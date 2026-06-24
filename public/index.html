@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wholesale CRM</title>
+  <link rel="stylesheet" href="styles.css?v=31" />
+</head>
+<body>
+  <header>
+    <div class="brand">🏠 <span>Wholesale CRM</span></div>
+    <nav>
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="leads">Leads</button>
+      <button class="tab" data-tab="dealcalc">Deal Calc</button>
+      <button class="tab" data-tab="outreach">Outreach</button>
+      <button class="tab" data-tab="inbox">Inbox</button>
+      <button class="tab" data-tab="acquisitions">Acquisitions</button>
+    </nav>
+    <button class="bell" id="bellBtn" title="Notifications">🔔<span class="bell-count" id="bellCount" style="display:none">0</span></button>
+    <button class="btn primary" id="newLeadBtn">+ New Lead</button>
+    <div id="notifPanel" class="notif-panel" style="display:none">
+      <div class="notif-head"><b>Notifications</b><button class="btn xs" id="notifReadAll">Mark all read</button></div>
+      <div id="notifList" class="notif-list"></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Dashboard -->
+    <section id="dashboard" class="view active">
+      <div class="cards" id="statCards"></div>
+      <div class="stage-cards" id="stageCards"></div>
+      <div class="dash-grid">
+        <div class="dash-col">
+          <div class="panel">
+            <h2>✅ Tasks &amp; follow-ups due</h2>
+            <div id="followups" class="followups"></div>
+          </div>
+          <div class="panel">
+            <h2>📊 Pipeline</h2>
+            <div id="pipelineBars" class="pipeline-bars"></div>
+          </div>
+        </div>
+        <div class="dash-col">
+          <div class="panel">
+            <div class="panel-head">
+              <h2 style="margin:0">💬 Recent messages</h2>
+              <button class="btn xs" data-tab-jump="inbox">Open inbox</button>
+            </div>
+            <div id="dashMessages" class="dash-msgs"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h2 style="margin:0">📅 Calendar</h2>
+              <div class="cal-nav"><button class="btn xs" id="calPrev">‹</button><span id="calLabel"></span><button class="btn xs" id="calNext">›</button></div>
+            </div>
+            <div class="cal-layout">
+              <div id="dashCalendar" class="dash-cal"></div>
+              <div class="cal-notes">
+                <div class="cal-notes-head"><span id="noteDayLabel">Today</span><button class="btn xs primary" id="noteSaveBtn">Save</button></div>
+                <textarea id="noteBody" placeholder="Notes for this day…"></textarea>
+                <div class="cal-notes-list-wrap">
+                  <div class="cal-notes-list-title">All notes</div>
+                  <div id="noteList" class="cal-notes-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel ds-panel">
+        <h2>🔒 Your data is safe</h2>
+        <p id="backupInfo" class="hint"></p>
+        <div class="ds-actions">
+          <a class="btn xs" href="/api/export/leads.csv">⬇ Export CSV</a>
+          <button class="btn xs" id="backupNowBtn">Back up now</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Leads (Active = activated · Prospects = not yet activated) -->
+    <section id="leads" class="view">
+      <div class="seg" id="leadModeToggle">
+        <button type="button" class="seg-btn active" data-mode="active">✅ Active leads</button>
+        <button type="button" class="seg-btn" data-mode="prospects">📥 Prospects to review</button>
+      </div>
+      <div class="toolbar">
+        <input id="leadSearch" placeholder="Search address, name, city…" />
+        <select id="leadSource"><option value="">All lists</option></select>
+        <select id="stageFilter">
+          <option value="">All stages</option>
+        </select>
+        <select id="leadSort">
+          <option value="recent">Recently updated</option>
+          <option value="created">Date added</option>
+          <option value="city">City A–Z</option>
+          <option value="state">State A–Z</option>
+        </select>
+        <div class="seg" id="viewToggle">
+          <button type="button" class="seg-btn active" data-view="list">List</button>
+          <button type="button" class="seg-btn" data-view="board">Board</button>
+        </div>
+        <button class="btn" id="underwriteBtn">🧮 Underwrite all</button>
+        <button class="btn" id="importBtn">⬆ Import list</button>
+      </div>
+      <p id="prospectHint" class="hint" style="display:none;margin:-2px 0 10px">Raw pulled records. <b>✓ Activate</b> the ones worth calling (they become working leads) or <b>✕ Dismiss</b> the rest. A record isn't a lead until you activate it.</p>
+      <div id="leadList" class="lead-list"></div>
+      <div id="leadBoard" class="kanban" style="display:none"></div>
+      <div id="prospectList" class="prospect-list" style="display:none"></div>
+    </section>
+
+    <!-- Deal Calculator (Creative Offer Oven) -->
+    <section id="dealcalc" class="view">
+      <div class="calc-topbar">
+        <div class="seg offer-type">
+          <button type="button" class="seg-btn" data-ot="cash">Cash</button>
+          <button type="button" class="seg-btn active" data-ot="subto">Subject-To</button>
+          <button type="button" class="seg-btn" data-ot="sellerfinance">Seller Finance</button>
+          <button type="button" class="seg-btn" data-ot="hybrid">Hybrid</button>
+        </div>
+        <button type="button" class="btn" id="resetCalc" title="Reset all inputs to defaults">↺ Reset</button>
+      </div>
+      <div class="ot-hint" id="otHint"></div>
+
+      <div class="calc-main">
+        <!-- Inputs (left, two internal columns) -->
+        <div class="inputs-grid">
+        <fieldset><legend>Deal</legend>
+          <div class="row">
+            <div class="field"><label id="lblPurchase">Purchase Price</label><input class="ci" data-k="purchase" type="number" value="120000" /></div>
+            <div class="field"><label>Market / Listed Value</label><input class="ci" data-k="listed" type="number" value="100000" /></div>
+          </div>
+          <div class="field" id="fldDown"><label>Down / Cash to Seller</label><input class="ci" data-k="down" type="number" value="6500" /></div>
+        </fieldset>
+
+        <fieldset id="fsCash"><legend>Cash Offer — MAO calculator</legend>
+          <div class="row">
+            <div class="field"><label>ARV (after-repair value)</label><input class="ci" data-k="arv" type="number" value="200000" /></div>
+            <div class="field"><label>Repair Estimate</label><input class="ci" data-k="repairs" type="number" value="35000" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>MAO % of ARV</label><input class="ci" data-k="maoPct" type="number" step="1" value="70" /></div>
+            <div class="field"><label>Your Wholesale Fee</label><input class="ci" data-k="wfee" type="number" value="10000" /></div>
+          </div>
+          <div class="mao-line" id="maoLine"></div>
+        </fieldset>
+
+        <fieldset id="fsSubto"><legend>Subject-To — existing loans you take over</legend>
+          <div class="row">
+            <div class="field"><label>Loan 1 Balance</label><input class="ci" data-k="sb1" type="number" value="90000" /></div>
+            <div class="field"><label>Rate %</label><input class="ci" data-k="sr1" type="number" step="0.01" value="3.69" /></div>
+            <div class="field"><label>Monthly Payment</label><input class="ci" data-k="sp1" type="number" value="456" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Loan 2 Balance</label><input class="ci" data-k="sb2" type="number" value="0" /></div>
+            <div class="field"><label>Rate %</label><input class="ci" data-k="sr2" type="number" step="0.01" value="0" /></div>
+            <div class="field"><label>Monthly Payment</label><input class="ci" data-k="sp2" type="number" value="0" /></div>
+          </div>
+        </fieldset>
+
+        <fieldset id="fsSF"><legend>Seller-Financed Note</legend>
+          <div class="row">
+            <div class="field"><label>Interest Rate %</label><input class="ci" data-k="rate" type="number" step="0.01" value="0" /></div>
+            <div class="field"><label>Amortization (yrs)</label><input class="ci" data-k="amort" type="number" value="30" /></div>
+          </div>
+          <label class="check"><input class="ci" data-k="io" type="checkbox" /> Interest only</label>
+          <div class="loan-amt" id="loanAmtDisp"></div>
+        </fieldset>
+
+        <fieldset><legend>Cash to Close</legend>
+          <div class="row">
+            <div class="field"><label>Buyer Entry Fee</label><input class="ci" data-k="entry" type="number" value="9900" /></div>
+            <div class="field"><label>Rehab</label><input class="ci" data-k="rehab" type="number" value="1000" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Assignment Fee</label><input class="ci" data-k="assign" type="number" value="0" /></div>
+            <div class="field"><label>Closing</label><input class="ci" data-k="closing" type="number" value="2400" /></div>
+          </div>
+        </fieldset>
+
+        <fieldset><legend>Rental Income & Expenses (monthly)</legend>
+          <div class="row">
+            <div class="field"><label>Monthly Rent</label><input class="ci" data-k="rent" type="number" value="1600" /></div>
+            <div class="field"><label>Insurance</label><input class="ci" data-k="ins" type="number" value="100" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Property Tax</label><input class="ci" data-k="tax" type="number" value="100" /></div>
+            <div class="field"><label>HOA</label><input class="ci" data-k="hoa" type="number" value="0" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Other</label><input class="ci" data-k="other" type="number" value="0" /></div>
+            <div class="field"><label>Mgmt % of rent</label><input class="ci" data-k="mgmt" type="number" step="0.5" value="10" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>CapEx % of rent</label><input class="ci" data-k="capex" type="number" step="0.5" value="10" /></div>
+            <div class="field"><label>Vacancy % of rent</label><input class="ci" data-k="vac" type="number" step="0.5" value="0" /></div>
+          </div>
+        </fieldset>
+
+        <fieldset><legend>Seller Proceeds & Appreciation</legend>
+          <div class="row">
+            <div class="field"><label>Agent Commission %</label><input class="ci" data-k="comm" type="number" step="0.5" value="6" /></div>
+            <div class="field"><label>Appreciation % / yr</label><input class="ci" data-k="appr" type="number" step="0.25" value="4.5" /></div>
+          </div>
+          <div class="field"><label>Years of Appreciation</label><input class="ci" data-k="apprYrs" type="number" value="10" /></div>
+        </fieldset>
+        </div><!-- /inputs-grid -->
+
+        <!-- Results + actions (right) -->
+        <aside class="calc-side">
+          <div class="results-strip">
+            <div class="result-card hero">
+              <div class="lbl" id="heroLbl">Monthly Cash Flow</div>
+              <div class="big" id="rCashflowMo">—</div>
+              <div class="sub" id="rCashflowYr"></div>
+            </div>
+            <!-- Cash-deal cards -->
+            <div class="result-card r-cash"><div class="lbl">Max Allowable Offer <span class="hint">MAO</span></div><div class="val accent" id="rMao">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Margin vs Your Offer</div><div class="val" id="rMargin">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Cap Rate</div><div class="val" id="rCap">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Cash-on-Cash <span class="hint">cash buy</span></div><div class="val" id="rCocCash">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">1% Rule <span class="hint">rent ÷ price</span></div><div class="val" id="r1pct">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Gross Rent Multiplier</div><div class="val" id="rGrm">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Total Cash Invested</div><div class="val" id="rCashInv">—</div></div>
+            <!-- Financing cards -->
+            <div class="result-card r-finance"><div class="lbl">Cash-on-Cash <span class="hint">÷ entry fee</span></div><div class="val accent" id="rCoc">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Monthly Debt Payment</div><div class="val" id="rPmt">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Total Cash to Close</div><div class="val" id="rCashIn">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Cash to Seller <span class="hint">after comm.</span></div><div class="val" id="rSeller">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Total Financed</div><div class="val" id="rLoan">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Monthly Op. Expenses</div><div class="val" id="rOpex">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Future Value <span class="hint">appreciated</span></div><div class="val" id="rAppr">—</div></div>
+          </div>
+          <div class="attach-box">
+            <label>Attach this analysis to a lead</label>
+            <div class="attach-row">
+              <select id="attachLead"><option value="">Choose a lead…</option></select>
+              <button class="btn primary" id="attachBtn">Save to lead</button>
+            </div>
+          </div>
+          <button class="btn full" id="toggleSched">Show amortization schedule ▾</button>
+          <div id="schedWrap" class="sched-wrap" style="display:none">
+            <table class="sched"><thead><tr><th>#</th><th>Date</th><th>Payment</th><th>Interest</th><th>Principal</th><th>Balance</th></tr></thead>
+            <tbody id="schedBody"></tbody></table>
+          </div>
+        </aside>
+      </div><!-- /calc-main -->
+    </section>
+
+    <!-- Outreach -->
+    <section id="outreach" class="view">
+      <div id="connectPanel" class="connect-panel"></div>
+
+      <div class="outreach-main">
+        <!-- Templates -->
+        <div class="tmpl-col">
+          <div class="col-head">
+            <h2>Templates</h2>
+            <button class="btn" id="newTmplBtn">+ New</button>
+          </div>
+          <div id="tmplList" class="tmpl-list"></div>
+        </div>
+
+        <!-- Compose & send -->
+        <div class="compose-col">
+          <div class="col-head"><h2>Compose &amp; Send</h2><button class="btn" id="openOfferBtn">💵 Send an Offer</button></div>
+          <div class="field" id="stageFilterWrap"><label>Filter leads by stage</label>
+            <select id="outStageFilter"><option value="">All active stages</option></select>
+          </div>
+          <div class="field"><label>Recipients <span id="recipCount" class="hint"></span></label>
+            <div id="recipList" class="recip-list"></div>
+          </div>
+          <div class="field"><label>Subject</label><input id="outSubject" placeholder="Quick question about {{address}}" /></div>
+          <div class="field"><label>Message <span class="hint">click a field below to insert it</span></label>
+            <textarea id="outBody" rows="9" placeholder="Hi {{first_name}}, …"></textarea></div>
+          <div class="merge-chips" id="mergeChips"></div>
+          <div class="compose-actions">
+            <button class="btn" id="previewBtn">Preview first</button>
+            <button class="btn primary" id="sendOutreachBtn">Send to <span id="sendCount">0</span></button>
+          </div>
+          <div id="outResult" class="out-result"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Inbox -->
+    <section id="inbox" class="view">
+      <div class="inbox-bar">
+        <h2 style="margin:0">📥 Inbox <span id="inboxCount" class="hint"></span></h2>
+        <div class="seg" id="inboxFilterSeg">
+          <button type="button" class="seg-btn active" data-if="all">All</button>
+          <button type="button" class="seg-btn" data-if="leads">Leads</button>
+          <button type="button" class="seg-btn" data-if="unread">Unread</button>
+        </div>
+        <span id="inboxSynced" class="hint" style="margin-left:auto"></span>
+        <button class="btn" id="inboxRefresh">↻ Sync new mail</button>
+      </div>
+      <div id="inboxList" class="inbox-list"></div>
+    </section>
+
+    <!-- Acquisitions -->
+    <section id="acquisitions" class="view">
+      <div id="rcPanel" class="connect-panel"></div>
+      <div id="aiPanel" class="connect-panel"></div>
+      <div id="btPanel" class="connect-panel"></div>
+      <div id="acqSettings"></div>
+      <div class="acq-main">
+        <div class="camp-col">
+          <div class="col-head"><h2>Campaigns</h2><button class="btn" id="newCampBtn">+ New</button></div>
+          <div id="campList" class="camp-list"></div>
+        </div>
+        <div class="feed-col">
+          <div class="col-head">
+            <h2>Property Feed <span id="propCount" class="hint"></span></h2>
+            <button class="btn xs" id="scoreAllBtn">↻ Re-score all</button>
+          </div>
+          <div class="feed-controls">
+            <div class="seg" id="propFilter">
+              <button type="button" class="seg-btn active" data-pf="new">Not imported</button>
+              <button type="button" class="seg-btn" data-pf="imported">Imported</button>
+              <button type="button" class="seg-btn" data-pf="all">All</button>
+            </div>
+            <select id="propSort">
+              <option value="score">Top score</option>
+              <option value="recent">Recently added</option>
+              <option value="shootings">Fewest shootings</option>
+              <option value="price">Lowest price</option>
+            </select>
+          </div>
+          <p class="hint" style="margin:-2px 0 10px">Scores, agent phone &amp; shootings load automatically when you run a campaign. <b>Analyze</b> pulls ARV + rent (2 RentCast lookups each).</p>
+          <div id="propFeed" class="prop-feed"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Lead modal -->
+  <div class="modal-bg" id="leadModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2 id="leadModalTitle">New Lead</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body two-col">
+        <div class="col">
+          <form id="leadForm">
+            <div class="field"><label>Stage</label>
+              <select name="stage" id="stageSelect"></select></div>
+            <fieldset><legend>Seller</legend>
+              <div class="field"><label>Name</label><input name="seller_name" /></div>
+              <div class="row">
+                <div class="field"><label>Phone</label><input name="seller_phone" /></div>
+                <div class="field"><label>Email</label><input name="seller_email" type="email" /></div>
+              </div>
+            </fieldset>
+            <fieldset><legend>Property</legend>
+              <div class="field"><label>Address</label><input name="address" /></div>
+              <div class="row">
+                <div class="field"><label>City</label><input name="city" /></div>
+                <div class="field s"><label>State</label><input name="state" /></div>
+                <div class="field s"><label>Zip</label><input name="zip" /></div>
+              </div>
+              <div class="row">
+                <div class="field"><label>Type</label><input name="property_type" placeholder="SFR, duplex…" /></div>
+                <div class="field s"><label>Beds</label><input name="beds" /></div>
+                <div class="field s"><label>Baths</label><input name="baths" /></div>
+                <div class="field s"><label>Sqft</label><input name="sqft" /></div>
+              </div>
+            </fieldset>
+            <fieldset><legend>Numbers</legend>
+              <div class="row">
+                <div class="field"><label>Asking</label><input name="asking_price" type="number" /></div>
+                <div class="field"><label>ARV</label><input name="arv" type="number" /></div>
+                <div class="field"><label>Repairs</label><input name="repair_estimate" type="number" /></div>
+              </div>
+              <div class="mao-box" id="maoBox"></div>
+              <div class="row">
+                <div class="field"><label>Offer</label><input name="offer_amount" type="number" /></div>
+                <div class="field"><label>Contract</label><input name="contract_price" type="number" /></div>
+                <div class="field"><label>Assign fee</label><input name="assignment_fee" type="number" /></div>
+              </div>
+            </fieldset>
+            <fieldset><legend>Context</legend>
+              <div class="row">
+                <div class="field"><label>Motivation</label><input name="motivation" placeholder="Foreclosure, inherited…" /></div>
+                <div class="field"><label>Source</label><input name="source" placeholder="Cold call, PPC, list…" /></div>
+              </div>
+              <div class="field"><label>Next follow-up</label><input name="next_followup" type="date" /></div>
+              <div class="field"><label>Notes</label><textarea name="notes" rows="3"></textarea></div>
+            </fieldset>
+            <div class="modal-actions">
+              <button type="button" class="btn danger" id="deleteLeadBtn" style="display:none">Delete</button>
+              <button type="submit" class="btn primary">Save</button>
+            </div>
+          </form>
+        </div>
+        <div class="col activity-col" id="activityCol">
+          <div class="lead-action-grid">
+            <button class="btn xs" id="logCallBtn">📞 Log call</button>
+            <button class="btn xs" id="addNoteBtn">📝 Note</button>
+            <button class="btn xs" id="underwriteLeadBtn" title="Cross-reference Detroit parcel data & run your numbers">🧮 Underwrite</button>
+            <button class="btn xs" id="skiptraceLeadBtn" title="Pull owner phone & email (BatchData)">🔎 Skip trace</button>
+            <button class="btn xs" id="reviewToggleBtn" title="Move this lead in or out of the review queue">↩ Move to review</button>
+          </div>
+          <div id="leadDataResult" class="lead-data-result" style="display:none"></div>
+          <h3>💬 Conversation</h3>
+          <div id="leadThread" class="lead-thread"></div>
+          <div class="thread-reply">
+            <input id="threadSubject" placeholder="Subject" />
+            <textarea id="threadBody" rows="3" placeholder="Write a message to this lead…"></textarea>
+            <div class="composer-actions">
+              <button class="btn primary" id="threadSendBtn">Send ✉</button>
+            </div>
+          </div>
+          <h3>Tasks</h3>
+          <div class="task-add">
+            <input id="taskTitle" placeholder="Add a task…" />
+            <input id="taskDue" type="date" title="Due date (optional)" />
+            <button class="btn" id="addTaskBtn">Add</button>
+          </div>
+          <div id="leadTasks" class="lead-tasks"></div>
+          <h3>Activity</h3>
+          <div id="timeline" class="timeline"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Template modal -->
+  <div class="modal-bg" id="tmplModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="tmplModalTitle">New Template</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <form id="tmplForm">
+          <div class="row">
+            <div class="field"><label>Template name</label><input name="name" placeholder="Cold seller — first touch" /></div>
+            <div class="field s2"><label>Audience</label>
+              <select name="audience"><option value="leads">Leads (sellers)</option><option value="buyers">Buyers</option><option value="offer">Offers</option></select></div>
+          </div>
+          <div class="field"><label>Subject</label><input name="subject" /></div>
+          <div class="field"><label>Message</label><textarea name="body" rows="9"></textarea></div>
+          <div class="merge-chips" id="tmplMergeChips"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn danger" id="deleteTmplBtn" style="display:none">Delete</button>
+            <button type="submit" class="btn primary">Save template</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Campaign modal -->
+  <div class="modal-bg" id="campModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="campModalTitle">New Campaign</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <form id="campForm">
+          <div class="field"><label>Campaign name</label><input name="name" placeholder="Detroit SFR under $150k" /></div>
+          <div class="row">
+            <div class="field"><label>City</label><input name="city" placeholder="Detroit" /></div>
+            <div class="field s2"><label>State</label><input name="state" placeholder="MI" maxlength="2" /></div>
+            <div class="field"><label>Zip</label><input name="zip" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Property type</label>
+              <select name="property_type"><option value="">Any</option><option>Single Family</option><option>Condo</option><option>Townhouse</option><option>Multi-Family</option><option>Manufactured</option><option>Apartment</option><option>Land</option></select></div>
+            <div class="field s2"><label>Status</label><select name="status"><option>Active</option><option>Inactive</option></select></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Min price</label><input name="price_min" type="number" /></div>
+            <div class="field"><label>Max price</label><input name="price_max" type="number" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Min beds</label><input name="beds_min" type="number" /></div>
+            <div class="field"><label>Min sqft</label><input name="sqft_min" type="number" /></div>
+            <div class="field"><label>Min DOM</label><input name="days_on_market_min" type="number" title="Minimum days on market" /></div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn danger" id="deleteCampBtn" style="display:none">Delete</button>
+            <button type="submit" class="btn primary">Save campaign</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- CSV import modal -->
+  <div class="modal-bg" id="importModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2>⬆ Import a list</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div class="autopull">
+          <div><b>📡 Auto-pull (Detroit official data)</b><div class="hint">Owner name + property address + mailing address. Absentee owners flagged.</div></div>
+          <label class="hint">last <input id="violDays" type="number" value="30" /> days</label>
+          <button class="btn primary" id="pullViolBtn">Pull code violations</button>
+        </div>
+        <div class="row">
+          <div class="field"><label>List type</label>
+            <select id="importType">
+              <option>Tax delinquent</option>
+              <option>Code violation</option>
+              <option>Probate</option>
+              <option>Driving for dollars</option>
+              <option>Absentee owner</option>
+              <option>Other / bought list</option>
+            </select></div>
+          <div class="field"><label>CSV file</label><input type="file" id="importFile" accept=".csv,text/csv" /></div>
+        </div>
+        <p class="hint" style="margin:8px 0">Or paste CSV with a header row below. County lists usually have <b>owner name + property address</b> but no phone/email — those come from skip tracing. Map whatever columns your list has; phone/email import too if present.</p>
+        <textarea id="importPaste" rows="3" placeholder="Owner Name,Property Address,City,State,Zip&#10;John Smith,123 Oak St,Detroit,MI,48205"></textarea>
+        <div id="importMap"></div>
+        <div class="modal-actions">
+          <span id="importInfo" class="hint"></span>
+          <button class="btn primary" id="importRunBtn" disabled>Import leads</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inbox message modal -->
+  <div class="modal-bg" id="msgModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2 id="msgSubject">Message</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div class="msg-meta" id="msgMeta"></div>
+        <div class="msg-body" id="msgBody"></div>
+        <div class="reply-box">
+          <label class="reply-label">↩ Reply</label>
+          <textarea id="msgReplyBody" rows="4" placeholder="Type your reply…"></textarea>
+          <div class="modal-actions">
+            <button class="btn" id="msgOpenLead" style="display:none">Open lead</button>
+            <button class="btn primary" id="msgReplySend">Send reply ✉</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Offer sender modal -->
+  <div class="modal-bg" id="offerModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2>💵 Send an Offer</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body two-col">
+        <div class="col">
+          <div class="field"><label>Lead / property</label><select id="offerLead"></select></div>
+          <div class="row">
+            <div class="field"><label>To (listing agent)</label><input id="offerTo" type="email" /></div>
+            <div class="field"><label>Offer template</label><select id="offerTemplate"></select></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Offer amount</label><input id="offerAmount" type="number" placeholder="55000" /></div>
+            <div class="field"><label>Earnest money</label><input id="offerEarnest" type="number" value="500" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Close in (days or less)</label><input id="offerClose" type="number" value="30" /></div>
+            <div class="field"><label>Inspection (business days)</label><input id="offerInspect" type="number" value="10" /></div>
+          </div>
+          <div class="field"><label>Subject</label><input id="offerSubject" /></div>
+          <div class="field"><label>Message <span class="hint">{{offer}} {{address}} {{earnest}} fill in automatically</span></label>
+            <textarea id="offerBody" rows="9"></textarea></div>
+          <div class="modal-actions">
+            <button type="button" class="btn primary" id="offerSendBtn">Send offer ✉</button>
+          </div>
+        </div>
+        <div class="col activity-col">
+          <h3>Live preview — what the agent receives</h3>
+          <div class="offer-preview"><div class="op-subj" id="opSubj"></div><div class="op-body" id="opBody"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI brief modal -->
+  <div class="modal-bg" id="aiModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2 id="aiModalTitle">🤖 AI Deal Brief</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div id="aiContent" class="ai-content"></div>
+        <div class="modal-actions">
+          <button class="btn" id="aiRegenBtn">↻ Regenerate</button>
+          <button class="btn" id="aiCopyBtn">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js?v=31"></script>
+</body>
+</html>
