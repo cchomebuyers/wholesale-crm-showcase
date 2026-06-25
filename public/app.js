@@ -1,4 +1,4 @@
-const STAGES = ["New", "Contacted", "Follow-Up", "Offer Made", "Under Contract", "Assigned", "Closed", "Dead"];
+const STAGES = ["New", "Contacted", "Follow-Up", "Offer Made", "Backup Offer", "Under Contract", "Assigned", "Closed", "Dead"];
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const money = (n) => (n || n === 0) ? "$" + Number(n).toLocaleString() : "—";
@@ -28,6 +28,7 @@ $$(".tab").forEach((b) =>
     if (b.dataset.tab === "dealcalc") { fillAttachLeads(); applyOfferType(); runDealCalc(); }
     if (b.dataset.tab === "outreach") openOutreach();
     if (b.dataset.tab === "inbox") openInbox();
+    if (b.dataset.tab === "offers") loadOffers();
     if (b.dataset.tab === "acquisitions") openAcquisitions();
   })
 );
@@ -74,7 +75,7 @@ function fillSources() {
 }
 $$("#leadModeToggle .seg-btn").forEach((b) => b.addEventListener("click", () => setLeadMode(b.dataset.mode)));
 const renderCurrentLeadView = () => (leadMode === "prospects" ? renderProspects() : renderLeads());
-const CONTACTED_STAGES = ["Contacted", "Follow-Up", "Offer Made", "Under Contract", "Assigned", "Closed"];
+const CONTACTED_STAGES = ["Contacted", "Follow-Up", "Offer Made", "Backup Offer", "Under Contract", "Assigned", "Closed"];
 function renderLeads() {
   const q = $("#leadSearch").value.toLowerCase();
   const sf = $("#stageFilter").value;
@@ -101,7 +102,7 @@ function renderLeads() {
     const meta = [l.seller_name && l.address ? l.seller_name : null, l.seller_phone || null].filter(Boolean).join(" · ");
     const tags = [
       l.next_followup ? `<span class="lc-tag">📅 ${l.next_followup}</span>` : "",
-      l.offer_sent_at ? `<span class="lc-tag green">💵 ${l.offer_amount ? money(l.offer_amount) : "Offer sent"}</span>` : "",
+      l.offer_sent_at ? `<span class="lc-tag green">💵 ${l.offer_amount ? money(l.offer_amount) : "Offer sent"}</span>` : (suggestedOffer(l) ? `<span class="lc-tag amber">💵 offer ≤ ${money(suggestedOffer(l))}</span>` : ""),
       l.assignment_fee ? `<span class="lc-tag green">${money(l.assignment_fee)} fee</span>` : "",
     ].filter(Boolean).join("");
     return `
@@ -123,6 +124,7 @@ function renderLeads() {
   $$("#leadList .offer-btn").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); openOffer(b.dataset.id); }));
   $$("#leadList .lead-stage-sel").forEach((s) => s.addEventListener("change", async (e) => {
     e.stopPropagation();
+    if (s.value === "Closed") { closeWithFee(s.dataset.id); return; } // closing → capture the collected fee
     await api(`/api/leads/${s.dataset.id}/stage`, { method: "PATCH", body: JSON.stringify({ stage: s.value }) });
     toast("Moved to " + s.value);
     loadLeads(); loadDashboard();
@@ -181,6 +183,7 @@ function renderBoard() {
       if (!dragId) return;
       const stage = col.dataset.stage;
       const id = dragId; dragId = null;
+      if (stage === "Closed") { closeWithFee(id, renderBoard); return; } // closing → capture the fee
       try {
         await api(`/api/leads/${id}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) });
         await loadLeads();
@@ -234,13 +237,25 @@ async function openLead(id) {
 }
 
 // Show whatever underwrite / skip-trace data the lead already has.
+const parseComps = (lead) => { try { return lead.comps_json ? JSON.parse(lead.comps_json) : null; } catch { return null; } };
 function renderLeadData(lead) {
   const el = $("#leadDataResult");
   if (!el) return;
   const bits = [];
   if (lead.uw_at) {
     const eqCls = (lead.equity ?? 0) >= 0 ? "pos" : "neg";
-    bits.push(`<div class="ldr-row">🧮 <b>Underwritten</b> · Est value ${money(lead.arv)} · Offer ≤ <b>${money(lead.mao)}</b> · Equity <b class="${eqCls}">${money(lead.equity)}</b>${lead.opportunity_score != null ? ` · Score <b>${lead.opportunity_score}</b>` : ""}</div>`);
+    const comps = parseComps(lead);
+    const srcTag = lead.arv_source === "comps"
+      ? `<span class="ldr-tag comps">${comps && comps.count ? comps.count + " comps" : "comps"}</span>`
+      : `<span class="ldr-tag est">assessed est.</span>`;
+    bits.push(`<div class="ldr-row">🧮 <b>ARV ${money(lead.arv)}</b> ${srcTag} · Offer ≤ <b>${money(lead.mao)}</b> · Equity <b class="${eqCls}">${money(lead.equity)}</b>${lead.opportunity_score != null ? ` · Score <b>${lead.opportunity_score}</b>` : ""}</div>`);
+    if (comps && comps.comps && comps.comps.length) {
+      const rows = comps.comps.slice(0, 4).map((c) => {
+        const dt = c.date ? new Date(c.date).toLocaleDateString(undefined, { year: "2-digit", month: "short" }) : "";
+        return `<div class="ldc-row"><span>${esc((c.address || "").slice(0, 22))}</span><span>${money(c.price)} · ${c.sqft} sqft · ${dt}</span></div>`;
+      }).join("");
+      bits.push(`<div class="ldr-comps"><div class="ldc-head">📊 Free live comps — recent nearby sales · median <b>$${comps.medPpsf}/sqft</b></div>${rows}</div>`);
+    }
   }
   if (lead.skiptraced_at) {
     bits.push(`<div class="ldr-row">🔎 <b>Skip traced</b> · ${lead.seller_phone ? "📞 " + esc(lead.seller_phone) : "no phone"}${lead.seller_email ? " · ✉ " + esc(lead.seller_email) : ""}</div>`);
@@ -278,7 +293,7 @@ $("#skiptraceLeadBtn")?.addEventListener("click", async () => {
     toast((r.phones.length || r.emails.length) ? `Found ${r.phones.length} phone(s), ${r.emails.length} email(s) ✅` : "No contact found for this address");
     loadLeads();
   } catch (e) { toast(e.message, true); }
-  btn.disabled = false; btn.textContent = "🔎 Skip trace";
+  btn.disabled = false; btn.textContent = "🔎 Skip trace $";
 });
 
 // --- Lead tasks ---
@@ -317,8 +332,13 @@ function formData(form) {
   return d;
 }
 
+let leadSubmitting = false;
 leadForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (leadSubmitting) return; // ignore double-clicks while the (slower, comps-loading) save is in flight
+  leadSubmitting = true;
+  const saveBtn = leadForm.querySelector('button[type="submit"]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = currentLeadId ? "Saving…" : "Adding & pulling comps…"; }
   const d = formData(leadForm);
   try {
     if (currentLeadId) {
@@ -326,15 +346,18 @@ leadForm.addEventListener("submit", async (e) => {
       toast("Lead saved");
       const lead = await api("/api/leads/" + currentLeadId);
       renderTimeline(lead.activities);
+      await loadLeads();
     } else {
       const res = await api("/api/leads", { method: "POST", body: JSON.stringify(d) });
-      currentLeadId = res.id;
-      $("#deleteLeadBtn").style.display = "";
-      $("#activityCol").style.display = "";
-      toast("Lead created");
+      await loadLeads();
+      toast(res.underwrite ? "Lead created — comps & ARV auto-loaded ✅" : "Lead created");
+      await openLead(res.id); // reopen so the pre-loaded comps/underwrite show
     }
-    await loadLeads();
   } catch (err) { toast(err.message, true); }
+  finally {
+    leadSubmitting = false;
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save"; }
+  }
 });
 
 $("#deleteLeadBtn").addEventListener("click", async () => {
@@ -467,12 +490,12 @@ async function loadDashboard() {
       <div class="lbl">🎯 Offers sent today ${hit ? "🔥" : ""}<br><span class="hint">resets 9am ET</span></div>
     </div>
     <div class="card"><div class="big">${active}</div><div class="lbl">Active leads</div></div>
-    <div class="card"><div class="big">${money(s.totals.pipeline_fees)}</div><div class="lbl">Pipeline (assignment fees)</div></div>
+    <div class="card"><div class="big">${money(s.totals.pipeline_fees)}</div><div class="lbl">Projected fees (pipeline)</div><div class="sub" style="color:var(--green);font-size:13px;margin-top:4px">${money(s.totals.collected_fees || 0)} collected</div></div>
     <div class="card"><div class="big">${s.prospects || 0}</div><div class="lbl">Prospects to review</div></div>`;
   // Active-lead breakdown by stage (clickable → filters the Leads tab)
   const counts = {};
   s.stages.forEach((x) => (counts[x.stage] = x.n));
-  const KEY = ["New", "Contacted", "Follow-Up", "Offer Made", "Under Contract", "Assigned"];
+  const KEY = ["New", "Contacted", "Follow-Up", "Offer Made", "Backup Offer", "Under Contract", "Assigned"];
   $("#stageCards").innerHTML = KEY.map((st) =>
     `<div class="stage-card s-${st.replace(/ /g, "-")}" data-stage="${st}"><div class="sc-n">${counts[st] || 0}</div><div class="sc-l">${st}</div></div>`
   ).join("");
@@ -689,41 +712,93 @@ $$(".offer-type .seg-btn").forEach((b) =>
 let lastDeal = null;
 const $v = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
 
+// Standard rental underwriting: rent → vacancy → operating expenses → NOI → debt → cash flow.
+function rentalModel(debtMonthly) {
+  const g = calcGet;
+  const rent = g("rent");
+  const vacLoss = g("vac") / 100 * rent;
+  const egi = rent - vacLoss;                     // effective gross income
+  const mgmt = g("mgmt") / 100 * rent;
+  const maint = g("maint") / 100 * rent;
+  const capex = g("capex") / 100 * rent;
+  const tax = g("tax"), ins = g("ins"), hoa = g("hoa"), other = g("other");
+  const opex = tax + ins + hoa + other + mgmt + maint + capex;
+  const noiMo = egi - opex;                        // net operating income (before debt)
+  const cashflowMo = noiMo - debtMonthly;
+  return { rent, vacLoss, egi, tax, ins, hoa, other, mgmt, maint, capex, opex, noiMo, cashflowMo, debtMonthly };
+}
+function renderCashflowBreakdown(m, metrics) {
+  const r = (lbl, val, neg) => `<div class="cfb-row"><span>${lbl}</span><span class="${neg ? "neg" : ""}">${neg ? "− " : ""}${money(Math.round(Math.abs(val)))}</span></div>`;
+  let h = r("Gross rent", m.rent);
+  if (m.vacLoss) h += r(`Vacancy (${calcGet("vac")}%)`, m.vacLoss, true);
+  h += `<div class="cfb-row sub"><span>Effective income</span><span>${money(Math.round(m.egi))}</span></div>`;
+  if (m.tax) h += r("Property tax", m.tax, true);
+  if (m.ins) h += r("Insurance", m.ins, true);
+  if (m.hoa) h += r("HOA", m.hoa, true);
+  if (m.other) h += r("Other", m.other, true);
+  if (m.mgmt) h += r(`Management (${calcGet("mgmt")}%)`, m.mgmt, true);
+  if (m.maint) h += r(`Maintenance (${calcGet("maint")}%)`, m.maint, true);
+  if (m.capex) h += r(`CapEx reserve (${calcGet("capex")}%)`, m.capex, true);
+  h += `<div class="cfb-row sub"><span>NOI (before debt)</span><span>${money(Math.round(m.noiMo))}/mo</span></div>`;
+  if (m.debtMonthly) h += r("Debt service", m.debtMonthly, true);
+  h += `<div class="cfb-row total"><span>Monthly cash flow</span><span class="${m.cashflowMo >= 0 ? "pos" : "neg"}">${money(Math.round(m.cashflowMo))}/mo</span></div>`;
+  const tgt = metrics.target || 0;
+  const cocPass = tgt ? metrics.coc >= tgt : metrics.coc >= 0;
+  const met = `<div class="cfb-metrics">
+    <span>Cap rate<b>${metrics.cap.toFixed(1)}%</b></span>
+    <span>Cash-on-cash${tgt ? ` <small>≥${tgt.toFixed(1)}%</small>` : ""}<b class="${cocPass ? "pos" : "neg"}">${metrics.coc.toFixed(1)}% ${tgt ? (cocPass ? "✓" : "✗") : ""}</b></span>
+    <span>DSCR<b>${metrics.dscr == null ? "—" : metrics.dscr.toFixed(2)}</b></span>
+  </div>`;
+  $("#cfBreakdown").innerHTML = `<div class="cfb-title">💵 Cash-flow breakdown <span class="hint">(monthly)</span></div>${h}${met}`;
+}
+
 function runCashCalc() {
   const g = calcGet;
   const arv = g("arv"), repairs = g("repairs"), maoPct = g("maoPct"), wfee = g("wfee");
   const offer = g("purchase"), closing = g("closing");
-  const mao = arv * maoPct / 100 - repairs - wfee;
-  const margin = mao - offer; // positive = your offer is under MAO (good)
+  const target = g("cocTarget") || 14.7; // minimum cash-on-cash % to gate the offer
 
   // The cash buyer pays your offer PLUS your wholesale fee to take the assignment.
   const buyerPrice = offer + wfee;
-  const rent = g("rent");
-  const pctExp = (g("mgmt") + g("capex") + g("vac")) / 100 * rent;
-  const opexNoDebt = g("ins") + g("tax") + g("hoa") + g("other") + pctExp;
-  const cashflowMo = rent - opexNoDebt; // cash purchase: no debt service
-  const noiAnnual = cashflowMo * 12;
+  const m = rentalModel(0); // cash purchase: no debt service
+  const rent = m.rent;
+  const cashflowMo = m.cashflowMo;
+  const noiAnnual = m.noiMo * 12;
   const cashInvested = buyerPrice + repairs + closing; // buyer's all-in (incl. your fee)
   const capRate = buyerPrice ? noiAnnual / buyerPrice * 100 : 0;
-  const cocCash = cashInvested ? noiAnnual / cashInvested * 100 : 0;
+  const cocCash = cashInvested ? (cashflowMo * 12) / cashInvested * 100 : 0;
   const onePct = buyerPrice ? rent / buyerPrice * 100 : 0;
-  const grm = rent ? buyerPrice / (rent * 12) : 0;
+
+  // Two MAO ceilings — take the LOWER so the deal clears BOTH the ARV rule and the cash-on-cash floor.
+  const maoArv = arv * maoPct / 100 - repairs - wfee;
+  // All-cash CoC = annual cashflow ÷ (offer + fee + repairs + closing). Solve for offer at target CoC:
+  const maxAllIn = target > 0 ? (cashflowMo * 12) / (target / 100) : Infinity;
+  const maoCashflow = cashflowMo > 0 ? maxAllIn - wfee - repairs - closing : -Infinity;
+  const cashBound = maoCashflow < maoArv;
+  const recMao = Math.min(maoArv, maoCashflow);
+  const margin = recMao - offer; // positive = your offer is under the recommended ceiling
+  renderCashflowBreakdown(m, { cap: capRate, coc: cocCash, dscr: null, target });
 
   $("#heroLbl").textContent = "Monthly Cash Flow (rental)";
   $v("rCashflowMo", money(Math.round(cashflowMo)) + "/mo");
   $v("rCashflowYr", money(Math.round(cashflowMo * 12)) + " / yr");
-  $v("rMao", money(Math.round(mao)));
+  $v("rMao", isFinite(recMao) ? money(Math.round(recMao)) : "—");
+  $v("rMaoCf", isFinite(maoCashflow) ? money(Math.round(maoCashflow)) : "needs cashflow");
+  $v("rMaoArv", money(Math.round(maoArv)));
+  $$(".cocTgt").forEach((el) => (el.textContent = target.toFixed(1) + "%"));
+  $("#maoDriver").textContent = cashBound ? "cashflow-bound" : "ARV-bound";
   $v("rMargin", (margin >= 0 ? "" : "-") + money(Math.abs(Math.round(margin))) + (margin >= 0 ? " under" : " OVER"));
   $v("rCap", capRate.toFixed(1) + "%");
   $v("rCocCash", cocCash.toFixed(1) + "%");
   $v("r1pct", onePct.toFixed(2) + "%");
-  $v("rGrm", grm.toFixed(1));
   $v("rCashInv", money(Math.round(cashInvested)));
-  $("#maoLine").innerHTML = `Suggested max offer: <b>${money(Math.round(mao))}</b> &nbsp;·&nbsp; ${maoPct}% of ${money(arv)} − ${money(repairs)} repairs − ${money(wfee)} fee<br>Your fee: <b style="color:var(--green)">${money(wfee)}</b> &nbsp;·&nbsp; cash buyer pays <b>${money(Math.round(buyerPrice))}</b> (your ${money(offer)} offer + fee)`;
+  $("#maoLine").innerHTML = `ARV rule: <b>${money(Math.round(maoArv))}</b> &nbsp;·&nbsp; ${target.toFixed(1)}% CoC ceiling: <b>${money(Math.round(maoCashflow))}</b><br><b>Pay no more than ${isFinite(recMao) ? money(Math.round(recMao)) : "—"}</b> (the lower — ${cashBound ? "cashflow is the limiter" : "ARV is the limiter"}). Your fee: <b style="color:var(--green)">${money(wfee)}</b>.`;
   $("#rCashflowMo").style.color = cashflowMo >= 0 ? "var(--green)" : "var(--red)";
   $("#rMargin").style.color = margin >= 0 ? "var(--green)" : "var(--red)";
+  $("#rCocCash").style.color = cocCash >= target ? "var(--green)" : "var(--red)";
+  $("#rMao").style.color = "var(--green)";
 
-  lastDeal = { offerType: "Cash", offer, arv, repairs, maoPct, wfee, mao, margin, buyerPrice, capRate, cocCash, onePct, grm, cashInvested, cashflowMo, rent };
+  lastDeal = { offerType: "Cash", offer, arv, repairs, maoPct, wfee, mao: recMao, maoArv, maoCashflow, margin, buyerPrice, capRate, cocCash, target, onePct, cashInvested, cashflowMo, rent };
 }
 
 function runDealCalc() {
@@ -743,32 +818,41 @@ function runDealCalc() {
   const monthlyPmt = (usesSubto ? subtoMonthly : 0) + (usesSF ? sfPmt : 0);
   const totalLoan = (usesSubto ? subtoBal : 0) + (usesSF ? sfLoan : 0);
 
-  const rent = g("rent");
-  const pctExp = (g("mgmt") + g("capex") + g("vac")) / 100 * rent;
-  const fixedExp = g("ins") + g("tax") + g("hoa") + g("other");
-  const opexNoDebt = fixedExp + pctExp;
-  const opexTotal = opexNoDebt + monthlyPmt;
-  const cashflowMo = rent - opexTotal;
+  const m = rentalModel(monthlyPmt);
+  const opexNoDebt = m.opex;
+  const cashflowMo = m.cashflowMo;
+  const noiAnnual = m.noiMo * 12;
 
+  const target = g("cocTarget") || 14.7;
   const cashIn = g("entry") + down + g("rehab") + g("assign") + g("closing");
-  // Cash-on-cash uses the Buyer Entry Fee as the basis, matching the Creative Offer Oven sheet.
-  const cocBasis = g("entry") || cashIn;
-  const coc = cocBasis ? (cashflowMo * 12) / cocBasis * 100 : 0;
+  // Honest cash-on-cash: annual cashflow ÷ total cash invested (subto equity is thin, so the return must come from cashflow).
+  const coc = cashIn ? (cashflowMo * 12) / cashIn * 100 : 0;
+  // The lever in a takeover is cash to seller (down). Max down that still clears the CoC floor:
+  const cashOps = g("entry") + g("rehab") + g("assign") + g("closing");
+  const maxCashIn = target > 0 ? (cashflowMo * 12) / (target / 100) : Infinity;
+  const maxDown = cashflowMo > 0 ? maxCashIn - cashOps : -Infinity;
+  const capRate = purchase ? noiAnnual / purchase * 100 : 0;
+  const dscr = monthlyPmt ? m.noiMo / monthlyPmt : null;
   const commission = purchase * g("comm") / 100;
   const cashToSeller = down - commission;
   const future = g("listed") * Math.pow(1 + g("appr") / 100, g("apprYrs"));
+  renderCashflowBreakdown(m, { cap: capRate, coc, dscr, target });
 
+  $$(".cocTgt").forEach((el) => (el.textContent = target.toFixed(1) + "%"));
   $v("rCashflowMo", money(Math.round(cashflowMo)) + "/mo");
   $v("rCashflowYr", money(Math.round(cashflowMo * 12)) + " / yr");
   $v("rPmt", money(Math.round(monthlyPmt)) + "/mo");
   $v("rCoc", coc.toFixed(1) + "%");
+  $v("rMaxDown", (cashflowMo > 0 && isFinite(maxDown)) ? money(Math.round(maxDown)) : "needs cashflow");
+  $v("rDscr", dscr == null ? "—" : dscr.toFixed(2));
   $v("rCashIn", money(Math.round(cashIn)));
   $v("rSeller", money(Math.round(cashToSeller)));
   $v("rLoan", money(Math.round(totalLoan)));
-  $v("rOpex", money(Math.round(opexNoDebt)) + "/mo");
   $v("rAppr", money(Math.round(future)) + "  (+" + money(Math.round(future - g("listed"))) + ")");
   $("#loanAmtDisp").textContent = usesSF ? "Seller note: " + money(Math.round(sfLoan)) : "";
 
+  $("#rCoc").style.color = coc >= target ? "var(--green)" : "var(--red)";
+  $("#rMaxDown").style.color = (down <= maxDown && cashflowMo > 0) ? "var(--green)" : "var(--red)";
   $("#rCashflowMo").style.color = cashflowMo >= 0 ? "var(--green)" : "var(--red)";
   const OT_LABEL = { subto: "Subject-To", sellerfinance: "Seller Finance", hybrid: "Hybrid" };
   lastDeal = { offerType: OT_LABEL[offerType], purchase, listed: g("listed"), totalLoan, sfLoan, subtoBal: usesSubto ? subtoBal : 0, down, rate, amort, io, monthlyPmt, cashflowMo, coc, cashIn, cashToSeller, future, rent, opexNoDebt };
@@ -1307,8 +1391,8 @@ function propRowHtml(p) {
       <div class="prop-price">${p.price ? money(p.price) : "—"}</div>
     </div>
     <div class="prop-actions">
-      <button class="btn xs analyze-btn" data-id="${p.id}">📊 ${p.arv != null ? "Re-analyze" : "Analyze"}</button>
-      <button class="btn xs ai-btn" data-id="${p.id}">🤖 AI${p.ai_analysis ? " ✓" : ""}</button>
+      <button class="btn xs analyze-btn" data-id="${p.id}">📊 ${p.arv != null ? "Re-analyze" : "Analyze"} $</button>
+      <button class="btn xs ai-btn" data-id="${p.id}">🤖 AI $${p.ai_analysis ? " ✓" : ""}</button>
       ${imported}
     </div>`;
 }
@@ -1371,6 +1455,47 @@ async function openAcquisitions() {
   await loadProperties();
 }
 
+// ---------- Offers sent (with projected vs collected fees) ----------
+async function loadOffers() {
+  let d;
+  try { d = await api("/api/offers"); } catch (e) { $("#offerList").innerHTML = `<div class="err-line" style="padding:16px">${esc(e.message)}</div>`; return; }
+  const t = d.totals;
+  $("#offerSummary").innerHTML = `
+    <div class="osum-card"><div class="osum-n">${t.count}</div><div class="osum-l">Offers sent</div></div>
+    <div class="osum-card"><div class="osum-n amber">${money(t.projected)}</div><div class="osum-l">Projected fees <span class="hint">spread, not yet earned</span></div></div>
+    <div class="osum-card"><div class="osum-n green">${money(t.collected)}</div><div class="osum-l">Collected <span class="hint">money in hand</span></div></div>`;
+  const el = $("#offerList");
+  if (!d.offers.length) { el.innerHTML = `<div class="empty">No offers sent yet. Fire some from Outreach → 💵 Send an Offer.</div>`; return; }
+  el.innerHTML = d.offers.map((o) => {
+    const when = o.offer_sent_at ? new Date(o.offer_sent_at).toLocaleDateString() : "";
+    const closed = o.stage === "Closed"; // a fee is only collected once the deal closes
+    return `<div class="offer-row" data-id="${o.id}">
+      <div class="or-main" data-open="${o.id}">
+        <div class="or-addr">${esc(o.address || o.seller_name || "Lead #" + o.id)}</div>
+        <div class="or-sub">${esc(o.seller_email || "")} · sent ${when} · <span class="badge ${(o.stage || "").replace(/ /g, "-")}">${esc(o.stage)}</span></div>
+      </div>
+      <div class="or-nums">
+        <div class="or-offer">${o.offer_amount ? money(o.offer_amount) : "—"}<span>offer</span></div>
+        <div class="or-fee ${closed ? "green" : "amber"}">${closed ? money(o.fee_collected || 0) : (o.assignment_fee ? money(o.assignment_fee) : "—")}<span>${closed ? "collected ✓" : "projected fee"}</span></div>
+        ${closed ? `<button class="btn xs collect-btn" data-id="${o.id}">Edit fee</button>` : `<button class="btn xs primary collect-btn" data-id="${o.id}">Close &amp; collect</button>`}
+      </div>
+    </div>`;
+  }).join("");
+  $$("#offerList .or-main").forEach((m) => m.addEventListener("click", () => openLead(m.dataset.open)));
+  $$("#offerList .collect-btn").forEach((b) => b.addEventListener("click", () => closeWithFee(b.dataset.id, loadOffers)));
+}
+// Close a deal and record the fee collected. Used from the Offers tab and the lead-card stage dropdown.
+async function closeWithFee(id, after) {
+  const input = prompt("Deal closed 🎉 — assignment fee collected at closing ($):", "");
+  if (input == null) { loadLeads(); if (after) after(); return; } // cancelled → revert any dropdown
+  const amount = parseFloat((input || "").replace(/[^0-9.]/g, "")) || 0;
+  try {
+    await api(`/api/leads/${id}/collect-fee`, { method: "PATCH", body: JSON.stringify({ amount }) });
+    toast(amount ? "Closed — " + money(amount) + " collected 💰" : "Marked closed");
+  } catch (e) { toast(e.message, true); }
+  loadLeads(); loadDashboard(); if (after) after();
+}
+
 // ---------- Offer sender ----------
 let offerTemplates = [];
 function mergeOffer(text, l) {
@@ -1399,22 +1524,111 @@ function applyOfferTemplate() {
   if (t) { $("#offerSubject").value = t.subject; $("#offerBody").value = t.body; }
   renderOfferPreview();
 }
+
+// ----- Combine multiple offer structures into one email -----
+const optChecked = (k) => { const cb = document.querySelector(`.os-cb[data-k="${k}"]`); return cb && cb.checked; };
+const ofVal = (k) => { const el = document.querySelector(`.of[data-of="${k}"]`); return el ? (parseFloat(el.value) || 0) : 0; };
+const m$round = (n) => "$" + Math.round(Number(n) || 0).toLocaleString();
+function buildCombinedOffer() {
+  const blocks = [];
+  // Cash uses {{merge}} placeholders so the Offer amount / EMD / close / inspection fields stay LIVE.
+  if (optChecked("cash")) {
+    blocks.push({ t: "CASH", b: `• Purchase price: {{offer}}\n• Closing: {{close_days}} days or less, all cash, no financing contingency, purchased as-is\n• Earnest money {{earnest}}, submitted 1 business day after a {{inspection_days}}-business-day inspection` });
+  }
+  if (optChecked("sf")) {
+    const price = ofVal("sfPrice"), down = ofVal("sfDown"), rate = ofVal("sfRate"), yrs = ofVal("sfYears") || 30;
+    const monthly = pmt(Math.max(0, price - down), rate, yrs, false);
+    $("#sfCalc").textContent = price ? `≈ ${m$round(monthly)}/mo for ${yrs} yrs` : "";
+    blocks.push({ t: "SELLER FINANCING", b: `• Purchase price: ${m$round(price)}\n• Down payment to you: ${m$round(down)}\n• Then ${m$round(monthly)}/month for ${yrs} years at ${rate}% interest\n• You collect steady monthly income and a higher overall price` });
+  }
+  if (optChecked("subto")) {
+    blocks.push({ t: "SUBJECT-TO (I take over the payments)", b: `• I take over your existing mortgage payment of ${m$round(ofVal("subPmt"))}/month and keep it current\n• ${m$round(ofVal("subCash"))} cash to you at closing\n• You're relieved of the monthly payment right away` });
+  }
+  if (!blocks.length) { toast("Check at least one offer structure", true); return; }
+  const multi = blocks.length > 1;
+  const intro = multi
+    ? `I'd like to make an offer on {{address}}. I can structure it a few different ways — pick whichever works best for you:`
+    : `I'd like to make an offer on {{address}}:`;
+  const body = blocks.map((x, i) => (multi ? `OPTION ${i + 1} — ${x.t}\n` : "") + x.b).join("\n\n");
+  const closer = `I'm flexible and easy to work with — if none of these are quite right, tell me what you need and I'll do my best to make it work.\n\nThanks,\n{{my_name}}\n{{my_phone}}`;
+  $("#offerBody").value = `Hi {{first_name}},\n\n${intro}\n\n${body}\n\n${closer}`;
+  $("#offerSubject").value = (multi ? "A few offer options" : "Cash offer") + " — {{address}}";
+  renderOfferPreview();
+}
+function prefillOfferOptions() {
+  const l = currentOfferLead() || {};
+  const sfPriceEl = document.querySelector('.of[data-of="sfPrice"]');
+  // Seller-finance price defaults higher than cash (the trade for terms): list/ARV, else 1.25× cash offer.
+  if (sfPriceEl && !sfPriceEl.value) sfPriceEl.value = Math.round(l.asking_price || l.arv || (suggestedOffer(l) ? suggestedOffer(l) * 1.25 : 0)) || "";
+  const subPmtEl = document.querySelector('.of[data-of="subPmt"]');
+  if (subPmtEl && !subPmtEl.value && l.mortgage_payment) subPmtEl.value = l.mortgage_payment;
+}
+// Cash-only → use the clean template; any creative structure on → use the combined builder.
+function refreshOfferBody() {
+  if (optChecked("sf") || optChecked("subto")) { prefillOfferOptions(); buildCombinedOffer(); }
+  else applyOfferTemplate();
+}
+$("#buildOfferBtn")?.addEventListener("click", buildCombinedOffer);
+$$(".os-cb").forEach((cb) => cb.addEventListener("change", () => {
+  const f = document.querySelector(`.os-fields[data-for="${cb.dataset.k}"]`);
+  if (f) f.style.display = cb.checked ? "block" : "none";
+  if (cb.checked) prefillOfferOptions();
+  buildCombinedOffer();
+}));
+$$(".of").forEach((el) => el.addEventListener("input", buildCombinedOffer));
+// Suggested cash offer for a lead: prefer the underwritten MAO, fall back to a 70%-rule estimate.
+function suggestedOffer(l) {
+  if (!l) return "";
+  if (l.offer_amount) return Math.round(l.offer_amount);
+  if (l.mao != null && l.mao > 0) return Math.round(l.mao);
+  if (l.arv) return Math.max(0, Math.round(l.arv * 0.7 - (l.repair_estimate || 0) - 10000));
+  return "";
+}
+const offerReady = (l) => !!(l && l.seller_email && l.seller_email.trim() && !l.offer_sent_at && l.stage !== "Dead");
+function offerLeadOptions() {
+  const sorted = [...leads].sort((a, b) => {
+    const r = (offerReady(b) ? 1 : 0) - (offerReady(a) ? 1 : 0);
+    return r || (b.opportunity_score ?? -1) - (a.opportunity_score ?? -1);
+  });
+  return sorted.map((l) => {
+    const mark = l.offer_sent_at ? "✓ " : offerReady(l) ? "• " : "⚠ ";
+    const so = suggestedOffer(l);
+    return `<option value="${l.id}">${mark}${esc(l.address || l.seller_name || "Lead #" + l.id)}${so ? " — ≤ " + money(so) : ""}</option>`;
+  }).join("");
+}
+function fillOfferLead() {
+  const l = currentOfferLead() || {};
+  $("#offerTo").value = l.seller_email || "";
+  $("#offerAmount").value = suggestedOffer(l) || "";
+  const ready = leads.filter(offerReady).length;
+  const sentToday = leads.filter((x) => x.offer_sent_at && x.offer_sent_at >= cutoffISO9am()).length;
+  $("#offerQueueInfo").innerHTML = `🎯 <b>${ready}</b> ready to offer · <b>${sentToday}</b> sent today. Send fires this lead, then jumps to the next ready one.`;
+}
+// Most recent 9am ET as ISO (mirrors the server KPI cutoff, good enough for a client-side count).
+function cutoffISO9am() {
+  const d = new Date(); const et = new Date(d.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  et.setHours(9, 0, 0, 0); if (new Date(d.toLocaleString("en-US", { timeZone: "America/New_York" })) < et) et.setDate(et.getDate() - 1);
+  return new Date(et.getTime() - (et.getTimezoneOffset() * 60000)).toISOString().slice(0, 19);
+}
+const nextReadyLeadId = (afterId) => {
+  const c = leads.filter((l) => offerReady(l) && l.id != afterId).sort((a, b) => (b.opportunity_score ?? -1) - (a.opportunity_score ?? -1));
+  return c.length ? c[0].id : null;
+};
 async function openOffer(leadId) {
   if (!leads.length) await loadLeads();
   if (!templates.length) await loadTemplates();
   try { settings = await api("/api/settings"); } catch {}
   offerTemplates = templates.filter((t) => t.audience === "offer");
   if (!offerTemplates.length) offerTemplates = templates.filter((t) => t.audience === "leads");
-  $("#offerLead").innerHTML = leads.map((l) => `<option value="${l.id}">${esc(l.address || l.seller_name || "Lead #" + l.id)}</option>`).join("");
-  if (leadId) $("#offerLead").value = leadId;
+  $("#offerLead").innerHTML = offerLeadOptions();
+  const firstReady = [...leads].filter(offerReady).sort((a, b) => (b.opportunity_score ?? -1) - (a.opportunity_score ?? -1))[0];
+  $("#offerLead").value = leadId || (firstReady && firstReady.id) || (leads[0] && leads[0].id) || "";
   $("#offerTemplate").innerHTML = offerTemplates.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
-  const l = currentOfferLead() || {};
-  $("#offerTo").value = l.seller_email || "";
-  $("#offerAmount").value = l.offer_amount || (l.arv ? Math.max(0, Math.round(l.arv * 0.7 - (l.repair_estimate || 0) - 10000)) : "");
-  applyOfferTemplate();
+  fillOfferLead();
+  refreshOfferBody();
   $("#offerModal").classList.add("open");
 }
-$("#offerLead")?.addEventListener("change", () => { const l = currentOfferLead() || {}; $("#offerTo").value = l.seller_email || ""; $("#offerAmount").value = l.offer_amount || (l.arv ? Math.max(0, Math.round(l.arv * 0.7 - (l.repair_estimate || 0) - 10000)) : ""); renderOfferPreview(); });
+$("#offerLead")?.addEventListener("change", () => { fillOfferLead(); refreshOfferBody(); });
 $("#offerTemplate")?.addEventListener("change", applyOfferTemplate);
 ["#offerAmount", "#offerEarnest", "#offerClose", "#offerInspect", "#offerSubject", "#offerBody"].forEach((s) => $(s)?.addEventListener("input", renderOfferPreview));
 $("#openOfferBtn")?.addEventListener("click", () => openOffer());
@@ -1426,13 +1640,21 @@ $("#offerSendBtn")?.addEventListener("click", async () => {
   if (!to) return toast("No agent email — add one to the lead", true);
   const subject = mergeOffer($("#offerSubject").value, l), body = mergeOffer($("#offerBody").value, l);
   const offerAmount = parseFloat($("#offerAmount").value) || null;
-  if (!confirm(`Send this offer to ${to}?`)) return;
   const btn = $("#offerSendBtn"); btn.disabled = true; btn.textContent = "Sending…";
   try {
-    const r = await api(`/api/leads/${id}/offer`, { method: "POST", body: JSON.stringify({ to, subject, body, offerAmount }) });
-    toast(r.stage === "Offer Made" ? "Offer sent ✅ — moved to Offer Made" : "Offer sent ✅");
-    closeModal("offerModal");
-    loadLeads(); loadDashboard();
+    await api(`/api/leads/${id}/offer`, { method: "POST", body: JSON.stringify({ to, subject, body, offerAmount }) });
+    const next = nextReadyLeadId(id);
+    await loadLeads(); loadDashboard();
+    $("#offerLead").innerHTML = offerLeadOptions();
+    if (next) {
+      $("#offerLead").value = next;
+      fillOfferLead(); refreshOfferBody();
+      const nl = currentOfferLead() || {};
+      toast("Offer sent ✅ — next: " + (nl.address || nl.seller_name || "lead"));
+    } else {
+      toast("Offer sent ✅ — queue clear 🎉");
+      closeModal("offerModal");
+    }
   } catch (e) { toast(e.message, true); }
   btn.disabled = false; btn.textContent = "Send offer ✉";
 });
@@ -1463,7 +1685,7 @@ function renderProspects() {
         ${p.notes ? `<div class="pr-notes">${esc(p.notes)}</div>` : ""}
       </div>
       <div class="pr-actions">
-        ${contact ? "" : `<button class="btn xs pr-trace" data-id="${p.id}">🔎 Skip trace</button>`}
+        ${contact ? "" : `<button class="btn xs pr-trace" data-id="${p.id}">🔎 Skip trace $</button>`}
         <button class="btn xs pr-activate" data-id="${p.id}">✓ Activate</button>
         <button class="btn xs pr-dismiss" data-id="${p.id}">✕ Dismiss</button>
       </div>
@@ -1482,7 +1704,7 @@ async function quickSkiptrace(id) {
     const r = await api("/api/leads/" + id + "/skiptrace", { method: "POST" });
     toast((r.phones.length || r.emails.length) ? `Found ${r.phones.length} phone(s), ${r.emails.length} email(s) ✅` : "No contact found");
     prospects = await api("/api/prospects"); renderProspects();
-  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = "🔎 Skip trace"; } toast(e.message, true); }
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = "🔎 Skip trace $"; } toast(e.message, true); }
 }
 $("#underwriteBtn")?.addEventListener("click", async () => {
   const btn = $("#underwriteBtn"); btn.disabled = true; btn.textContent = "Underwriting…";

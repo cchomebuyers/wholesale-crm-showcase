@@ -129,7 +129,8 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_emails_lead ON emails(lead_id);`);
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_emails_uid ON emails(uid) WHERE uid IS NOT NULL;`);
 for (const col of ["offer_sent_at TEXT", "offer_amount REAL", "active INTEGER DEFAULT 1",
   "mao REAL", "equity REAL", "opportunity_score INTEGER", "assessed_value REAL", "last_sale_price REAL", "uw_at TEXT",
-  "skiptraced_at TEXT", "skiptrace_raw TEXT"]) {
+  "skiptraced_at TEXT", "skiptrace_raw TEXT", "fee_collected REAL", "fee_collected_at TEXT",
+  "rent_estimate REAL", "latitude REAL", "longitude REAL", "comps_json TEXT", "arv_source TEXT"]) {
   try { db.exec(`ALTER TABLE leads ADD COLUMN ${col}`); } catch { /* already exists */ }
 }
 // One-time: bulk-pulled records (code violations / imported lists) start as Prospects, not active leads.
@@ -170,7 +171,7 @@ const LEAD_FIELDS = [
   "address", "city", "state", "zip",
   "property_type", "beds", "baths", "sqft",
   "asking_price", "arv", "repair_estimate",
-  "offer_amount", "contract_price", "assignment_fee",
+  "offer_amount", "contract_price", "assignment_fee", "fee_collected",
   "motivation", "source", "next_followup", "notes",
 ];
 const BUYER_FIELDS = ["name", "phone", "email", "areas", "property_types", "max_price", "cash", "notes"];
@@ -178,6 +179,17 @@ const BUYER_FIELDS = ["name", "phone", "email", "areas", "property_types", "max_
 function logActivity(leadId, type, body) {
   db.prepare("INSERT INTO activities (lead_id, created_at, type, body) VALUES (?,?,?,?)")
     .run(leadId, now(), type, body);
+}
+// Moving a lead into an offer stage (e.g. you sent the offer from your phone) counts as an offer sent:
+// stamp offer_sent_at so it hits the dashboard KPI and the Offers tab. Idempotent.
+const OFFER_STAGES = new Set(["Offer Made", "Backup Offer"]);
+function markOfferSentIfNeeded(leadId, newStage) {
+  if (!OFFER_STAGES.has(newStage)) return;
+  const row = db.prepare("SELECT offer_sent_at FROM leads WHERE id=?").get(leadId);
+  if (row && !row.offer_sent_at) {
+    db.prepare("UPDATE leads SET offer_sent_at=? WHERE id=?").run(now(), leadId);
+    logActivity(leadId, "note", `💵 Counted as offer sent (moved to ${newStage})`);
+  }
 }
 
 // ---------- App ----------
@@ -273,7 +285,14 @@ app.post("/api/leads/pull-violations", async (req, res) => {
 
 // ---- Free underwriting from Detroit's parcel file (assessed value, last sale, sqft) ----
 const DETROIT_PARCELS = "https://services2.arcgis.com/qvkbeam7Wirps6zC/ArcGIS/rest/services/parcel_file_current/FeatureServer/0/query";
-const streetOf = (addr) => (addr || "").split(",")[0].trim().toUpperCase();
+// Detroit's parcel file stores street addresses WITHOUT the street-type suffix ("13335 STRATHMOOR",
+// not "13335 STRATHMOOR ST"). Normalize so leads match: take the street part, drop a trailing suffix.
+const ST_SUFFIX = new Set("ST STREET AVE AV AVENUE RD ROAD DR DRIVE BLVD BOULEVARD LN LANE CT COURT PL PLACE WAY TER TERR TERRACE CIR CIRCLE PKWY PARKWAY HWY HIGHWAY SQ SQUARE ROW PT POINT PLZ PLAZA CRES".split(" "));
+const streetOf = (addr) => {
+  const parts = (addr || "").split(",")[0].trim().toUpperCase().replace(/\s+/g, " ").split(" ");
+  if (parts.length > 2 && ST_SUFFIX.has(parts[parts.length - 1])) parts.pop();
+  return parts.join(" ");
+};
 async function lookupParcels(addresses) {
   const map = {};
   const uniq = [...new Set(addresses.filter(Boolean))];
@@ -291,10 +310,62 @@ async function lookupParcels(addresses) {
   }
   return map;
 }
-// Run the wholesale math for one lead given its matched parcel record. Returns the columns to store.
-function computeUnderwrite(lead, a, cfg) {
+// Build FREE live comps from Detroit's recorded parcel sales: nearby recent arms-length sales
+// of similar-size homes → median $/sqft → ARV. Real closed prices, no paid API.
+async function detroitComps(address) {
+  const street = streetOf(address);
+  if (!street) return null;
+  try {
+    // 1) subject parcel: centroid (Web Mercator) + building floor area
+    const su = new URL(DETROIT_PARCELS);
+    su.searchParams.set("where", `address='${street.replace(/'/g, "''")}'`);
+    su.searchParams.set("outFields", "address,total_floor_area,year_built");
+    su.searchParams.set("returnCentroid", "true");
+    su.searchParams.set("returnGeometry", "false");
+    su.searchParams.set("outSR", "3857");
+    su.searchParams.set("f", "json");
+    const sj = await (await fetch(su)).json();
+    const feat = (sj.features || [])[0];
+    if (!feat || !feat.centroid) return null;
+    const { x, y } = feat.centroid;
+    const subjSqft = feat.attributes.total_floor_area || 0;
+    if (!subjSqft) return { subjSqft: 0, arv: null, comps: [], count: 0 };
+    // 2) nearby comparable recent sales (~0.75mi, similar sqft, last 2 yrs, sane price band)
+    const lo = Math.round(subjSqft * 0.6), hi = Math.round(subjSqft * 1.6);
+    const cutoff = new Date(Date.now() - 2 * 365 * 86400000).toISOString().slice(0, 10);
+    const cu = new URL(DETROIT_PARCELS);
+    cu.searchParams.set("geometry", `${x},${y}`);
+    cu.searchParams.set("geometryType", "esriGeometryPoint");
+    cu.searchParams.set("inSR", "3857");
+    cu.searchParams.set("distance", "1200");
+    cu.searchParams.set("units", "esriSRUnit_Meter");
+    cu.searchParams.set("spatialRel", "esriSpatialRelIntersects");
+    cu.searchParams.set("where", `amt_sale_price>=8000 AND amt_sale_price<=400000 AND total_floor_area>=${lo} AND total_floor_area<=${hi} AND sale_date>=DATE '${cutoff}'`);
+    cu.searchParams.set("outFields", "address,amt_sale_price,sale_date,total_floor_area");
+    cu.searchParams.set("returnGeometry", "false");
+    cu.searchParams.set("orderByFields", "sale_date DESC");
+    cu.searchParams.set("resultRecordCount", "60");
+    cu.searchParams.set("f", "json");
+    const cj = await (await fetch(cu)).json();
+    let comps = (cj.features || []).map((f) => f.attributes)
+      .filter((a) => a.total_floor_area > 0 && a.amt_sale_price > 0 && streetOf(a.address) !== street)
+      .map((a) => ({ address: a.address, price: Math.round(a.amt_sale_price), sqft: a.total_floor_area, date: a.sale_date, ppsf: a.amt_sale_price / a.total_floor_area }));
+    if (!comps.length) return { subjSqft, arv: null, comps: [], count: 0 };
+    const ppsfs = comps.map((c) => c.ppsf).sort((a, b) => a - b);
+    const med = ppsfs[Math.floor(ppsfs.length / 2)];
+    const arv = Math.round(med * subjSqft);
+    const display = [...comps].sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 6)
+      .map((c) => ({ address: c.address, price: c.price, sqft: c.sqft, date: c.date }));
+    return { subjSqft, medPpsf: Math.round(med), arv, count: comps.length, comps: display };
+  } catch { return null; }
+}
+
+// Run the wholesale math for one lead. Prefers a comps-based ARV, falls back to assessed×2.
+function computeUnderwrite(lead, a, cfg, compsArv) {
   const assessed = a.amt_assessed_value || 0;
-  const arv = Math.round(assessed * 2); // MI assesses at ~50% of market
+  const useComps = compsArv && compsArv > 0;
+  const arv = useComps ? Math.round(compsArv) : Math.round(assessed * 2); // MI assesses at ~50% of market
+  const arvSource = useComps ? "comps" : "assessed";
   const floor = a.total_floor_area || a.total_square_footage || 0;
   const repairs = Math.round(floor * cfg.rehabPerSqft);
   const mao = Math.round(arv * (cfg.buyerPct / 100) - repairs - cfg.minFee);
@@ -308,10 +379,28 @@ function computeUnderwrite(lead, a, cfg) {
     if (equity > 0) score += Math.min(30, equity / 2000);
   }
   score = Math.round(Math.max(0, Math.min(100, score)));
-  return { arv, repairs, mao, equity, score, assessed, lastSale };
+  return { arv, repairs, mao, equity, score, assessed, lastSale, arvSource };
 }
 const UW_UPDATE = `UPDATE leads SET arv=?, repair_estimate=?, mao=?, equity=?, opportunity_score=?,
-    assessed_value=?, last_sale_price=?, uw_at=?, updated_at=? WHERE id=?`;
+    assessed_value=?, last_sale_price=?, arv_source=?, uw_at=?, updated_at=? WHERE id=?`;
+
+// Full single-lead underwrite WITH free live comps (used on lead-add and on-demand).
+async function underwriteOne(leadId, cfg) {
+  const lead = db.prepare("SELECT id, address, notes FROM leads WHERE id=?").get(leadId);
+  if (!lead || !lead.address) return { matched: false };
+  const map = await lookupParcels([streetOf(lead.address)]);
+  const a = map[streetOf(lead.address)];
+  if (!a) return { matched: false };
+  let compsData = null, compsArv = null;
+  try { compsData = await detroitComps(lead.address); if (compsData && compsData.arv) compsArv = compsData.arv; } catch { /* comps optional */ }
+  const u = computeUnderwrite(lead, a, cfg, compsArv);
+  const t = now();
+  db.prepare(`UPDATE leads SET arv=?, repair_estimate=?, mao=?, equity=?, opportunity_score=?,
+      assessed_value=?, last_sale_price=?, arv_source=?, comps_json=?, uw_at=?, updated_at=? WHERE id=?`)
+    .run(u.arv, u.repairs, u.mao, u.equity, u.score, u.assessed, u.lastSale, u.arvSource,
+      compsData ? JSON.stringify(compsData) : null, t, t, leadId);
+  return { matched: true, ...u, comps: compsData };
+}
 
 // Bulk underwrite every non-dead record (prospects AND active leads).
 app.post("/api/prospects/underwrite", async (req, res) => {
@@ -325,7 +414,7 @@ app.post("/api/prospects/underwrite", async (req, res) => {
       const a = map[streetOf(p.address)];
       if (!a) continue;
       const u = computeUnderwrite(p, a, cfg);
-      upd.run(u.arv, u.repairs, u.mao, u.equity, u.score, u.assessed, u.lastSale, t, t, p.id);
+      upd.run(u.arv, u.repairs, u.mao, u.equity, u.score, u.assessed, u.lastSale, u.arvSource, t, t, p.id);
       underwritten++;
     }
     res.json({ total: props.length, underwritten });
@@ -334,22 +423,29 @@ app.post("/api/prospects/underwrite", async (req, res) => {
   }
 });
 
-// Underwrite ONE lead on demand — works whether it's an active lead or a prospect under review.
+// Underwrite ONE lead on demand WITH free live comps — works for active leads or prospects.
 app.post("/api/leads/:id/underwrite", async (req, res) => {
-  const lead = db.prepare("SELECT id, address, notes FROM leads WHERE id=?").get(req.params.id);
+  const lead = db.prepare("SELECT id, address FROM leads WHERE id=?").get(req.params.id);
   if (!lead) return res.status(404).json({ error: "Lead not found" });
   if (!lead.address) return res.status(400).json({ error: "This lead has no address to cross-reference." });
   try {
-    const map = await lookupParcels([streetOf(lead.address)]);
-    const a = map[streetOf(lead.address)];
-    if (!a) return res.status(404).json({ error: "No Detroit parcel record matched this address. (Underwriting uses Detroit's free parcel file — works for Detroit addresses.)" });
-    const u = computeUnderwrite(lead, a, acqConfig());
-    const t = now();
-    db.prepare(UW_UPDATE).run(u.arv, u.repairs, u.mao, u.equity, u.score, u.assessed, u.lastSale, t, t, lead.id);
-    res.json({ ok: true, ...u });
+    const r = await underwriteOne(lead.id, acqConfig());
+    if (!r.matched) return res.status(404).json({ error: "No Detroit parcel record matched this address. (Comps & underwriting use Detroit's free parcel file — Detroit addresses only.)" });
+    res.json({ ok: true, ...r });
   } catch (err) {
     res.status(500).json({ error: "Underwriting failed: " + String(err.message || err) });
   }
+});
+// Just the comps for a lead (free recorded sales), without re-underwriting.
+app.get("/api/leads/:id/comps", async (req, res) => {
+  const lead = db.prepare("SELECT id, address, comps_json FROM leads WHERE id=?").get(req.params.id);
+  if (!lead) return res.status(404).json({ error: "not found" });
+  if (lead.comps_json) { try { return res.json(JSON.parse(lead.comps_json)); } catch {} }
+  try {
+    const c = await detroitComps(lead.address);
+    if (c) db.prepare("UPDATE leads SET comps_json=? WHERE id=?").run(JSON.stringify(c), lead.id);
+    res.json(c || { arv: null, comps: [], count: 0 });
+  } catch (err) { res.status(500).json({ error: String(err.message || err) }); }
 });
 
 // ---- Skip tracing (BatchData) — pull owner phone/email for any lead, any status ----
@@ -433,16 +529,26 @@ app.post("/api/leads/import", (req, res) => {
   res.json({ imported, skipped });
 });
 
-app.post("/api/leads", (req, res) => {
+app.post("/api/leads", async (req, res) => {
   const b = req.body || {};
   if (!b.stage) b.stage = "New"; // stage is NOT NULL
+  // Guard against double-submit: same address created in the last 15s → return the existing lead.
+  if (b.address && b.address.trim()) {
+    const recent = db.prepare("SELECT id FROM leads WHERE lower(address)=lower(?) AND created_at > ?")
+      .get(b.address.trim(), new Date(Date.now() - 15000).toISOString());
+    if (recent) return res.json({ id: recent.id, duplicate: true });
+  }
   const t = now();
   const info = db
     .prepare(`INSERT INTO leads (created_at, updated_at, ${LEAD_FIELDS.join(",")})
               VALUES (?, ?, ${LEAD_FIELDS.map(() => "?").join(",")})`)
     .run(t, t, ...LEAD_FIELDS.map((f) => (b[f] === undefined || b[f] === "" ? null : b[f])));
-  logActivity(info.lastInsertRowid, "stage_change", `Lead created — stage: ${b.stage || "New"}`);
-  res.json({ id: info.lastInsertRowid });
+  const id = info.lastInsertRowid;
+  logActivity(id, "stage_change", `Lead created — stage: ${b.stage || "New"}`);
+  // Auto-load free analysis (comps → ARV, underwrite, score) so the lead comes pre-filled — no buttons.
+  let uw = null;
+  if (b.address) { try { uw = await underwriteOne(id, acqConfig()); } catch { /* non-fatal */ } }
+  res.json({ id, underwrite: uw && uw.matched ? uw : null });
 });
 
 app.put("/api/leads/:id", (req, res) => {
@@ -454,6 +560,7 @@ app.put("/api/leads/:id", (req, res) => {
     .run(now(), ...LEAD_FIELDS.map((f) => (b[f] === undefined || b[f] === "" ? null : b[f])), req.params.id);
   if (b.stage && b.stage !== existing.stage) {
     logActivity(req.params.id, "stage_change", `Stage: ${existing.stage} → ${b.stage}`);
+    markOfferSentIfNeeded(req.params.id, b.stage);
   }
   res.json({ ok: true });
 });
@@ -494,7 +601,10 @@ app.patch("/api/leads/:id/stage", (req, res) => {
   const existing = db.prepare("SELECT stage FROM leads WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "not found" });
   db.prepare("UPDATE leads SET stage = ?, updated_at = ? WHERE id = ?").run(stage, now(), req.params.id);
-  if (stage !== existing.stage) logActivity(req.params.id, "stage_change", `Stage: ${existing.stage} → ${stage}`);
+  if (stage !== existing.stage) {
+    logActivity(req.params.id, "stage_change", `Stage: ${existing.stage} → ${stage}`);
+    markOfferSentIfNeeded(req.params.id, stage);
+  }
   res.json({ ok: true });
 });
 
@@ -921,6 +1031,33 @@ function cutoff9amET() {
   return cutoff.toISOString();
 }
 
+// --- Offers sent (with projected vs collected fees) ---
+app.get("/api/offers", (req, res) => {
+  const rows = db.prepare(`SELECT id, address, seller_name, seller_email, stage,
+      offer_sent_at, offer_amount, assignment_fee, fee_collected, fee_collected_at, contract_price
+    FROM leads WHERE offer_sent_at IS NOT NULL ORDER BY offer_sent_at DESC`).all();
+  const totals = {
+    count: rows.length,
+    // Projected = spread on deals still in flight (not closed/dead). Collected = fees on closed deals.
+    projected: rows.filter((r) => !["Closed", "Dead"].includes(r.stage)).reduce((s, r) => s + (r.assignment_fee || 0), 0),
+    collected: rows.filter((r) => r.stage === "Closed").reduce((s, r) => s + (r.fee_collected || 0), 0),
+  };
+  res.json({ offers: rows, totals });
+});
+// Close a deal and record the assignment fee collected. A fee is only "collected" at closing.
+app.patch("/api/leads/:id/collect-fee", (req, res) => {
+  const lead = db.prepare("SELECT id, address, stage FROM leads WHERE id=?").get(req.params.id);
+  if (!lead) return res.status(404).json({ error: "not found" });
+  const amt = Number(req.body && req.body.amount);
+  if (!(amt >= 0)) return res.status(400).json({ error: "Enter a valid amount" });
+  const t = now();
+  db.prepare("UPDATE leads SET fee_collected=?, fee_collected_at=?, stage='Closed', updated_at=? WHERE id=?")
+    .run(amt || null, amt ? t : null, t, lead.id);
+  if (lead.stage !== "Closed") logActivity(lead.id, "stage_change", `Stage: ${lead.stage} → Closed`);
+  if (amt) logActivity(lead.id, "note", `💰 Deal closed — assignment fee collected: $${amt.toLocaleString()}`);
+  res.json({ ok: true, stage: "Closed" });
+});
+
 // --- Dashboard stats ---
 app.get("/api/stats", (req, res) => {
   const stages = db.prepare("SELECT stage, COUNT(*) n FROM leads WHERE active=1 GROUP BY stage").all();
@@ -929,6 +1066,8 @@ app.get("/api/stats", (req, res) => {
                 COALESCE(SUM(assignment_fee),0) pipeline_fees
               FROM leads WHERE active=1 AND stage NOT IN ('Closed','Dead')`)
     .get();
+  // Realized money = fees collected on CLOSED deals only.
+  totals.collected_fees = db.prepare("SELECT COALESCE(SUM(fee_collected),0) c FROM leads WHERE stage='Closed' AND fee_collected IS NOT NULL").get().c;
   const today = new Date().toISOString().slice(0, 10);
   const followups = db
     .prepare(`SELECT id, seller_name, address, next_followup, stage FROM leads

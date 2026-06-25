@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wholesale CRM</title>
-  <link rel="stylesheet" href="styles.css?v=31" />
+  <link rel="stylesheet" href="styles.css?v=41" />
 </head>
 <body>
   <header>
@@ -12,6 +12,7 @@
     <nav>
       <button class="tab active" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="leads">Leads</button>
+      <button class="tab" data-tab="offers">Offers</button>
       <button class="tab" data-tab="dealcalc">Deal Calc</button>
       <button class="tab" data-tab="outreach">Outreach</button>
       <button class="tab" data-tab="inbox">Inbox</button>
@@ -109,6 +110,12 @@
       <div id="prospectList" class="prospect-list" style="display:none"></div>
     </section>
 
+    <!-- Offers sent -->
+    <section id="offers" class="view">
+      <div class="offer-summary" id="offerSummary"></div>
+      <div id="offerList" class="offer-list"></div>
+    </section>
+
     <!-- Deal Calculator (Creative Offer Oven) -->
     <section id="dealcalc" class="view">
       <div class="calc-topbar">
@@ -130,7 +137,10 @@
             <div class="field"><label id="lblPurchase">Purchase Price</label><input class="ci" data-k="purchase" type="number" value="120000" /></div>
             <div class="field"><label>Market / Listed Value</label><input class="ci" data-k="listed" type="number" value="100000" /></div>
           </div>
-          <div class="field" id="fldDown"><label>Down / Cash to Seller</label><input class="ci" data-k="down" type="number" value="6500" /></div>
+          <div class="row">
+            <div class="field" id="fldDown"><label>Down / Cash to Seller</label><input class="ci" data-k="down" type="number" value="6500" /></div>
+            <div class="field"><label>Min Cash-on-Cash % <span class="hint">offer ceiling</span></label><input class="ci" data-k="cocTarget" type="number" step="0.1" value="14.7" /></div>
+          </div>
         </fieldset>
 
         <fieldset id="fsCash"><legend>Cash Offer — MAO calculator</legend>
@@ -178,22 +188,26 @@
           </div>
         </fieldset>
 
-        <fieldset><legend>Rental Income & Expenses (monthly)</legend>
+        <fieldset><legend>Rental Income & Expenses (monthly $)</legend>
           <div class="row">
             <div class="field"><label>Monthly Rent</label><input class="ci" data-k="rent" type="number" value="1600" /></div>
-            <div class="field"><label>Insurance</label><input class="ci" data-k="ins" type="number" value="100" /></div>
+            <div class="field"><label>Vacancy % of rent</label><input class="ci" data-k="vac" type="number" step="0.5" value="5" /></div>
           </div>
           <div class="row">
-            <div class="field"><label>Property Tax</label><input class="ci" data-k="tax" type="number" value="100" /></div>
-            <div class="field"><label>HOA</label><input class="ci" data-k="hoa" type="number" value="0" /></div>
+            <div class="field"><label>Property Tax <span class="hint">/mo</span></label><input class="ci" data-k="tax" type="number" value="100" /></div>
+            <div class="field"><label>Insurance <span class="hint">/mo</span></label><input class="ci" data-k="ins" type="number" value="100" /></div>
           </div>
           <div class="row">
-            <div class="field"><label>Other</label><input class="ci" data-k="other" type="number" value="0" /></div>
-            <div class="field"><label>Mgmt % of rent</label><input class="ci" data-k="mgmt" type="number" step="0.5" value="10" /></div>
+            <div class="field"><label>HOA <span class="hint">/mo</span></label><input class="ci" data-k="hoa" type="number" value="0" /></div>
+            <div class="field"><label>Other <span class="hint">utils, lawn…</span></label><input class="ci" data-k="other" type="number" value="0" /></div>
           </div>
           <div class="row">
-            <div class="field"><label>CapEx % of rent</label><input class="ci" data-k="capex" type="number" step="0.5" value="10" /></div>
-            <div class="field"><label>Vacancy % of rent</label><input class="ci" data-k="vac" type="number" step="0.5" value="0" /></div>
+            <div class="field"><label>Mgmt % of rent</label><input class="ci" data-k="mgmt" type="number" step="0.5" value="8" /></div>
+            <div class="field"><label>Maintenance % of rent</label><input class="ci" data-k="maint" type="number" step="0.5" value="5" /></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>CapEx % of rent</label><input class="ci" data-k="capex" type="number" step="0.5" value="5" /></div>
+            <div class="field"></div>
           </div>
         </fieldset>
 
@@ -215,22 +229,25 @@
               <div class="sub" id="rCashflowYr"></div>
             </div>
             <!-- Cash-deal cards -->
-            <div class="result-card r-cash"><div class="lbl">Max Allowable Offer <span class="hint">MAO</span></div><div class="val accent" id="rMao">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Recommended Max Offer <span class="hint" id="maoDriver"></span></div><div class="val accent" id="rMao">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Offer @ <span class="cocTgt">14.7%</span> CoC <span class="hint">cashflow ceiling</span></div><div class="val" id="rMaoCf">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">ARV-rule offer <span class="hint">70% − repairs − fee</span></div><div class="val" id="rMaoArv">—</div></div>
             <div class="result-card r-cash"><div class="lbl">Margin vs Your Offer</div><div class="val" id="rMargin">—</div></div>
-            <div class="result-card r-cash"><div class="lbl">Cap Rate</div><div class="val" id="rCap">—</div></div>
             <div class="result-card r-cash"><div class="lbl">Cash-on-Cash <span class="hint">cash buy</span></div><div class="val" id="rCocCash">—</div></div>
+            <div class="result-card r-cash"><div class="lbl">Cap Rate</div><div class="val" id="rCap">—</div></div>
             <div class="result-card r-cash"><div class="lbl">1% Rule <span class="hint">rent ÷ price</span></div><div class="val" id="r1pct">—</div></div>
-            <div class="result-card r-cash"><div class="lbl">Gross Rent Multiplier</div><div class="val" id="rGrm">—</div></div>
             <div class="result-card r-cash"><div class="lbl">Total Cash Invested</div><div class="val" id="rCashInv">—</div></div>
             <!-- Financing cards -->
-            <div class="result-card r-finance"><div class="lbl">Cash-on-Cash <span class="hint">÷ entry fee</span></div><div class="val accent" id="rCoc">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Cash-on-Cash <span class="hint">÷ total cash in</span></div><div class="val accent" id="rCoc">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">Max Cash to Seller @ <span class="cocTgt">14.7%</span> <span class="hint">offer ceiling</span></div><div class="val" id="rMaxDown">—</div></div>
             <div class="result-card r-finance"><div class="lbl">Monthly Debt Payment</div><div class="val" id="rPmt">—</div></div>
             <div class="result-card r-finance"><div class="lbl">Total Cash to Close</div><div class="val" id="rCashIn">—</div></div>
+            <div class="result-card r-finance"><div class="lbl">DSCR <span class="hint">NOI ÷ debt</span></div><div class="val" id="rDscr">—</div></div>
             <div class="result-card r-finance"><div class="lbl">Cash to Seller <span class="hint">after comm.</span></div><div class="val" id="rSeller">—</div></div>
             <div class="result-card r-finance"><div class="lbl">Total Financed</div><div class="val" id="rLoan">—</div></div>
-            <div class="result-card r-finance"><div class="lbl">Monthly Op. Expenses</div><div class="val" id="rOpex">—</div></div>
             <div class="result-card r-finance"><div class="lbl">Future Value <span class="hint">appreciated</span></div><div class="val" id="rAppr">—</div></div>
           </div>
+          <div class="cf-breakdown" id="cfBreakdown"></div>
           <div class="attach-box">
             <label>Attach this analysis to a lead</label>
             <div class="attach-row">
@@ -377,7 +394,10 @@
               <div class="row">
                 <div class="field"><label>Offer</label><input name="offer_amount" type="number" /></div>
                 <div class="field"><label>Contract</label><input name="contract_price" type="number" /></div>
-                <div class="field"><label>Assign fee</label><input name="assignment_fee" type="number" /></div>
+              </div>
+              <div class="row">
+                <div class="field"><label>Assign fee <span class="hint">projected spread</span></label><input name="assignment_fee" type="number" /></div>
+                <div class="field"><label>Fee collected <span class="hint">money in hand</span></label><input name="fee_collected" type="number" /></div>
               </div>
             </fieldset>
             <fieldset><legend>Context</legend>
@@ -399,7 +419,7 @@
             <button class="btn xs" id="logCallBtn">📞 Log call</button>
             <button class="btn xs" id="addNoteBtn">📝 Note</button>
             <button class="btn xs" id="underwriteLeadBtn" title="Cross-reference Detroit parcel data & run your numbers">🧮 Underwrite</button>
-            <button class="btn xs" id="skiptraceLeadBtn" title="Pull owner phone & email (BatchData)">🔎 Skip trace</button>
+            <button class="btn xs" id="skiptraceLeadBtn" title="Pull owner phone & email (BatchData)">🔎 Skip trace <span class="cost-tag">$</span></button>
             <button class="btn xs" id="reviewToggleBtn" title="Move this lead in or out of the review queue">↩ Move to review</button>
           </div>
           <div id="leadDataResult" class="lead-data-result" style="display:none"></div>
@@ -559,6 +579,7 @@
       <div class="modal-body two-col">
         <div class="col">
           <div class="field"><label>Lead / property</label><select id="offerLead"></select></div>
+          <div id="offerQueueInfo" class="hint" style="margin:-4px 0 10px"></div>
           <div class="row">
             <div class="field"><label>To (listing agent)</label><input id="offerTo" type="email" /></div>
             <div class="field"><label>Offer template</label><select id="offerTemplate"></select></div>
@@ -571,6 +592,34 @@
             <div class="field"><label>Close in (days or less)</label><input id="offerClose" type="number" value="30" /></div>
             <div class="field"><label>Inspection (business days)</label><input id="offerInspect" type="number" value="10" /></div>
           </div>
+
+          <div class="offer-stack">
+            <div class="os-title">🔀 Combine offers <span class="hint">check the structures to send — they go in one email as options</span></div>
+            <label class="os-row"><input type="checkbox" class="os-cb" data-k="cash" checked /> 💵 <b>Cash</b> <span class="hint">— uses Offer amount above</span></label>
+
+            <label class="os-row"><input type="checkbox" class="os-cb" data-k="sf" /> 📜 <b>Seller financing</b></label>
+            <div class="os-fields" data-for="sf" style="display:none">
+              <div class="row">
+                <div class="field"><label>Price</label><input class="of" data-of="sfPrice" type="number" /></div>
+                <div class="field"><label>Down</label><input class="of" data-of="sfDown" type="number" value="5000" /></div>
+              </div>
+              <div class="row">
+                <div class="field"><label>Rate %</label><input class="of" data-of="sfRate" type="number" step="0.1" value="6" /></div>
+                <div class="field"><label>Years</label><input class="of" data-of="sfYears" type="number" value="30" /></div>
+              </div>
+              <div class="os-calc" id="sfCalc"></div>
+            </div>
+
+            <label class="os-row"><input type="checkbox" class="os-cb" data-k="subto" /> 🏦 <b>Subject-To</b> <span class="hint">— take over their payment</span></label>
+            <div class="os-fields" data-for="subto" style="display:none">
+              <div class="row">
+                <div class="field"><label>Their monthly payment</label><input class="of" data-of="subPmt" type="number" /></div>
+                <div class="field"><label>Cash to seller</label><input class="of" data-of="subCash" type="number" value="5000" /></div>
+              </div>
+            </div>
+            <button type="button" class="btn" id="buildOfferBtn">↻ Build combined message</button>
+          </div>
+
           <div class="field"><label>Subject</label><input id="offerSubject" /></div>
           <div class="field"><label>Message <span class="hint">{{offer}} {{address}} {{earnest}} fill in automatically</span></label>
             <textarea id="offerBody" rows="9"></textarea></div>
@@ -604,6 +653,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=31"></script>
+  <script src="app.js?v=41"></script>
 </body>
 </html>
