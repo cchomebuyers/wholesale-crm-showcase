@@ -79,10 +79,27 @@ async function probeSources() {
   } catch (e) { $("#srcStatus").innerHTML = `<span class="err">${e.message}</span>`; toast(e.message, true); }
   finally { btn.disabled = false; btn.textContent = label; }
 }
+async function pullArea() {
+  const city = $("#areaCity").value.trim(), state = $("#areaState").value.trim(), zip = $("#areaZip").value.trim();
+  if (!city && !zip) { toast("Enter a city or ZIP", true); return; }
+  const btn = $("#areaPull"); btn.disabled = true; const label = btn.textContent; btn.textContent = "Pulling…";
+  $("#areaStatus").textContent = "Fanning across every source for this area…";
+  try {
+    const d = await api("/api/area/pull", { method: "POST", body: JSON.stringify({ city, state, zip }) });
+    $("#areaStatus").innerHTML = `<span class="ok">${d.area}: ${d.found} found · ${d.inserted} new prospects · ${d.withContact} with contact · ${d.skipped} dupes.</span> They're in <b>Leads → Prospects</b>.`;
+    $("#areaBreakdown").innerHTML = `<table class="src-table"><thead><tr><th>Source</th><th>Type</th><th>Status</th><th>Found</th><th>Added</th><th>Latency</th></tr></thead><tbody>${
+      (d.bySource || []).map((s) => `<tr><td><b>${s.source_id}</b></td><td class="muted">${s.type}</td><td>${s.ok ? '<span class="pill ok">ok</span>' : '<span class="pill err">'+(s.error_kind||"fail")+'</span>'}</td><td>${s.found}</td><td><b>${s.added}</b></td><td>${s.latency_ms} ms</td></tr>`).join("")
+    }</tbody></table>`;
+    toast(`${d.inserted} new prospects from ${city || zip}`);
+    loadSources();
+  } catch (e) { $("#areaStatus").innerHTML = `<span class="err">${e.message}</span>`; toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
 document.addEventListener("DOMContentLoaded", () => {
-  const p = $("#srcProbe"), r = $("#srcRefresh");
+  const p = $("#srcProbe"), r = $("#srcRefresh"), a = $("#areaPull");
   if (p) p.addEventListener("click", probeSources);
   if (r) r.addEventListener("click", loadSources);
+  if (a) a.addEventListener("click", pullArea);
 });
 
 // ---------- Populate stage selects ----------

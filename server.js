@@ -1738,6 +1738,62 @@ app.get("/api/sources/recent", async (req, res) => {
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
+// ---- "Pull everything for an area": fan across every lead-producing connector, dedupe, persist ----
+function areaResultToLead(r, connId) {
+  return {
+    address: r.formatted_address || r.address || null,
+    seller_name: r.seller_name || r.listing_agent_name || null,
+    seller_phone: r.listing_agent_phone || r.phone || null,
+    seller_email: r.listing_agent_email || r.email || null,
+    city: r.city || null, state: r.state || null, zip: r.zip || null,
+    source: r.source || connId,
+    motivation: r.motivation || (r.status ? "On-market" : null),
+    notes: [r.price ? "List $" + Number(r.price).toLocaleString() : null,
+            r.ordinance ? "Violation: " + r.ordinance : null,
+            r.absentee ? "⚑ ABSENTEE" : null].filter(Boolean).join(" · ") || null,
+  };
+}
+app.post("/api/area/pull", async (req, res) => {
+  const b = req.body || {};
+  const target = { city: b.city || undefined, state: b.state || undefined, zip: b.zip || undefined,
+    status: "Active", days: Math.max(1, Math.min(365, Number(b.days) || 30)) };
+  if (!target.city && !target.zip) return res.status(400).json({ error: "Enter a city or ZIP." });
+  const t = now(); const bySource = []; let found = 0, inserted = 0, skipped = 0, withContact = 0;
+  const seen = new Set();
+  const ins = db.prepare(`INSERT INTO leads (created_at, updated_at, stage, active, seller_name, seller_phone, seller_email, address, city, state, zip, motivation, source, notes)
+      VALUES (?, ?, 'New', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const conn of Object.values(registry)) {
+    if (conn.type !== "listings" && conn.type !== "violations") continue; // comps aren't leads
+    let results = [], ok = true, error = null, latency = 0;
+    if (sourceHealth) {
+      const r = await sourceHealth.runAndRecord(conn, target); // also records metrics to the scoreboard
+      results = r.results; ok = r.summary.ok; error = r.summary.error; latency = r.summary.latency_ms;
+    } else {
+      const s = Date.now();
+      try { const out = await conn.search(target); results = Array.isArray(out) ? out : (out ? [out] : []); }
+      catch (e) { ok = false; error = String(e.message || e); }
+      latency = Date.now() - s;
+    }
+    let added = 0;
+    for (const r of results) {
+      const lead = areaResultToLead(r, conn.id);
+      if (!lead.address) { skipped++; continue; }
+      const key = lead.address.toLowerCase();
+      if (seen.has(key)) { skipped++; continue; }
+      seen.add(key);
+      if (db.prepare("SELECT id FROM leads WHERE lower(address)=lower(?)").get(lead.address)) { skipped++; continue; }
+      const info = ins.run(t, t, lead.seller_name, lead.seller_phone, lead.seller_email, lead.address,
+        lead.city, lead.state, lead.zip, lead.motivation, lead.source, lead.notes);
+      mirrorLeadSafe(info.lastInsertRowid);
+      if (lead.seller_phone || lead.seller_email) withContact++;
+      added++; inserted++;
+    }
+    found += results.length;
+    bySource.push({ source_id: conn.id, type: conn.type, ok, found: results.length, added, latency_ms: latency, error_kind: error ? "error" : null });
+  }
+  res.json({ area: `${target.city || ""} ${target.state || ""} ${target.zip || ""}`.trim(), found, inserted, skipped, withContact, bySource });
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   makeBackup(); // snapshot on every startup

@@ -59,35 +59,35 @@ export function createSourceHealth(connectionString, getRegistry) {
     `);
   }
 
-  // Probe one connector → record a fully-metriced row → return the summary.
-  async function probeOne(conn) {
-    const target = probeTarget(conn);
+  // Run one connector for a target, record a fully-metriced row, return {summary, results}.
+  async function runAndRecord(conn, target = probeTarget(conn)) {
     const started = Date.now();
-    let ok = false, leads = 0, with_contact = 0, error = null, sample = null;
+    let ok = false, error = null, results = [];
     try {
-      const result = await withTimeout(conn.search(target), 20000, conn.id);
-      const arr = Array.isArray(result) ? result : (result ? [result] : []);
-      leads = arr.length;
-      with_contact = arr.filter(hasContact).length;
-      sample = arr[0] || null;
+      const result = await withTimeout(conn.search(target), 30000, conn.id);
+      results = Array.isArray(result) ? result : (result ? [result] : []);
       ok = true;
     } catch (e) {
       error = String(e.message || e).slice(0, 400);
     }
     const latency_ms = Date.now() - started;
-    const row = {
+    const with_contact = results.filter(hasContact).length;
+    const summary = {
       source_id: conn.id, source_type: conn.type, region: conn.region, ok,
-      leads, with_contact, latency_ms, error, error_kind: errorKind(error), target, sample,
+      leads: results.length, with_contact, latency_ms, error, error_kind: errorKind(error),
+      target, sample: results[0] || null,
     };
     await pool.query(
       `INSERT INTO source_runs (source_id, source_type, region, ok, leads, with_contact, latency_ms, error, error_kind, target, sample)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [row.source_id, row.source_type, row.region, row.ok, row.leads, row.with_contact, row.latency_ms,
-       row.error, row.error_kind, JSON.stringify(target), sample ? JSON.stringify(sample) : null],
+      [summary.source_id, summary.source_type, summary.region, summary.ok, summary.leads, summary.with_contact,
+       summary.latency_ms, summary.error, summary.error_kind, JSON.stringify(target), summary.sample ? JSON.stringify(summary.sample) : null],
     );
-    return row;
+    return { summary, results };
   }
 
+  // Probe = run with the default target; metrics only.
+  const probeOne = async (conn) => (await runAndRecord(conn)).summary;
   async function probeAll() {
     const registry = getRegistry();
     const out = [];
@@ -130,5 +130,5 @@ export function createSourceHealth(connectionString, getRegistry) {
     return r.rows;
   }
 
-  return { pool, init, probeOne, probeAll, health, recent };
+  return { pool, init, probeOne, probeAll, runAndRecord, health, recent };
 }

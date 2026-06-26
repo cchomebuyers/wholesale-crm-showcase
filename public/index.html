@@ -355,6 +355,20 @@
     <section id="sources" class="view">
       <div class="panel">
         <div class="panel-head">
+          <b>🌐 Pull everything for an area</b>
+          <span class="muted" style="margin-left:8px">fans across every connected source at once</span>
+        </div>
+        <div class="toolbar" style="margin:8px 0 4px">
+          <input id="areaCity" placeholder="City (e.g. Detroit)" style="min-width:160px" />
+          <input id="areaState" placeholder="State" style="max-width:90px" />
+          <input id="areaZip" placeholder="ZIP (optional)" style="max-width:130px" />
+          <button class="btn primary" id="areaPull">⬇ Pull all sources for this area</button>
+        </div>
+        <div id="areaStatus" class="muted" style="margin-bottom:6px"></div>
+        <div id="areaBreakdown"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
           <b>Data source scoreboard</b>
           <span class="muted" id="srcMeta" style="margin-left:8px"></span>
           <button class="btn primary" id="srcProbe" style="margin-left:auto">▶ Test all sources</button>
