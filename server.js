@@ -7,7 +7,7 @@ import { simpleParser } from "mailparser";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
-import { mountCrmSubstrate, mirrorLead } from "./crm_thinga.js";
+import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead } from "./crm_thinga.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -192,8 +192,11 @@ const LEAD_FIELDS = [
 const BUYER_FIELDS = ["name", "phone", "email", "areas", "property_types", "max_price", "cash", "notes"];
 
 function logActivity(leadId, type, body) {
-  db.prepare("INSERT INTO activities (lead_id, created_at, type, body) VALUES (?,?,?,?)")
-    .run(leadId, now(), type, body);
+  const at = now();
+  const info = db.prepare("INSERT INTO activities (lead_id, created_at, type, body) VALUES (?,?,?,?)")
+    .run(leadId, at, type, body);
+  try { mirrorActivity(thinga, { id: info.lastInsertRowid, lead_id: leadId, created_at: at, type, body }); }
+  catch (e) { console.error("thinga mirror activity (non-fatal):", e.message); }
 }
 // Moving a lead into an offer stage (e.g. you sent the offer from your phone) counts as an offer sent:
 // stamp offer_sent_at so it hits the dashboard KPI and the Offers tab. Idempotent.
@@ -637,6 +640,10 @@ app.get("/api/thinga", (req, res) => {
   const kind = req.query.kind || undefined;
   res.json({ items: thinga.query(null, kind ? { kind } : {}) });
 });
+// A lead's substrate children — its activities + threaded messages — via the reverse-link index.
+app.get("/api/thinga/lead/:leadId/children", (req, res) => {
+  res.json({ items: childrenOfLead(thinga, Number(req.params.leadId)) });
+});
 
 // --- Tasks / reminders ---
 app.get("/api/tasks", (req, res) => {
@@ -729,10 +736,13 @@ async function sendOne(transporter, to, subject, body) {
 // Store an email in the unified log (used by both inbound sync and outbound send).
 function recordEmail({ lead_id = null, direction, from_name = "", from_addr = "", to_addr = "", subject = "", body = "", msg_date = null, uid = null, read = 0 }) {
   const snippet = (body || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  const md = msg_date || now();
   try {
-    db.prepare(`INSERT INTO emails (lead_id, direction, from_name, from_addr, to_addr, subject, body, snippet, msg_date, uid, read, created_at)
+    const info = db.prepare(`INSERT INTO emails (lead_id, direction, from_name, from_addr, to_addr, subject, body, snippet, msg_date, uid, read, created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(lead_id, direction, from_name, from_addr, to_addr, subject, body, snippet, msg_date || now(), uid, read, now());
+      .run(lead_id, direction, from_name, from_addr, to_addr, subject, body, snippet, md, uid, read, now());
+    try { mirrorEmail(thinga, { id: info.lastInsertRowid, lead_id, direction, subject, snippet, from_addr, to_addr, msg_date: md }); }
+    catch (e) { console.error("thinga mirror email (non-fatal):", e.message); }
     return true;
   } catch { return false; /* duplicate uid */ }
 }

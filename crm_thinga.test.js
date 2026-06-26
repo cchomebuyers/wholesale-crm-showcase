@@ -3,7 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mountCrmSubstrate, mirrorLead, leadToThinga, leadCategoryPath } from "./crm_thinga.js";
+import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
+  leadToThinga, leadCategoryPath, leadThingaId } from "./crm_thinga.js";
 
 const leadRow = (over = {}) => ({
   id: 1, stage: "New", status: null,
@@ -73,4 +74,46 @@ test("leadToThinga / leadCategoryPath are pure and stable", () => {
   const row = leadRow();
   assert.equal(leadCategoryPath(row), "Pipeline/New");
   assert.deepEqual(leadToThinga(row), leadToThinga(row));
+});
+
+// ---- iter 5: activities + emails as children/links of their lead ----
+
+test("an activity mirrors to a child Thinga of its lead (containment via reverse index)", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  mirrorLead(store, leadRow());
+  const aid = mirrorActivity(store, { id: 10, lead_id: 1, created_at: "2026-06-26T00:00:00Z", type: "call", body: "spoke to seller" });
+  const t = store.get(aid);
+  assert.equal(t.kind, "activity");
+  assert.deepEqual(t.parents, [leadThingaId(1)]);
+  // reverse-link index records the child_of edge
+  const incoming = store.incomingLinks(leadThingaId(1), "child_of");
+  assert.ok(incoming.some((l) => l.from_id === aid));
+});
+
+test("an inbound email threads to its lead as received_from; outbound as sent_to", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  mirrorLead(store, leadRow());
+  const inb = store.get(mirrorEmail(store, { id: 1, lead_id: 1, direction: "in", subject: "re: offer", snippet: "ok", from_addr: "jane@x.com", to_addr: "me@x.com" }));
+  const out = store.get(mirrorEmail(store, { id: 2, lead_id: 1, direction: "out", subject: "offer", snippet: "hi", from_addr: "me@x.com", to_addr: "jane@x.com" }));
+  assert.equal(inb.kind, "message");
+  assert.equal(inb.links[0].kind, "received_from");
+  assert.equal(out.links[0].kind, "sent_to");
+  assert.equal(inb.links[0].to, leadThingaId(1));
+});
+
+test("childrenOfLead returns the lead's activities and messages", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  mirrorLead(store, leadRow());
+  mirrorActivity(store, { id: 10, lead_id: 1, created_at: "2026-06-26T00:00:00Z", type: "note", body: "n" });
+  mirrorEmail(store, { id: 1, lead_id: 1, direction: "out", subject: "s", snippet: "x", from_addr: "me", to_addr: "jane" });
+  const kids = childrenOfLead(store, 1);
+  const kinds = kids.map((k) => k.kind).sort();
+  assert.deepEqual(kinds, ["activity", "message"]);
+});
+
+test("an email with no lead_id mirrors without links (unthreaded)", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorEmail(store, { id: 5, lead_id: null, direction: "in", subject: "spam", snippet: "" }));
+  assert.deepEqual(t.links, []);
+  assert.deepEqual(t.parents, []);
 });

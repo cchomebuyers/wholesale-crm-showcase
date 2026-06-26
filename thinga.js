@@ -233,8 +233,16 @@ export function createThingaStore(dbOrPath = ":memory:") {
     for (const s of subs) { try { invoke(s.from_id, { changed: id }); } catch { /* a subscriber must not break the PUT */ } }
   }
 
+  // Reverse containment/edges: who points AT this Thinga (the regret #6 index, read side).
+  function incomingLinks(id, linkKind) {
+    const rows = linkKind
+      ? db.prepare("SELECT from_id, link_kind FROM thinga_links WHERE to_id=? AND link_kind=?").all(id, linkKind)
+      : db.prepare("SELECT from_id, link_kind FROM thinga_links WHERE to_id=?").all(id);
+    return rows;
+  }
+
   const api = {
-    db, put, get, query, invoke, tombstone, verify,
+    db, put, get, query, invoke, tombstone, verify, incomingLinks,
     registerHandler, registerSchema,
     publicKey: keypair.publicKey,
     ANKHOR_VERSION,

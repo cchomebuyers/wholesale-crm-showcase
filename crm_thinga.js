@@ -40,6 +40,38 @@ export function leadToThinga(row) {
   };
 }
 
+// Stable Thinga id for a CRM lead row id — so children can reference their parent deterministically.
+export const leadThingaId = (leadId) => `thinga:lead-${leadId}`;
+
+// An activity (note/call/stage_change/skiptrace/email log) → a child Thinga of its lead.
+export function activityToThinga(row) {
+  return {
+    id: `thinga:activity-${row.id}`,
+    kind: "activity",
+    name: row.type || "note",
+    parents: [leadThingaId(row.lead_id)],          // containment → reverse index records child_of
+    content: { crm_id: row.id, type: row.type, body: row.body, lead_id: row.lead_id },
+    created_at: row.created_at,
+  };
+}
+
+// An email (inbound or outbound) → a message Thinga linked to the lead it threads to.
+export function emailToThinga(row) {
+  const linkKind = row.direction === "in" ? "received_from" : "sent_to";
+  const links = row.lead_id ? [{ kind: linkKind, to: leadThingaId(row.lead_id) }] : [];
+  return {
+    id: `thinga:email-${row.id}`,
+    kind: "message",
+    name: row.subject || "(no subject)",
+    parents: row.lead_id ? [leadThingaId(row.lead_id)] : [],
+    links,
+    content: {
+      crm_id: row.id, direction: row.direction, subject: row.subject, snippet: row.snippet,
+      from_addr: row.from_addr, to_addr: row.to_addr, msg_date: row.msg_date, lead_id: row.lead_id,
+    },
+  };
+}
+
 // Mount the substrate and register the CRM's schemas + handlers. Returns the store.
 export function mountCrmSubstrate(db, { handlers = {} } = {}) {
   const store = createThingaStore(db);
@@ -61,4 +93,18 @@ export function mountCrmSubstrate(db, { handlers = {} } = {}) {
 // Idempotently mirror one CRM lead row into the substrate. Safe to call on every create/update.
 export function mirrorLead(store, row) {
   return store.put(leadToThinga(row));
+}
+export function mirrorActivity(store, row) {
+  return store.put(activityToThinga(row));
+}
+export function mirrorEmail(store, row) {
+  return store.put(emailToThinga(row));
+}
+
+// The children of a lead Thinga (activities + messages), via the reverse-link index.
+// A child may connect by multiple edge kinds (child_of + sent_to) — dedupe to one Thinga.
+export function childrenOfLead(store, leadId) {
+  const id = leadThingaId(leadId);
+  const ids = [...new Set(store.incomingLinks(id).map((l) => l.from_id))];
+  return ids.map((fid) => store.get(fid)).filter(Boolean);
 }
