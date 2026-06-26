@@ -4,8 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
-  mirrorTask, mirrorNote, mirrorNotification,
-  leadToThinga, leadCategoryPath, leadThingaId } from "./crm_thinga.js";
+  mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
+  isSensitiveSetting, leadToThinga, leadCategoryPath, leadThingaId } from "./crm_thinga.js";
 
 const leadRow = (over = {}) => ({
   id: 1, stage: "New", status: null,
@@ -155,4 +155,43 @@ test("a notification mirrors to kind:notification, linked 'about' its property",
   assert.deepEqual(t.links, [{ kind: "about", to: "thinga:property-42" }]);
   // reverse index lets the (future) property Thinga find what's about it
   assert.equal(store.incomingLinks("thinga:property-42", "about")[0].from_id, t.id);
+});
+
+// ---- iter 7: buyers + templates + settings → kinds ----
+
+test("a buyer mirrors to kind:buyer with its buy-box and areas as tags", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorBuyer(store, { id: 4, name: "Cash Co", phone: "313", email: "c@co.com", areas: "48235; 48224", property_types: "SFR", max_price: 80000, cash: 1 }));
+  assert.equal(t.kind, "buyer");
+  assert.equal(t.category_path, "Buyers");
+  assert.deepEqual(t.tags, ["48235", "48224"]);
+  assert.equal(t.content.max_price, 80000);
+});
+
+test("a template mirrors to kind:template, filed by audience", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorTemplate(store, { id: 2, name: "Cold seller", subject: "Hi", body: "{{first_name}}", audience: "leads" }));
+  assert.equal(t.kind, "template");
+  assert.equal(t.category_path, "Templates/leads");
+  assert.equal(t.content.body, "{{first_name}}");
+});
+
+test("non-secret settings mirror; secrets are skipped (never enter the substrate)", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const ok = mirrorSetting(store, "buyer_pct", "70");
+  assert.equal(store.get(ok).content.value, "70");
+  // secrets return null and write nothing
+  assert.equal(mirrorSetting(store, "gmail_app_password", "hunter2"), null);
+  assert.equal(mirrorSetting(store, "rentcast_api_key", "sk-xyz"), null);
+  assert.equal(mirrorSetting(store, "reso_token", "tok"), null);
+  assert.equal(store.query(null, { kind: "setting" }).length, 1); // only buyer_pct
+});
+
+test("isSensitiveSetting flags passwords/keys/tokens/secrets", () => {
+  for (const k of ["gmail_app_password", "rentcast_api_key", "anthropic_api_key", "reso_token", "client_secret"]) {
+    assert.equal(isSensitiveSetting(k), true, k);
+  }
+  for (const k of ["buyer_pct", "rehab_per_sqft", "my_name", "email_footer"]) {
+    assert.equal(isSensitiveSetting(k), false, k);
+  }
 });

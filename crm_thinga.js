@@ -109,6 +109,47 @@ export function notificationToThinga(row) {
   };
 }
 
+// A cash buyer → a buyer Thinga carrying its buy-box (areas/types/max price).
+export function buyerToThinga(row) {
+  return {
+    id: `thinga:buyer-${row.id}`,
+    kind: "buyer",
+    name: row.name || `buyer ${row.id}`,
+    category_path: "Buyers",
+    tags: String(row.areas || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean),
+    content: {
+      crm_id: row.id, name: row.name, phone: row.phone, email: row.email,
+      areas: row.areas, property_types: row.property_types, max_price: row.max_price,
+      cash: row.cash == null ? 1 : Number(row.cash), notes: row.notes,
+    },
+  };
+}
+
+// An email template → a template Thinga (filed by audience).
+export function templateToThinga(row) {
+  return {
+    id: `thinga:template-${row.id}`,
+    kind: "template",
+    name: row.name || "Untitled",
+    category_path: `Templates/${row.audience || "leads"}`,
+    content: { crm_id: row.id, name: row.name, subject: row.subject, body: row.body, audience: row.audience || "leads" },
+  };
+}
+
+// Secrets never enter the substrate — keys matching this are skipped by mirrorSetting.
+export const isSensitiveSetting = (key) => /password|api_key|token|secret/i.test(String(key || ""));
+
+// A key/value setting → a setting Thinga (non-secret only).
+export function settingToThinga(key, value) {
+  return {
+    id: `thinga:setting-${key}`,
+    kind: "setting",
+    name: key,
+    category_path: "Settings",
+    content: { key, value },
+  };
+}
+
 // Mount the substrate and register the CRM's schemas + handlers. Returns the store.
 export function mountCrmSubstrate(db, { handlers = {} } = {}) {
   const store = createThingaStore(db);
@@ -145,6 +186,17 @@ export function mirrorNote(store, row) {
 }
 export function mirrorNotification(store, row) {
   return store.put(notificationToThinga(row));
+}
+export function mirrorBuyer(store, row) {
+  return store.put(buyerToThinga(row));
+}
+export function mirrorTemplate(store, row) {
+  return store.put(templateToThinga(row));
+}
+// Returns the Thinga id, or null if the setting is sensitive (secrets are never mirrored).
+export function mirrorSetting(store, key, value) {
+  if (isSensitiveSetting(key)) return null;
+  return store.put(settingToThinga(key, value));
 }
 
 // The children of a lead Thinga (activities + messages), via the reverse-link index.

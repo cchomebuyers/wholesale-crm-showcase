@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
-  mirrorTask, mirrorNote, mirrorNotification } from "./crm_thinga.js";
+  mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting } from "./crm_thinga.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -168,14 +168,25 @@ const mirrorNotifSafe = (id) => {
   try { const r = db.prepare("SELECT * FROM notifications WHERE id=?").get(id); if (r) mirrorNotification(thinga, r); }
   catch (e) { console.error("thinga mirror notif (non-fatal):", e.message); }
 };
+const mirrorBuyerSafe = (id) => {
+  try { const r = db.prepare("SELECT * FROM buyers WHERE id=?").get(id); if (r) mirrorBuyer(thinga, r); }
+  catch (e) { console.error("thinga mirror buyer (non-fatal):", e.message); }
+};
+const mirrorTemplateSafe = (id) => {
+  try { const r = db.prepare("SELECT * FROM templates WHERE id=?").get(id); if (r) mirrorTemplate(thinga, r); }
+  catch (e) { console.error("thinga mirror template (non-fatal):", e.message); }
+};
 
 // ---------- Settings (key/value) ----------
 const getSetting = (k) => {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(k);
   return row ? row.value : null;
 };
-const setSetting = (k, v) =>
+const setSetting = (k, v) => {
   db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(k, v ?? "");
+  // mirror non-secret settings into the substrate (mirrorSetting skips passwords/api keys/tokens)
+  try { mirrorSetting(thinga, k, v ?? ""); } catch (e) { console.error("thinga mirror setting (non-fatal):", e.message); }
+};
 
 // Seed a couple of starter templates on first run.
 if (db.prepare("SELECT COUNT(*) n FROM templates").get().n === 0) {
@@ -999,16 +1010,19 @@ app.post("/api/templates", (req, res) => {
   const { name, subject, body, audience } = req.body || {};
   const info = db.prepare("INSERT INTO templates (created_at, name, subject, body, audience) VALUES (?,?,?,?,?)")
     .run(now(), name || "Untitled", subject || "", body || "", audience || "leads");
+  mirrorTemplateSafe(info.lastInsertRowid); // guarded substrate mirror
   res.json({ id: info.lastInsertRowid });
 });
 app.put("/api/templates/:id", (req, res) => {
   const { name, subject, body, audience } = req.body || {};
   db.prepare("UPDATE templates SET name=?, subject=?, body=?, audience=? WHERE id=?")
     .run(name, subject, body, audience || "leads", req.params.id);
+  mirrorTemplateSafe(req.params.id); // guarded substrate mirror
   res.json({ ok: true });
 });
 app.delete("/api/templates/:id", (req, res) => {
   db.prepare("DELETE FROM templates WHERE id=?").run(req.params.id);
+  try { thinga.tombstone(`thinga:template-${req.params.id}`); } catch { /* non-fatal */ }
   res.json({ ok: true });
 });
 
@@ -1064,6 +1078,7 @@ app.post("/api/buyers", (req, res) => {
     .prepare(`INSERT INTO buyers (created_at, ${BUYER_FIELDS.join(",")})
               VALUES (?, ${BUYER_FIELDS.map(() => "?").join(",")})`)
     .run(now(), ...BUYER_FIELDS.map((f) => (b[f] === undefined || b[f] === "" ? null : b[f])));
+  mirrorBuyerSafe(info.lastInsertRowid); // guarded substrate mirror
   res.json({ id: info.lastInsertRowid });
 });
 
@@ -1071,11 +1086,13 @@ app.put("/api/buyers/:id", (req, res) => {
   const b = req.body || {};
   db.prepare(`UPDATE buyers SET ${BUYER_FIELDS.map((f) => `${f} = ?`).join(",")} WHERE id = ?`)
     .run(...BUYER_FIELDS.map((f) => (b[f] === undefined || b[f] === "" ? null : b[f])), req.params.id);
+  mirrorBuyerSafe(req.params.id); // guarded substrate mirror
   res.json({ ok: true });
 });
 
 app.delete("/api/buyers/:id", (req, res) => {
   db.prepare("DELETE FROM buyers WHERE id = ?").run(req.params.id);
+  try { thinga.tombstone(`thinga:buyer-${req.params.id}`); } catch { /* non-fatal */ }
   res.json({ ok: true });
 });
 
