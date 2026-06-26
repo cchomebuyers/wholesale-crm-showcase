@@ -10,6 +10,7 @@ import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "no
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
   mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
   mirrorProperty, mirrorCampaign } from "./crm_thinga.js";
+import { buildRegistry } from "./connectors/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -157,6 +158,9 @@ const mirrorLeadSafe = (id) => {
   try { const row = db.prepare("SELECT * FROM leads WHERE id=?").get(id); if (row) mirrorLead(thinga, row); }
   catch (e) { console.error("thinga mirror (non-fatal):", e.message); }
 };
+// Connector registry (built at end of file once its injected deps are defined). executeCampaign
+// fans over registry[<sources>] instead of calling RentCast directly. See connectors/.
+let registry = {};
 const mirrorTaskSafe = (id) => {
   try { const r = db.prepare("SELECT * FROM tasks WHERE id=?").get(id); if (r) mirrorTask(thinga, r); }
   catch (e) { console.error("thinga mirror task (non-fatal):", e.message); }
@@ -1178,8 +1182,10 @@ app.get("/api/stats", (req, res) => {
 });
 
 // ====================== ACQUISITIONS — Phase 1 ======================
+// `sources` = comma-separated connector ids the campaign fans over (default rentcast-sale).
+try { db.exec("ALTER TABLE campaigns ADD COLUMN sources TEXT"); } catch { /* already exists */ }
 const CAMPAIGN_FIELDS = ["name", "active", "city", "state", "zip", "property_type", "status",
-  "price_min", "price_max", "beds_min", "baths_min", "sqft_min", "days_on_market_min"];
+  "price_min", "price_max", "beds_min", "baths_min", "sqft_min", "days_on_market_min", "sources"];
 
 const acqNum = (k, d) => { const v = Number(getSetting(k)); return Number.isFinite(v) && v > 0 ? v : d; };
 // Like acqNum but allows a valid 0 (only falls back to default when truly unset).
@@ -1252,39 +1258,30 @@ app.delete("/api/campaigns/:id", (req, res) => {
   res.json({ ok: true });
 });
 
-// Run a campaign — pull from RentCast and dedup into the property store
+// Run a campaign — fan over its connector sources, dedup into the property store.
 async function executeCampaign(c) {
-  const listings = await rentcastGet("/listings/sale", {
-    city: c.city, state: c.state, zipCode: c.zip,
-    propertyType: c.property_type, status: c.status || "Active",
-    daysOld: c.days_on_market_min || undefined, limit: 500,
-  });
-  const arr = Array.isArray(listings) ? listings : [];
+  // Fan over listings-type connectors named in the campaign's `sources` (default rentcast-sale).
+  const sourceIds = (c.sources || "rentcast-sale").split(",").map((s) => s.trim()).filter(Boolean);
+  const arr = [];
+  for (const sid of sourceIds) {
+    const conn = registry[sid];
+    if (!conn || conn.type !== "listings") continue; // campaign scan = on-market listings sources
+    try { arr.push(...await conn.search(c)); }
+    catch (e) { console.error(`connector ${sid} failed:`, e.message); } // one source failing never kills the run
+  }
   const hotScore = Number(getSetting("hot_score")) || 60;
   let neu = 0, upd = 0; const newHotIds = []; const t = now();
   {
-    for (const L of arr) {
-      if (c.price_min && L.price && L.price < c.price_min) continue;
-      if (c.price_max && L.price && L.price > c.price_max) continue;
-      if (c.beds_min && L.bedrooms && L.bedrooms < c.beds_min) continue;
-      if (c.baths_min && L.bathrooms && L.bathrooms < c.baths_min) continue;
-      if (c.sqft_min && L.squareFootage && L.squareFootage < c.sqft_min) continue;
-      const fa = L.formattedAddress || [L.addressLine1, L.city, L.state, L.zipCode].filter(Boolean).join(", ");
-      if (!fa) continue;
-      const key = fa.toLowerCase();
-      const existing = db.prepare("SELECT id, wholesale_score FROM properties WHERE addr_key=?").get(key);
-      const vals = {
-        addr_key: key, last_seen: t, campaign_id: c.id, source: "rentcast", source_id: L.id || null,
-        formatted_address: fa, address: L.addressLine1 || null, city: L.city || null, state: L.state || null, zip: L.zipCode || null, county: L.county || null,
-        latitude: L.latitude || null, longitude: L.longitude || null,
-        property_type: L.propertyType || null, bedrooms: L.bedrooms || null, bathrooms: L.bathrooms || null,
-        square_footage: L.squareFootage || null, lot_size: L.lotSize || null, year_built: L.yearBuilt || null,
-        status: L.status || null, price: L.price || null, listed_date: L.listedDate || null, removed_date: L.removedDate || null,
-        days_on_market: L.daysOnMarket || null, price_history: L.history ? JSON.stringify(L.history) : null,
-        listing_agent_name: (L.listingAgent && L.listingAgent.name) || (L.listingOffice && L.listingOffice.name) || null,
-        listing_agent_phone: (L.listingAgent && L.listingAgent.phone) || (L.listingOffice && L.listingOffice.phone) || null,
-        listing_agent_email: (L.listingAgent && L.listingAgent.email) || (L.listingOffice && L.listingOffice.email) || null,
-      };
+    for (const vals of arr) {
+      // campaign numeric filters, applied uniformly on the normalized shape
+      if (c.price_min && vals.price && vals.price < c.price_min) continue;
+      if (c.price_max && vals.price && vals.price > c.price_max) continue;
+      if (c.beds_min && vals.bedrooms && vals.bedrooms < c.beds_min) continue;
+      if (c.baths_min && vals.bathrooms && vals.bathrooms < c.baths_min) continue;
+      if (c.sqft_min && vals.square_footage && vals.square_footage < c.sqft_min) continue;
+      if (!vals.addr_key) continue;
+      vals.last_seen = t; vals.campaign_id = c.id;
+      const existing = db.prepare("SELECT id, wholesale_score FROM properties WHERE addr_key=?").get(vals.addr_key);
       const sc = scoreListing(vals);
       vals.motivation_score = sc.motivation;
       vals.distress_score = sc.distress;
@@ -1706,6 +1703,18 @@ thinga.registerHandler("analyze_property", (_t, args) => {
 thinga.put({ id: "thinga:code-score", kind: "code", name: "score_property", category_path: "Code", code: { handler: "score_property" } });
 thinga.put({ id: "thinga:code-underwrite", kind: "code", name: "underwrite_lead", category_path: "Code", code: { handler: "underwrite_lead" } });
 thinga.put({ id: "thinga:code-analyze", kind: "code", name: "analyze_property", category_path: "Code", code: { handler: "analyze_property" } });
+
+// ---- iter 10: connector registry — every source is a connector; each is a code:connector Thinga ----
+registry = buildRegistry({ rentcastGet, pullBlightTickets, detroitComps, getSetting });
+for (const conn of Object.values(registry)) {
+  const handlerName = `connector.${conn.id}`;
+  thinga.registerHandler(handlerName, async (_t, args) => conn.search(args || {}));
+  thinga.put({
+    id: `thinga:connector-${conn.id}`, kind: "connector", name: conn.id,
+    category_path: `Connectors/${conn.type}`, code: { handler: handlerName },
+    content: { id: conn.id, region: conn.region, type: conn.type },
+  });
+}
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
