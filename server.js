@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
-  mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting } from "./crm_thinga.js";
+  mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
+  mirrorProperty, mirrorCampaign } from "./crm_thinga.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -175,6 +176,14 @@ const mirrorBuyerSafe = (id) => {
 const mirrorTemplateSafe = (id) => {
   try { const r = db.prepare("SELECT * FROM templates WHERE id=?").get(id); if (r) mirrorTemplate(thinga, r); }
   catch (e) { console.error("thinga mirror template (non-fatal):", e.message); }
+};
+const mirrorPropertySafe = (id) => {
+  try { const r = db.prepare("SELECT * FROM properties WHERE id=?").get(id); if (r) mirrorProperty(thinga, r); }
+  catch (e) { console.error("thinga mirror property (non-fatal):", e.message); }
+};
+const mirrorCampaignSafe = (id) => {
+  try { const r = db.prepare("SELECT * FROM campaigns WHERE id=?").get(id); if (r) mirrorCampaign(thinga, r); }
+  catch (e) { console.error("thinga mirror campaign (non-fatal):", e.message); }
 };
 
 // ---------- Settings (key/value) ----------
@@ -1220,15 +1229,21 @@ app.post("/api/campaigns", (req, res) => {
   const info = db.prepare(`INSERT INTO campaigns (created_at, ${CAMPAIGN_FIELDS.join(",")})
       VALUES (?, ${CAMPAIGN_FIELDS.map(() => "?").join(",")})`)
     .run(now(), ...CAMPAIGN_FIELDS.map((f) => (f === "active" ? (b[f] === 0 ? 0 : 1) : (b[f] === undefined || b[f] === "" ? null : b[f]))));
+  mirrorCampaignSafe(info.lastInsertRowid); // campaign → code Thinga (guarded)
   res.json({ id: info.lastInsertRowid });
 });
 app.put("/api/campaigns/:id", (req, res) => {
   const b = req.body || {};
   db.prepare(`UPDATE campaigns SET ${CAMPAIGN_FIELDS.map((f) => `${f}=?`).join(",")} WHERE id=?`)
     .run(...CAMPAIGN_FIELDS.map((f) => (f === "active" ? (b[f] ? 1 : 0) : (b[f] === undefined || b[f] === "" ? null : b[f]))), req.params.id);
+  mirrorCampaignSafe(req.params.id); // keep the campaign Thinga in sync (guarded)
   res.json({ ok: true });
 });
-app.delete("/api/campaigns/:id", (req, res) => { db.prepare("DELETE FROM campaigns WHERE id=?").run(req.params.id); res.json({ ok: true }); });
+app.delete("/api/campaigns/:id", (req, res) => {
+  db.prepare("DELETE FROM campaigns WHERE id=?").run(req.params.id);
+  try { thinga.tombstone(`thinga:campaign-${req.params.id}`); } catch { /* non-fatal */ }
+  res.json({ ok: true });
+});
 
 // Run a campaign — pull from RentCast and dedup into the property store
 async function executeCampaign(c) {
@@ -1271,19 +1286,28 @@ async function executeCampaign(c) {
         const lead = blendLead(sc, existing.wholesale_score);
         db.prepare(`UPDATE properties SET updated_at=?, last_seen=?, status=?, price=?, days_on_market=?, price_history=?, campaign_id=?, motivation_score=?, distress_score=?, lead_score=?, listing_agent_name=?, listing_agent_phone=?, listing_agent_email=? WHERE id=?`)
           .run(t, t, vals.status, vals.price, vals.days_on_market, vals.price_history, c.id, sc.motivation, sc.distress, lead, vals.listing_agent_name, vals.listing_agent_phone, vals.listing_agent_email, existing.id);
+        mirrorPropertySafe(existing.id); // guarded substrate mirror
         upd++;
       } else {
         const cols = Object.keys(vals);
         const info = db.prepare(`INSERT INTO properties (created_at, updated_at, ${cols.join(",")}) VALUES (?,?, ${cols.map(() => "?").join(",")})`)
           .run(t, t, ...cols.map((k) => vals[k]));
+        mirrorPropertySafe(info.lastInsertRowid); // guarded substrate mirror
         neu++;
         if (sc.lead >= hotScore) newHotIds.push(info.lastInsertRowid);
       }
     }
   }
   db.prepare("UPDATE campaigns SET last_run=?, last_count=? WHERE id=?").run(t, arr.length, c.id);
+  mirrorCampaignSafe(c.id); // refresh the campaign Thinga (last_run/last_count)
   return { found: arr.length, neu, upd, newHotIds };
 }
+
+// The campaign code Thinga's run handler — INVOKE thinga:campaign-N executes the campaign.
+thinga.registerHandler("run_campaign", async (t) => {
+  const c = db.prepare("SELECT * FROM campaigns WHERE id=?").get(t.content && t.content.crm_id);
+  return c ? await executeCampaign(c) : { error: "campaign not found" };
+});
 
 app.post("/api/campaigns/:id/run", async (req, res) => {
   const c = db.prepare("SELECT * FROM campaigns WHERE id=?").get(req.params.id);
@@ -1504,6 +1528,7 @@ app.post("/api/properties/:id/analyze", async (req, res) => {
     db.prepare("UPDATE properties SET arv=?, rent_estimate=? WHERE id=?").run(arv, rent, p.id);
     const fresh = db.prepare("SELECT * FROM properties WHERE id=?").get(p.id);
     const out = persistAnalysis(fresh, deriveAnalysis(fresh));
+    mirrorPropertySafe(p.id); // guarded substrate mirror (refreshed scores/ARV/MAO)
     res.json({ arv, rent, ...out });
   } catch (err) { res.status(500).json({ error: String(err.message || err) }); }
 });
@@ -1544,6 +1569,8 @@ app.post("/api/properties/:id/import", (req, res) => {
     // No auto task/follow-up — the user adds one per lead when they want it.
   }
   db.prepare("UPDATE properties SET imported_lead_id=?, review_status='Reviewing', updated_at=? WHERE id=?").run(leadId, t, p.id);
+  mirrorPropertySafe(p.id);   // property now links imported_to the lead (guarded)
+  mirrorLeadSafe(leadId);     // and the new/updated lead
   res.json({ leadId, already: false, duplicate: Boolean(dupe) });
 });
 

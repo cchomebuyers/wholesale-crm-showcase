@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
   mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
-  isSensitiveSetting, leadToThinga, leadCategoryPath, leadThingaId } from "./crm_thinga.js";
+  mirrorProperty, mirrorCampaign, isSensitiveSetting,
+  leadToThinga, leadCategoryPath, leadThingaId } from "./crm_thinga.js";
 
 const leadRow = (over = {}) => ({
   id: 1, stage: "New", status: null,
@@ -194,4 +195,42 @@ test("isSensitiveSetting flags passwords/keys/tokens/secrets", () => {
   for (const k of ["buyer_pct", "rehab_per_sqft", "my_name", "email_footer"]) {
     assert.equal(isSensitiveSetting(k), false, k);
   }
+});
+
+// ---- iter 8: properties + campaigns → kinds (campaign = code Thinga) ----
+
+test("a property mirrors to kind:property with scores, linked to campaign + imported lead", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorProperty(store, { id: 9, formatted_address: "5 ELM", city: "Detroit", lead_score: 72, arv: 90000, mao: 45000, campaign_id: 3, imported_lead_id: 2, review_status: "New" }));
+  assert.equal(t.kind, "property");
+  assert.equal(t.category_path, "Acquisitions/New");
+  assert.equal(t.content.lead_score, 72);
+  const linkKinds = t.links.map((l) => l.kind).sort();
+  assert.deepEqual(linkKinds, ["found_by", "imported_to"]);
+  assert.equal(store.incomingLinks("thinga:lead-2", "imported_to")[0].from_id, t.id);
+});
+
+test("a campaign mirrors to a CODE Thinga with a run handler and recurrence when active", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorCampaign(store, { id: 3, name: "Detroit SFR", active: 1, city: "Detroit", price_max: 60000 }));
+  assert.equal(t.kind, "campaign");
+  assert.equal(t.category_path, "Campaigns/Active");
+  assert.deepEqual(t.code, { handler: "run_campaign" });
+  assert.deepEqual(t.recurrence, { pattern: "daily" });
+});
+
+test("an inactive campaign is paused with no recurrence", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorCampaign(store, { id: 4, name: "Paused", active: 0 }));
+  assert.equal(t.category_path, "Campaigns/Paused");
+  assert.equal(t.recurrence, null);
+});
+
+test("INVOKE on a campaign Thinga calls its registered run handler", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  let ran = null;
+  store.registerHandler("run_campaign", (t) => { ran = t.content.crm_id; return { found: 7 }; });
+  const id = mirrorCampaign(store, { id: 5, name: "Run me", active: 1 });
+  assert.deepEqual(store.invoke(id), { found: 7 });
+  assert.equal(ran, 5);
 });

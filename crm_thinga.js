@@ -150,6 +150,51 @@ export function settingToThinga(key, value) {
   };
 }
 
+// A scanned property → a property Thinga (scores/ARV/MAO), linked to its campaign + imported lead.
+export function propertyToThinga(row) {
+  const links = [];
+  if (row.campaign_id) links.push({ kind: "found_by", to: `thinga:campaign-${row.campaign_id}` });
+  if (row.imported_lead_id) links.push({ kind: "imported_to", to: `thinga:lead-${row.imported_lead_id}` });
+  return {
+    id: `thinga:property-${row.id}`,
+    kind: "property",
+    name: row.formatted_address || row.address || `property ${row.id}`,
+    category_path: `Acquisitions/${row.review_status || "New"}`,
+    links,
+    content: {
+      crm_id: row.id, address: row.formatted_address || row.address, city: row.city, state: row.state, zip: row.zip,
+      property_type: row.property_type, bedrooms: row.bedrooms, bathrooms: row.bathrooms,
+      square_footage: row.square_footage, year_built: row.year_built,
+      status: row.status, price: row.price, days_on_market: row.days_on_market,
+      lead_score: row.lead_score, motivation_score: row.motivation_score, distress_score: row.distress_score,
+      wholesale_score: row.wholesale_score, arv: row.arv, mao: row.mao, spread: row.spread,
+      equity: row.equity, rent_estimate: row.rent_estimate, crime_shootings_30d: row.crime_shootings_30d,
+      listing_agent_name: row.listing_agent_name, listing_agent_phone: row.listing_agent_phone,
+      source: row.source, source_id: row.source_id,
+    },
+  };
+}
+
+// A campaign → a CODE Thinga: its filters are content, its run is a registered handler, and an
+// active campaign recurs (the auto-scan). INVOKE thinga:campaign-N runs it (handler set in server.js).
+export function campaignToThinga(row) {
+  return {
+    id: `thinga:campaign-${row.id}`,
+    kind: "campaign",
+    name: row.name || `campaign ${row.id}`,
+    category_path: row.active ? "Campaigns/Active" : "Campaigns/Paused",
+    code: { handler: "run_campaign" },
+    recurrence: row.active ? { pattern: "daily" } : null,
+    content: {
+      crm_id: row.id, name: row.name, active: Number(row.active),
+      city: row.city, state: row.state, zip: row.zip, property_type: row.property_type, status: row.status,
+      price_min: row.price_min, price_max: row.price_max, beds_min: row.beds_min, baths_min: row.baths_min,
+      sqft_min: row.sqft_min, days_on_market_min: row.days_on_market_min,
+      last_run: row.last_run, last_count: row.last_count,
+    },
+  };
+}
+
 // Mount the substrate and register the CRM's schemas + handlers. Returns the store.
 export function mountCrmSubstrate(db, { handlers = {} } = {}) {
   const store = createThingaStore(db);
@@ -197,6 +242,12 @@ export function mirrorTemplate(store, row) {
 export function mirrorSetting(store, key, value) {
   if (isSensitiveSetting(key)) return null;
   return store.put(settingToThinga(key, value));
+}
+export function mirrorProperty(store, row) {
+  return store.put(propertyToThinga(row));
+}
+export function mirrorCampaign(store, row) {
+  return store.put(campaignToThinga(row));
 }
 
 // The children of a lead Thinga (activities + messages), via the reverse-link index.
