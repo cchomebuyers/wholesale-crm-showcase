@@ -1,0 +1,72 @@
+[
+  {
+    "id": "losangeles-ca-violations", "region": "us-ca-losangeles", "name": "Los Angeles", "state": "CA", "pop": 9829544,
+    "type": "violations", "dialect": "socrata",
+    "endpoint": "https://data.lacity.org/resource/u82d-eh7z.json",
+    "fieldmap": { "address": null, "city": null, "zip": "zip", "ordinance": null, "description": "aptype", "lat": null, "lon": null, "house_number": "stno", "street": "stname" },
+    "verified_at": "2026-06-26", "note": "LA Dept of Building & Safety - Code Enforcement Case - Open (N)"
+  },
+  {
+    "id": "sandiego-ca-parcels", "region": "us-ca-sandiego", "name": "San Diego", "state": "CA", "pop": 3298634,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://geo.sandag.org/server/rest/services/Hosted/Parcels/FeatureServer/0/query",
+    "fieldmap": { "address": null, "city": "situs_community", "zip": "situs_zip", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "situs_address", "street": "situs_street" },
+    "verified_at": "2026-06-26", "note": "SANDAG / San Diego County assessor parcels (situs address)"
+  },
+  {
+    "id": "orange-ca-parcels", "region": "us-ca-orange", "name": "Orange", "state": "CA", "pop": 3186989,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://ocgis.com/arcpub/rest/services/Map_Layers/Parcels/FeatureServer/0/query",
+    "fieldmap": { "address": "SITE_ADDRESS", "city": null, "zip": null, "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Orange County OCGIS parcels (SITE_ADDRESS)"
+  },
+  {
+    "id": "riverside-ca-parcels", "region": "us-ca-riverside", "name": "Riverside", "state": "CA", "pop": 2418185,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services/Current_Parcels/FeatureServer/0/query",
+    "fieldmap": { "address": "SITUS_ADDRESS", "city": "SITUS_CITY_NM", "zip": "SITUS_ZIP_NR", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Riverside County Current_Parcels (SITUS_ADDRESS)"
+  },
+  {
+    "id": "sanbernardino-ca-parcels", "region": "us-ca-sanbernardino", "name": "San Bernardino", "state": "CA", "pop": 2181654,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/aA3snZwJfFkVyDuP/arcgis/rest/services/Internal_SB_County_Parcels_ForPublicView/FeatureServer/0/query",
+    "fieldmap": { "address": "SITUS_ADDRESS", "city": "SITUS_CITY", "zip": "SITUS_ZIP", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "SITUS_NBR", "street": "SITUS_NAME" },
+    "verified_at": "2026-06-26", "note": "San Bernardino County parcels public view (SITUS_ADDRESS)"
+  },
+  {
+    "id": "santaclara-ca-parcels", "region": "us-ca-santaclara", "name": "Santa Clara", "state": "CA", "pop": 1936259,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services2.arcgis.com/tcv2cMrq63AgvbHF/arcgis/rest/services/Parcels_Public_View/FeatureServer/0/query",
+    "fieldmap": { "address": "Situs_Address_Full", "city": null, "zip": null, "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Santa Clara County Parcels Public View (Situs_Address_Full)"
+  },
+  {
+    "id": "alameda-ca-parcels", "region": "us-ca-alameda", "name": "Alameda", "state": "CA", "pop": 1682353,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services5.arcgis.com/ROBnTHSNjoZ2Wm1P/arcgis/rest/services/Parcels/FeatureServer/0/query",
+    "fieldmap": { "address": "SitusAddress", "city": "SitusCity", "zip": "SitusZip", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "SitusStreetNumber", "street": "SitusStreetName" },
+    "verified_at": "2026-06-26", "note": "Alameda County assessor parcels (SitusAddress)"
+  },
+  {
+    "id": "sacramento-ca-parcels", "region": "us-ca-sacramento", "name": "Sacramento", "state": "CA", "pop": 1585055,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/5NARefyPVtAeuJPU/arcgis/rest/services/Parcels/FeatureServer/0/query",
+    "fieldmap": { "address": null, "city": "CITY", "zip": "ZIP", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "STREET_NBR", "street": "STREET_NAM" },
+    "verified_at": "2026-06-26", "note": "Sacramento County parcels (STREET_NBR/STREET_NAM)"
+  },
+  {
+    "id": "contracosta-ca-parcels", "region": "us-ca-contracosta", "name": "Contra Costa", "state": "CA", "pop": 1165927,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://gis.cccounty.us/arcgis/rest/services/INTERNET/BASE_DATA_ArcPro/MapServer/8/query",
+    "fieldmap": { "address": "fulladd", "city": "municipality", "zip": "postal", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "sitenum", "street": "sitestreet" },
+    "verified_at": "2026-06-26", "note": "Contra Costa County address points (fulladd)"
+  },
+  {
+    "id": "kern-ca-parcels", "region": "us-ca-kern", "name": "Kern", "state": "CA", "pop": 909235,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://gis.bakersfieldcity.us/webmaps/rest/services/General/Addresses/FeatureServer/0/query",
+    "fieldmap": { "address": "ADDRESS", "city": "CITY", "zip": "ZIP", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "NUMBER", "street": "STREET_NAME" },
+    "verified_at": "2026-06-26", "note": "City of Bakersfield (Kern) address points (ADDRESS)"
+  }
+]

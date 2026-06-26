@@ -1,0 +1,86 @@
+[
+  {
+    "id": "king-wa-violations", "region": "us-wa-king", "name": "King", "state": "WA", "pop": 2269675,
+    "type": "violations", "dialect": "socrata",
+    "endpoint": "https://data.seattle.gov/resource/ez4a-iug7.json",
+    "fieldmap": { "address": "originaladdress1", "city": "originalcity", "zip": "originalzip", "ordinance": "recordtypedesc", "description": "description", "lat": "latitude", "lon": "longitude", "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Seattle SDCI Code Complaints and Violations"
+  },
+  {
+    "id": "philadelphia-pa-violations", "region": "us-pa-philadelphia", "name": "Philadelphia", "state": "PA", "pop": 1603797,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/LI_VIOLATIONS/FeatureServer/0/query",
+    "fieldmap": { "address": "ADDRESS", "city": null, "zip": "ZIP", "ordinance": "VIOLATIONTYPE", "description": "VIOLATIONDESCRIPTION", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Philadelphia L&I code violations (OpenDataPhilly ArcGIS)"
+  },
+  {
+    "id": "middlesex-ma-violations", "region": "us-ma-middlesex", "name": "Middlesex", "state": "MA", "pop": 1632002,
+    "type": "violations", "dialect": "socrata",
+    "endpoint": "https://data.cambridgema.gov/resource/f8su-kv88.json",
+    "fieldmap": { "address": "full_address", "city": null, "zip": null, "ordinance": "code", "description": "description", "lat": "latitude", "lon": "longitude", "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Cambridge (Middlesex Co.) housing code violations"
+  },
+  {
+    "id": "suffolk-ny-parcels", "region": "us-ny-suffolk", "name": "Suffolk", "state": "NY", "pop": 1525920,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://gis.suffolkcountyny.gov/server/rest/services/LocalGovernmentSQLData/TaxParcelPolygon/FeatureServer/0/query",
+    "fieldmap": { "address": "FULLADDRESS", "city": "MUNICIPALITY", "zip": "ZIPCODE", "ordinance": null, "description": "LANDUSE", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Suffolk County tax parcels (Real Property Tax Service)"
+  },
+  {
+    "id": "franklin-oh-violations", "region": "us-oh-franklin", "name": "Franklin", "state": "OH", "pop": 1323807,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://maps2.columbus.gov/arcgis/rest/services/Schemas/BuildingZoning/MapServer/23/query",
+    "fieldmap": { "address": "SITE_ADDRESS", "city": null, "zip": null, "ordinance": "B1_PER_TYPE", "description": "B1_PER_SUB_TYPE", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Columbus (Franklin Co.) code enforcement cases"
+  },
+  {
+    "id": "hennepin-mn-parcels", "region": "us-mn-hennepin", "name": "Hennepin", "state": "MN", "pop": 1281565,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://gis.hennepin.us/arcgis/rest/services/HennepinData/LAND_PROPERTY/MapServer/1/query",
+    "fieldmap": { "address": null, "city": "MUNIC_NM", "zip": "ZIP_CD", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "HOUSE_NO", "street": "STREET_NM" },
+    "verified_at": "2026-06-26", "note": "Hennepin County parcels (county property data)"
+  },
+  {
+    "id": "oakland-mi-parcels", "region": "us-mi-oakland", "name": "Oakland", "state": "MI", "pop": 1274395,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://gisservices.oakgov.com/arcgis/rest/services/Enterprise/EnterpriseOpenParcelDataMapService/MapServer/1/query",
+    "fieldmap": { "address": "SITEADDRESS", "city": "SITECITY", "zip": "SITEZIP5", "ordinance": null, "description": "STRUCTURE_DESC", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Oakland County OC Tax Parcels (Public)"
+  },
+  {
+    "id": "cuyahoga-oh-violations", "region": "us-oh-cuyahoga", "name": "Cuyahoga", "state": "OH", "pop": 1264817,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://services3.arcgis.com/dty2kHktVXHrqO8i/arcgis/rest/services/Complaint_Violation_Notices/FeatureServer/0/query",
+    "fieldmap": { "address": "PRIMARY_ADDRESS", "city": null, "zip": null, "ordinance": "VIOLATION_NUMBER", "description": "SOURCE", "lat": "LAT", "lon": "LON", "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Cleveland (Cuyahoga Co.) building complaint violation notices"
+  },
+  {
+    "id": "fairfax-va-parcels", "region": "us-va-fairfax", "name": "Fairfax", "state": "VA", "pop": 1150309,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/ioennV6PpG5Xodq0/arcgis/rest/services/Address_Points/FeatureServer/0/query",
+    "fieldmap": { "address": "ADDRESS_1", "city": "CITY", "zip": "ZIP", "ordinance": null, "description": "ADDRESS_TYPE", "lat": null, "lon": null, "house_number": "STREET_NUM", "street": "FULL_NAME" },
+    "verified_at": "2026-06-26", "note": "Fairfax County address points (parcel-linked via PARCEL_PIN)"
+  },
+  {
+    "id": "montgomery-md-violations", "region": "us-md-montgomery", "name": "Montgomery", "state": "MD", "pop": 1062061,
+    "type": "violations", "dialect": "socrata",
+    "endpoint": "https://data.montgomerycountymd.gov/resource/k9nj-z35d.json",
+    "fieldmap": { "address": "street_address", "city": "city", "zip": "zip_code", "ordinance": "code_reference", "description": "condition", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Montgomery County housing code violations"
+  },
+  {
+    "id": "marion-in-violations", "region": "us-in-marion", "name": "Marion", "state": "IN", "pop": 977203,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://gis.indy.gov/server/rest/services/OpenData/OpenData_NonSpatial/MapServer/1/query",
+    "fieldmap": { "address": "STREET_ADDRESS", "city": "CITY", "zip": "ZIP", "ordinance": "CASE_TYPE", "description": "CASE_STATUS", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Indianapolis/Marion County code enforcement violations and investigations"
+  },
+  {
+    "id": "stlouis-mo-parcels", "region": "us-mo-stlouis", "name": "St. Louis", "state": "MO", "pop": 1004125,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://maps.stlouisco.com/hosting/rest/services/Maps/AGS_Parcels/MapServer/0/query",
+    "fieldmap": { "address": "PROP_ADD", "city": "MUNICIPALITY", "zip": "PROP_ZIP", "ordinance": null, "description": "LUCODE", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "St. Louis County parcels (assessor)"
+  }
+]

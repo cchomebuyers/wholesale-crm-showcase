@@ -1,0 +1,72 @@
+[
+  {
+    "id": "miamidade-fl-violations", "region": "us-fl-miamidade", "name": "Miami-Dade", "state": "FL", "pop": 2701767,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/arcgis/rest/services/CCVIOL_gdb/FeatureServer/0/query",
+    "fieldmap": { "address": "ADDRESS", "city": null, "zip": null, "ordinance": "PROBLEM_DESC", "description": "PROBLEM_DESC", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Miami-Dade Code Compliance Violations (CCVIOL)"
+  },
+  {
+    "id": "broward-fl-parcels", "region": "us-fl-broward", "name": "Broward", "state": "FL", "pop": 1944375,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/JMAJrTsHNLrSsWf5/arcgis/rest/services/PARCEL_POLY_BCPA_TAXROLL/FeatureServer/0/query",
+    "fieldmap": { "address": "ADDRESS_LINE_1", "city": "CITY", "zip": "ZIP", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Broward County BCPA parcel tax roll (address is owner mailing address)"
+  },
+  {
+    "id": "palmbeach-fl-parcels", "region": "us-fl-palmbeach", "name": "Palm Beach", "state": "FL", "pop": 1492191,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services/Parcels_and_Property_Details_WebMercator/FeatureServer/0/query",
+    "fieldmap": { "address": "SITE_ADDR_STR", "city": "CITYNAME", "zip": "ZIP1", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "STREET_NUMBER", "street": "STREET_NAME" },
+    "verified_at": "2026-06-26", "note": "Palm Beach County parcels & property details (situs address)"
+  },
+  {
+    "id": "hillsborough-fl-violations", "region": "us-fl-hillsborough", "name": "Hillsborough", "state": "FL", "pop": 1471968,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/apTfC6SUmnNfnxuF/arcgis/rest/services/CodeEnforcementCasesMapService/FeatureServer/0/query",
+    "fieldmap": { "address": "USER_Property_Address", "city": null, "zip": "USER_ZIP_CODE", "ordinance": null, "description": "USER_B1_APPL_STATUS", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Hillsborough County Code Enforcement cases"
+  },
+  {
+    "id": "orange-fl-violations", "region": "us-fl-orange", "name": "Orange", "state": "FL", "pop": 1429908,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://ocgis4.ocfl.net/arcgis/rest/services/Public_Dynamic/MapServer/15/query",
+    "fieldmap": { "address": "CE_COMPLETE_ADDRESS", "city": null, "zip": null, "ordinance": null, "description": "INCI_DESC", "lat": null, "lon": null, "house_number": "CE_LOC_ST_NUM", "street": "CE_LOC_ST_NAME" },
+    "verified_at": "2026-06-26", "note": "Orange County (FL) Code Enforcement Active Violations"
+  },
+  {
+    "id": "fulton-ga-parcels", "region": "us-ga-fulton", "name": "Fulton", "state": "GA", "pop": 1066710,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/AQDHTHDrZzfsFsB5/arcgis/rest/services/Tax_Parcels/FeatureServer/0/query",
+    "fieldmap": { "address": "Address", "city": null, "zip": null, "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "AddrNumber", "street": "AddrStreet" },
+    "verified_at": "2026-06-26", "note": "Fulton County GIS Tax Parcels (situs address)"
+  },
+  {
+    "id": "gwinnett-ga-parcels", "region": "us-ga-gwinnett", "name": "Gwinnett", "state": "GA", "pop": 957062,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services3.arcgis.com/RfpmnkSAQleRbndX/arcgis/rest/services/Address_Points/FeatureServer/16/query",
+    "fieldmap": { "address": "FULLADDR", "city": "MUNICIPALITY", "zip": "ZIP5", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "ADDRNUM", "street": "FULLNAME" },
+    "verified_at": "2026-06-26", "note": "Gwinnett County Address Points (parcel situs addresses)"
+  },
+  {
+    "id": "mecklenburg-nc-violations", "region": "us-nc-mecklenburg", "name": "Mecklenburg", "state": "NC", "pop": 1115482,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://gis.charlottenc.gov/arcgis/rest/services/HNS/CodeEnforcementCasesAll/MapServer/0/query",
+    "fieldmap": { "address": "FullAddress", "city": null, "zip": null, "ordinance": "CaseType", "description": "DetailedDescription", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Charlotte/Mecklenburg Code Enforcement Cases (all)"
+  },
+  {
+    "id": "wake-nc-parcels", "region": "us-nc-wake", "name": "Wake", "state": "NC", "pop": 1129410,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://maps.wake.gov/arcgis/rest/services/Property/Parcels/MapServer/0/query",
+    "fieldmap": { "address": "SITE_ADDRESS", "city": "CITY_DECODE", "zip": "ZIPNUM", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "STNUM", "street": "FULL_STREET_NAME" },
+    "verified_at": "2026-06-26", "note": "Wake County parcels (situs address)"
+  },
+  {
+    "id": "honolulu-hi-parcels", "region": "us-hi-honolulu", "name": "Honolulu", "state": "HI", "pop": 1016508,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/tNJpAOha4mODLkXz/arcgis/rest/services/LEGDAT_ADDRESS/FeatureServer/1/query",
+    "fieldmap": { "address": "merged_address", "city": "cityname", "zip": "zip1", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "adrno", "street": "adrstr" },
+    "verified_at": "2026-06-26", "note": "City & County of Honolulu real property situs address table (LEGDAT)"
+  }
+]
