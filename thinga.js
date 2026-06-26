@@ -23,7 +23,7 @@ export const ANKHOR_VERSION = "ankhor.v1";
 
 // The six axes. `content` (axis 2) is a top-level column; everything in AXIS_FIELDS is folded
 // into the `axes` JSON column. id/kind/name/version (axis 1) + timestamps are columns too.
-const AXIS_FIELDS = [
+export const AXIS_FIELDS = [
   // axis 3 — classification
   "tags", "schema", "color", "icon",
   // axis 4 — relationships (the recursion lives here)
@@ -38,7 +38,7 @@ const AXIS_FIELDS = [
 const nowISO = () => new Date().toISOString();
 
 // Deterministic stringify (sorted keys) so the checksum is stable across runs.
-function canonical(value) {
+export function canonical(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
   const keys = Object.keys(value).sort();
@@ -46,7 +46,7 @@ function canonical(value) {
 }
 
 // Fill every axis so no Thinga is ever missing one (Ankhor §2: "none can be omitted; some empty").
-function normalize(input) {
+export function normalize(input) {
   const t = { ...input };
   t.id = t.id || `thinga:${randomUUID()}`;
   if (!t.kind) throw new Error("Thinga requires a `kind`");

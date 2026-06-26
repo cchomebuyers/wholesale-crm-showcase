@@ -13,6 +13,7 @@
     "express": "^4.21.2",
     "imapflow": "^1.4.2",
     "mailparser": "^3.9.11",
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^6.9.16",
+    "pg": "^8.22.0"
   }
 }
