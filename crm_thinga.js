@@ -72,6 +72,43 @@ export function emailToThinga(row) {
   };
 }
 
+// A task (follow-up/reminder) → a child Thinga of its lead (or a free-floating task if lead-less).
+export function taskToThinga(row) {
+  return {
+    id: `thinga:task-${row.id}`,
+    kind: "task",
+    name: row.title || "task",
+    parents: row.lead_id ? [leadThingaId(row.lead_id)] : [],
+    due_date: row.due_date || null,
+    category_path: row.done ? "Tasks/Done" : "Tasks/Open",
+    content: { crm_id: row.id, title: row.title, done: Boolean(row.done), lead_id: row.lead_id ?? null },
+  };
+}
+
+// A day-note → a calendar note Thinga (day_notes is keyed by day, not a numeric id).
+export function noteToThinga(row) {
+  return {
+    id: `thinga:note-${row.day}`,
+    kind: "note",
+    name: row.day,
+    due_date: row.day,
+    category_path: `Calendar/${row.day}`,
+    content: { day: row.day, body: row.body },
+  };
+}
+
+// A notification → a notification Thinga, linked to the property it's about (if any).
+export function notificationToThinga(row) {
+  return {
+    id: `thinga:notification-${row.id}`,
+    kind: "notification",
+    name: row.title || row.type || "notification",
+    links: row.property_id ? [{ kind: "about", to: `thinga:property-${row.property_id}` }] : [],
+    category_path: row.read ? "Notifications/Read" : "Notifications/Unread",
+    content: { crm_id: row.id, type: row.type, title: row.title, body: row.body, read: Boolean(row.read) },
+  };
+}
+
 // Mount the substrate and register the CRM's schemas + handlers. Returns the store.
 export function mountCrmSubstrate(db, { handlers = {} } = {}) {
   const store = createThingaStore(db);
@@ -99,6 +136,15 @@ export function mirrorActivity(store, row) {
 }
 export function mirrorEmail(store, row) {
   return store.put(emailToThinga(row));
+}
+export function mirrorTask(store, row) {
+  return store.put(taskToThinga(row));
+}
+export function mirrorNote(store, row) {
+  return store.put(noteToThinga(row));
+}
+export function mirrorNotification(store, row) {
+  return store.put(notificationToThinga(row));
 }
 
 // The children of a lead Thinga (activities + messages), via the reverse-link index.

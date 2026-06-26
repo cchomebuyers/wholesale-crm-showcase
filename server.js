@@ -7,7 +7,8 @@ import { simpleParser } from "mailparser";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
-import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead } from "./crm_thinga.js";
+import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
+  mirrorTask, mirrorNote, mirrorNotification } from "./crm_thinga.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -154,6 +155,18 @@ const thinga = mountCrmSubstrate(db, {
 const mirrorLeadSafe = (id) => {
   try { const row = db.prepare("SELECT * FROM leads WHERE id=?").get(id); if (row) mirrorLead(thinga, row); }
   catch (e) { console.error("thinga mirror (non-fatal):", e.message); }
+};
+const mirrorTaskSafe = (id) => {
+  try { const r = db.prepare("SELECT * FROM tasks WHERE id=?").get(id); if (r) mirrorTask(thinga, r); }
+  catch (e) { console.error("thinga mirror task (non-fatal):", e.message); }
+};
+const mirrorNoteSafe = (day) => {
+  try { const r = db.prepare("SELECT day, body FROM day_notes WHERE day=?").get(day); if (r) mirrorNote(thinga, r); }
+  catch (e) { console.error("thinga mirror note (non-fatal):", e.message); }
+};
+const mirrorNotifSafe = (id) => {
+  try { const r = db.prepare("SELECT * FROM notifications WHERE id=?").get(id); if (r) mirrorNotification(thinga, r); }
+  catch (e) { console.error("thinga mirror notif (non-fatal):", e.message); }
 };
 
 // ---------- Settings (key/value) ----------
@@ -600,9 +613,10 @@ app.post("/api/leads/:id/followup", (req, res) => {
   if (!lead) return res.status(404).json({ error: "not found" });
   const days = Math.max(1, Number(req.body && req.body.days) || 3);
   const due = new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
-  db.prepare("INSERT INTO tasks (lead_id, created_at, title, due_date, done) VALUES (?,?,?,?,0)")
+  const tinfo = db.prepare("INSERT INTO tasks (lead_id, created_at, title, due_date, done) VALUES (?,?,?,?,0)")
     .run(req.params.id, now(), "Follow up", due);
   db.prepare("UPDATE leads SET next_followup = ?, updated_at = ? WHERE id = ?").run(due, now(), req.params.id);
+  mirrorTaskSafe(tinfo.lastInsertRowid); // mirror the task into the substrate (guarded)
   res.json({ ok: true, due });
 });
 
@@ -662,6 +676,7 @@ app.post("/api/leads/:id/tasks", (req, res) => {
   const lid = req.params.id === "none" ? null : req.params.id;
   const info = db.prepare("INSERT INTO tasks (lead_id, created_at, title, due_date, done) VALUES (?,?,?,?,0)")
     .run(lid, now(), title, due_date || null);
+  mirrorTaskSafe(info.lastInsertRowid); // guarded substrate mirror
   res.json({ id: info.lastInsertRowid });
 });
 app.get("/api/leads/:id/tasks", (req, res) => {
@@ -673,6 +688,7 @@ app.put("/api/tasks/:id", (req, res) => {
   const b = req.body || {};
   db.prepare("UPDATE tasks SET title = ?, due_date = ?, done = ? WHERE id = ?")
     .run(b.title ?? t.title, b.due_date !== undefined ? b.due_date : t.due_date, b.done !== undefined ? (b.done ? 1 : 0) : t.done, req.params.id);
+  mirrorTaskSafe(req.params.id); // keep the substrate in sync (guarded)
   res.json({ ok: true });
 });
 app.delete("/api/tasks/:id", (req, res) => {
@@ -823,9 +839,14 @@ app.get("/api/day-notes/:day", (req, res) => {
 });
 app.put("/api/day-notes/:day", (req, res) => {
   const body = ((req.body && req.body.body) || "").trim();
-  if (!body) { db.prepare("DELETE FROM day_notes WHERE day=?").run(req.params.day); return res.json({ ok: true, deleted: true }); }
+  if (!body) {
+    db.prepare("DELETE FROM day_notes WHERE day=?").run(req.params.day);
+    try { thinga.tombstone(`thinga:note-${req.params.day}`); } catch { /* non-fatal */ }
+    return res.json({ ok: true, deleted: true });
+  }
   db.prepare(`INSERT INTO day_notes (day, body, updated_at) VALUES (?,?,?)
     ON CONFLICT(day) DO UPDATE SET body=excluded.body, updated_at=excluded.updated_at`).run(req.params.day, body, now());
+  mirrorNoteSafe(req.params.day); // guarded substrate mirror
   res.json({ ok: true });
 });
 
@@ -942,8 +963,11 @@ async function syncInboxOnce() {
     throw err;
   }
   setSetting("inbox_synced_at", now());
-  if (added > 0) db.prepare("INSERT INTO notifications (created_at, type, title, body, read) VALUES (?,?,?,?,0)")
-    .run(now(), "inbox", `📥 ${added} new email${added === 1 ? "" : "s"}`, "New mail landed in your inbox.");
+  if (added > 0) {
+    const ni = db.prepare("INSERT INTO notifications (created_at, type, title, body, read) VALUES (?,?,?,?,0)")
+      .run(now(), "inbox", `📥 ${added} new email${added === 1 ? "" : "s"}`, "New mail landed in your inbox.");
+    mirrorNotifSafe(ni.lastInsertRowid); // guarded substrate mirror
+  }
   return added;
 }
 app.post("/api/inbox/sync", async (req, res) => {
@@ -1268,6 +1292,7 @@ function createHotNotifications(ids) {
     const body = `${p.formatted_address} · ${fmtMoney(p.price)}${p.crime_shootings_30d != null ? ` · 🔫 ${p.crime_shootings_30d}` : ""}`;
     const info = db.prepare("INSERT INTO notifications (created_at, type, title, body, property_id, read) VALUES (?,?,?,?,?,0)")
       .run(now(), "hot", title, body, id);
+    mirrorNotifSafe(info.lastInsertRowid); // guarded substrate mirror
     created.push({ id: info.lastInsertRowid, title, body, property: p });
   }
   return created;

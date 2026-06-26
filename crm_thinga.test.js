@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
+  mirrorTask, mirrorNote, mirrorNotification,
   leadToThinga, leadCategoryPath, leadThingaId } from "./crm_thinga.js";
 
 const leadRow = (over = {}) => ({
@@ -116,4 +117,42 @@ test("an email with no lead_id mirrors without links (unthreaded)", () => {
   const t = store.get(mirrorEmail(store, { id: 5, lead_id: null, direction: "in", subject: "spam", snippet: "" }));
   assert.deepEqual(t.links, []);
   assert.deepEqual(t.parents, []);
+});
+
+// ---- iter 6: tasks + notes + notifications → kinds ----
+
+test("a task mirrors to kind:task, a child of its lead, with a due_date", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  mirrorLead(store, leadRow());
+  const t = store.get(mirrorTask(store, { id: 3, lead_id: 1, title: "Follow up", due_date: "2026-07-01", done: 0 }));
+  assert.equal(t.kind, "task");
+  assert.equal(t.due_date, "2026-07-01");
+  assert.equal(t.category_path, "Tasks/Open");
+  assert.deepEqual(t.parents, [leadThingaId(1)]);
+  assert.ok(childrenOfLead(store, 1).some((c) => c.kind === "task"));
+});
+
+test("a done task lands under Tasks/Done; a lead-less task has no parent", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  assert.equal(store.get(mirrorTask(store, { id: 1, lead_id: null, title: "x", done: 1 })).category_path, "Tasks/Done");
+  assert.deepEqual(store.get(mirrorTask(store, { id: 2, lead_id: null, title: "y", done: 0 })).parents, []);
+});
+
+test("a day-note mirrors to kind:note under Calendar/<day>, keyed by day", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorNote(store, { day: "2026-06-26", body: "call backs" }));
+  assert.equal(t.kind, "note");
+  assert.equal(t.id, "thinga:note-2026-06-26");
+  assert.equal(t.category_path, "Calendar/2026-06-26");
+  assert.equal(t.due_date, "2026-06-26");
+});
+
+test("a notification mirrors to kind:notification, linked 'about' its property", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const t = store.get(mirrorNotification(store, { id: 7, type: "hot", title: "🔥", body: "deal", property_id: 42, read: 0 }));
+  assert.equal(t.kind, "notification");
+  assert.equal(t.category_path, "Notifications/Unread");
+  assert.deepEqual(t.links, [{ kind: "about", to: "thinga:property-42" }]);
+  // reverse index lets the (future) property Thinga find what's about it
+  assert.equal(store.incomingLinks("thinga:property-42", "about")[0].from_id, t.id);
 });
