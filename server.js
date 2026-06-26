@@ -11,6 +11,7 @@ import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfL
   mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
   mirrorProperty, mirrorCampaign } from "./crm_thinga.js";
 import { buildRegistry } from "./connectors/index.js";
+import { createSourceHealth } from "./source_health.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1712,6 +1713,30 @@ for (const conn of Object.values(registry)) {
     content: { id: conn.id, region: conn.region, type: conn.type },
   });
 }
+
+// ---- source health: auto-run every connector, record ALL metrics to Postgres ----
+const sourceHealth = createSourceHealth(process.env.DATABASE_URL, () => registry);
+if (sourceHealth) {
+  sourceHealth.init().catch((e) => console.error("source_health init failed:", e.message));
+  setInterval(() => sourceHealth.probeAll().catch((e) => console.error("auto probe-all:", e.message)), 6 * 3600e3);
+  setTimeout(() => sourceHealth.probeAll().catch(() => {}), 20000); // first probe shortly after boot
+}
+// Button-driven endpoints (no typing): run all probes, read the scoreboard, read recent runs.
+app.post("/api/sources/probe", async (req, res) => {
+  if (!sourceHealth) return res.status(400).json({ error: "Set DATABASE_URL (Postgres) to enable source tracking." });
+  try { res.json({ ok: true, results: await sourceHealth.probeAll() }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.get("/api/sources/health", async (req, res) => {
+  if (!sourceHealth) return res.json({ enabled: false, rows: [] });
+  try { res.json({ enabled: true, rows: await sourceHealth.health() }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.get("/api/sources/recent", async (req, res) => {
+  if (!sourceHealth) return res.json({ enabled: false, rows: [] });
+  try { res.json({ enabled: true, rows: await sourceHealth.recent(Number(req.query.limit) || 50) }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
