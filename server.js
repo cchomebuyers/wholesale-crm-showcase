@@ -148,12 +148,9 @@ const now = () => new Date().toISOString();
 // ---------- Ankhor / Thinga substrate (non-destructive interop) ----------
 // Mirrors CRM rows into a `thingas` store living ALONGSIDE the eleven tables. The app is never
 // blocked by it: every mirror is guarded. Roadmap: dev/plans/6-26-26/01-SUBSTRATE.md. Runtime: thinga.js.
-const thinga = mountCrmSubstrate(db, {
-  handlers: {
-    // a CRM pure-function becomes a code Thinga (no eval) — score from stored ARV
-    score: (t) => (t.content && t.content.arv ? Math.min(100, Math.round(t.content.arv / 2000)) : 0),
-  },
-});
+// Real verb handlers (score_property/underwrite_lead/analyze_property/run_campaign/connector.*) are
+// registered later, where their dependencies exist. Mount with no demo handlers.
+const thinga = mountCrmSubstrate(db);
 const mirrorLeadSafe = (id) => {
   try { const row = db.prepare("SELECT * FROM leads WHERE id=?").get(id); if (row) mirrorLead(thinga, row); }
   catch (e) { console.error("thinga mirror (non-fatal):", e.message); }
