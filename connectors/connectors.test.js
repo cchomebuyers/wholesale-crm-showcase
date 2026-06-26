@@ -16,9 +16,11 @@ const deps = (over = {}) => ({
   ...over,
 });
 
-test("registry exposes all connectors keyed by id, each with the search interface", () => {
+test("registry exposes the core connectors (+ data-driven counties), each with the search interface", () => {
   const r = buildRegistry(deps());
-  assert.deepEqual(Object.keys(r).sort(), ["census-geocode", "detroit-blight", "detroit-comps", "rentcast-sale", "reso-mls"]);
+  for (const id of ["census-geocode", "detroit-blight", "detroit-comps", "rentcast-sale", "reso-mls"]) {
+    assert.ok(r[id], `missing core connector ${id}`);
+  }
   for (const c of Object.values(r)) {
     assert.equal(typeof c.search, "function");
     assert.ok(c.id && c.region && c.type);
