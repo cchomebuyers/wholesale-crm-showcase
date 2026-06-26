@@ -1,0 +1,72 @@
+[
+  {
+    "id": "harris-tx-parcels", "region": "us-tx-harris", "name": "Harris", "state": "TX", "pop": 4731145,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://www.gis.hctx.net/arcgis/rest/services/HCAD/Parcels/MapServer/0/query",
+    "fieldmap": { "address": null, "city": "site_city", "zip": "site_zip", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "site_str_num", "street": "site_str_name" },
+    "verified_at": "2026-06-26", "note": "Harris Central Appraisal District (HCAD) parcels with situs address"
+  },
+  {
+    "id": "maricopa-az-parcels", "region": "us-az-maricopa", "name": "Maricopa", "state": "AZ", "pop": 4420568,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://gis.mcassessor.maricopa.gov/arcgis/rest/services/MaricopaDynamicQueryService/MapServer/3/query",
+    "fieldmap": { "address": "PHYSICAL_ADDRESS", "city": "PHYSICAL_CITY", "zip": "PHYSICAL_ZIP", "ordinance": null, "description": null, "lat": "LATITUDE", "lon": "LONGITUDE", "house_number": "PHYSICAL_STREET_NUM", "street": "PHYSICAL_STREET_NAME" },
+    "verified_at": "2026-06-26", "note": "Maricopa County Assessor parcels (situs/physical address)"
+  },
+  {
+    "id": "dallas-tx-violations", "region": "us-tx-dallas", "name": "Dallas", "state": "TX", "pop": 2613539,
+    "type": "violations", "dialect": "socrata",
+    "endpoint": "https://www.dallasopendata.com/resource/x9pz-kdq9.json",
+    "fieldmap": { "address": null, "city": null, "zip": "zone", "ordinance": null, "description": "nuisance", "lat": null, "lon": null, "house_number": "str_num", "street": "str_nam" },
+    "verified_at": "2026-06-26", "note": "Dallas OpenData code violations (str_num + str_nam)"
+  },
+  {
+    "id": "clark-nv-violations", "region": "us-nv-clark", "name": "Clark", "state": "NV", "pop": 2265461,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/F1v0ufATbBQScMtY/arcgis/rest/services/Code_Enforcement_Open_Data/FeatureServer/0/query",
+    "fieldmap": { "address": "ADDRESS", "city": null, "zip": null, "ordinance": null, "description": "DESCRIPT", "lat": "LAT", "lon": "LONG", "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "City of Las Vegas code enforcement violations"
+  },
+  {
+    "id": "tarrant-tx-violations", "region": "us-tx-tarrant", "name": "Tarrant", "state": "TX", "pop": 2110640,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://services5.arcgis.com/3ddLCBXe1bRt7mzj/ArcGIS/rest/services/CFW_Open_Data_Code_Violations_Table_view/FeatureServer/0/query",
+    "fieldmap": { "address": "Violation_Address", "city": "City", "zip": null, "ordinance": null, "description": "Complaint_Type_Description", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "City of Fort Worth code violations table"
+  },
+  {
+    "id": "bexar-tx-parcels", "region": "us-tx-bexar", "name": "Bexar", "state": "TX", "pop": 2009324,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/g1fRTDLeMgspWrYp/arcgis/rest/services/BCAD_Parcels/FeatureServer/0/query",
+    "fieldmap": { "address": "Situs", "city": null, "zip": null, "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Bexar Appraisal District parcels (Situs address), hosted by City of San Antonio"
+  },
+  {
+    "id": "travis-tx-violations", "region": "us-tx-travis", "name": "Travis", "state": "TX", "pop": 1290188,
+    "type": "violations", "dialect": "socrata",
+    "endpoint": "https://data.austintexas.gov/resource/6wtj-zbtb.json",
+    "fieldmap": { "address": "address", "city": "city", "zip": "zip_code", "ordinance": null, "description": "description", "lat": "latitude", "lon": "longitude", "house_number": "house_number", "street": "street_name" },
+    "verified_at": "2026-06-26", "note": "Austin Code complaint cases"
+  },
+  {
+    "id": "saltlake-ut-parcels", "region": "us-ut-saltlake", "name": "Salt Lake", "state": "UT", "pop": 1185238,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/99lidPhWCzftIe9K/arcgis/rest/services/Parcels_SaltLake/FeatureServer/0/query",
+    "fieldmap": { "address": "PARCEL_ADD", "city": "PARCEL_CITY", "zip": "PARCEL_ZIP", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "Utah (AGRC) Salt Lake County parcels with situs address"
+  },
+  {
+    "id": "collin-tx-parcels", "region": "us-tx-collin", "name": "Collin", "state": "TX", "pop": 1064465,
+    "type": "parcels", "dialect": "arcgis",
+    "endpoint": "https://services2.arcgis.com/uXyoacYrZTPTKD3R/arcgis/rest/services/CCAD_Parcel_Feature_Set/FeatureServer/4/query",
+    "fieldmap": { "address": "situsConcat", "city": "situsCity", "zip": "situsZip", "ordinance": null, "description": null, "lat": null, "lon": null, "house_number": "situsBldgNum", "street": "situsStreetName" },
+    "verified_at": "2026-06-26", "note": "Collin Central Appraisal District (CCAD) parcels with situs address"
+  },
+  {
+    "id": "pima-az-violations", "region": "us-az-pima", "name": "Pima", "state": "AZ", "pop": 1043433,
+    "type": "violations", "dialect": "arcgis",
+    "endpoint": "https://utility.arcgis.com/usrsvcs/servers/acb9aac0f2e842b29c976a1695d64319/rest/services/PublicMaps/PropertyHousing/MapServer/6/query",
+    "fieldmap": { "address": "ADDRESSFULL", "city": null, "zip": null, "ordinance": null, "description": "DESCRIPTION", "lat": null, "lon": null, "house_number": null, "street": null },
+    "verified_at": "2026-06-26", "note": "City of Tucson code enforcement violations (Pima County)"
+  }
+]
