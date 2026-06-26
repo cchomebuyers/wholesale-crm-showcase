@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ankhor.v1",
+  "title": "Thinga — ankhor.v1",
+  "description": "The universal recursive type. Six axes; none omitted, some empty. Canonical spec: yearTwo777/synthesis/ANKHOR_ARCHITECTURE.md. Runtime: thinga.js. kind is manners (convention); schema is enforcement only where a kind opts in.",
+  "type": "object",
+  "required": ["id", "kind", "version", "content"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^thinga:[0-9a-fA-F-]{36}$", "description": "axis 1 — identity, globally addressable" },
+    "kind": { "type": "string", "description": "axis 1 — the social contract; tooling expects certain content per kind" },
+    "name": { "type": ["string", "null"] },
+    "version": { "type": "integer", "minimum": 1, "description": "monotonic; bumped on every PUT" },
+
+    "content": { "type": "object", "description": "axis 2 — the payload; shape determined by kind" },
+
+    "tags": { "type": "array", "items": { "type": "string" }, "description": "axis 3 — classification" },
+    "schema": { "type": ["string", "null"], "description": "axis 3 — e.g. ankhor.v1.lead; validated on PUT when registered" },
+    "color": { "type": ["string", "null"] },
+    "icon": { "type": ["string", "null"] },
+    "category_path": { "type": ["string", "null"], "description": "axis 3 — stable human address, e.g. Pipeline/Offer Made" },
+
+    "children": { "type": "array", "items": { "type": "string" }, "description": "axis 4 — contained Thinga ids (recursion)" },
+    "parents": { "type": "array", "items": { "type": "string" }, "description": "axis 4 — containing Thinga ids (multi-parent)" },
+    "links": {
+      "type": "array",
+      "description": "axis 4 — typed edges to other Thingas",
+      "items": {
+        "type": "object",
+        "required": ["to"],
+        "properties": {
+          "kind": { "type": "string", "description": "e.g. sent_to, received_from, imported_to, subscribes_to, depends_on, forks_from" },
+          "to": { "type": "string" }
+        }
+      }
+    },
+    "subworld": { "type": ["string", "null"], "description": "axis 4 — for world/object kinds" },
+
+    "due_date": { "type": ["string", "null"] },
+    "due_time": { "type": ["string", "null"] },
+    "recurrence": { "type": ["object", "null"], "description": "axis 5 — { pattern, days, until }" },
+    "ttl_seconds": { "type": "integer", "minimum": 0, "description": "axis 5 — 0 = no expiry" },
+
+    "code": {
+      "type": ["object", "null"],
+      "description": "axis 6 — execution; { handler: <registered name> }. Resolves to a native handler, NEVER eval.",
+      "properties": { "handler": { "type": "string" } }
+    },
+    "interaction_script": { "type": ["string", "null"], "description": "axis 6 — id of a code Thinga run on invoke, this Thinga as subject" },
+    "physics_profile": { "type": ["object", "null"] },
+    "permissions": { "type": "string", "enum": ["public", "private"], "default": "private", "description": "axis 6 — may extend to group:<id>/tenant:<id>" },
+    "owner": { "type": ["string", "null"] },
+    "origin": { "type": ["string", "null"] },
+    "signature": { "type": ["string", "null"], "description": "axis 6 — ed25519:<base64>, recomputed every PUT" },
+    "checksum": { "type": ["string", "null"], "description": "axis 6 — sha256:<hex> over the canonical form" },
+
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "deleted_at": { "type": ["string", "null"], "description": "tombstone; never hard delete" }
+  },
+
+  "$defs": {
+    "registeredKinds": {
+      "description": "Soft contract (manners). The CRM's eleven tables map here — see dev/plans/6-26-26/01-SUBSTRATE.md.",
+      "enum": ["lead", "activity", "message", "buyer", "task", "campaign", "property", "note",
+               "setting", "template", "notification", "comps", "code", "connector", "reference", "tombstone"]
+    }
+  }
+}
