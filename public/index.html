@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wholesale CRM</title>
-  <link rel="stylesheet" href="styles.css?v=41" />
+  <link rel="stylesheet" href="styles.css?v=42" />
 </head>
 <body>
   <header>
@@ -17,6 +17,7 @@
       <button class="tab" data-tab="outreach">Outreach</button>
       <button class="tab" data-tab="inbox">Inbox</button>
       <button class="tab" data-tab="acquisitions">Acquisitions</button>
+      <button class="tab" data-tab="sources">Sources</button>
     </nav>
     <button class="bell" id="bellBtn" title="Notifications">🔔<span class="bell-count" id="bellCount" style="display:none">0</span></button>
     <button class="btn primary" id="newLeadBtn">+ New Lead</button>
@@ -347,6 +348,30 @@
           <p class="hint" style="margin:-2px 0 10px">Scores, agent phone &amp; shootings load automatically when you run a campaign. <b>Analyze</b> pulls ARV + rent (2 RentCast lookups each).</p>
           <div id="propFeed" class="prop-feed"></div>
         </div>
+      </div>
+    </section>
+
+    <!-- Sources — auto-run every data source, track which APIs are good / get leads -->
+    <section id="sources" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <b>Data source scoreboard</b>
+          <span class="muted" id="srcMeta" style="margin-left:8px"></span>
+          <button class="btn primary" id="srcProbe" style="margin-left:auto">▶ Test all sources</button>
+          <button class="btn xs" id="srcRefresh">Refresh</button>
+        </div>
+        <p class="muted" style="margin:4px 0 12px">
+          One click runs every connected API, tests the response, and records all metrics to Postgres —
+          which sources work, how many leads they return, how many come with contact, and how fast.
+        </p>
+        <div id="srcStatus" class="muted" style="margin-bottom:10px"></div>
+        <table class="src-table" id="srcTable">
+          <thead><tr>
+            <th>Source</th><th>Type</th><th>Status</th><th>Leads (last)</th><th>With contact</th>
+            <th>Total leads</th><th>Success</th><th>Avg latency</th><th>Last run</th><th>Note</th>
+          </tr></thead>
+          <tbody id="srcBody"><tr><td colspan="10" class="muted">No runs yet — click “Test all sources”.</td></tr></tbody>
+        </table>
       </div>
     </section>
   </main>

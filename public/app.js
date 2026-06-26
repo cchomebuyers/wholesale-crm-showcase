@@ -30,8 +30,60 @@ $$(".tab").forEach((b) =>
     if (b.dataset.tab === "inbox") openInbox();
     if (b.dataset.tab === "offers") loadOffers();
     if (b.dataset.tab === "acquisitions") openAcquisitions();
+    if (b.dataset.tab === "sources") loadSources();
   })
 );
+
+// ---------- Sources scoreboard (auto-run APIs, track which are good / get leads) ----------
+function srcStatusCell(r) {
+  if (r.last_ok) return '<span class="pill ok">working</span>';
+  const k = r.last_error_kind || "error";
+  return `<span class="pill err" title="${(r.last_error || "").replace(/"/g, "&quot;")}">${k}</span>`;
+}
+function renderSources(rows) {
+  const body = $("#srcBody");
+  if (!rows || !rows.length) { body.innerHTML = '<tr><td colspan="10" class="muted">No runs yet — click “Test all sources”.</td></tr>'; return; }
+  body.innerHTML = rows.map((r) => `
+    <tr>
+      <td><b>${r.source_id}</b></td>
+      <td class="muted">${r.source_type || ""}</td>
+      <td>${srcStatusCell(r)}</td>
+      <td>${r.last_leads ?? "—"}</td>
+      <td>${r.last_with_contact ?? "—"}</td>
+      <td><b>${r.total_leads ?? 0}</b></td>
+      <td>${r.success_rate ?? 0}%</td>
+      <td>${r.avg_latency_ms ?? "—"} ms</td>
+      <td class="muted">${r.last_ran ? new Date(r.last_ran).toLocaleString() : "—"}</td>
+      <td class="muted">${r.last_error_kind || ""}</td>
+    </tr>`).join("");
+}
+async function loadSources() {
+  try {
+    const d = await api("/api/sources/health");
+    if (!d.enabled) { $("#srcStatus").innerHTML = '<span class="err">Postgres not configured — set DATABASE_URL to enable source tracking.</span>'; return; }
+    $("#srcMeta").textContent = d.rows.length ? `${d.rows.length} sources tracked` : "";
+    renderSources(d.rows);
+  } catch (e) { $("#srcStatus").innerHTML = `<span class="err">${e.message}</span>`; }
+}
+async function probeSources() {
+  const btn = $("#srcProbe");
+  btn.disabled = true; const label = btn.textContent; btn.textContent = "Testing…";
+  $("#srcStatus").textContent = "Running every source and recording metrics…";
+  try {
+    const d = await api("/api/sources/probe", { method: "POST" });
+    const got = (d.results || []).reduce((s, r) => s + (r.leads || 0), 0);
+    const okN = (d.results || []).filter((r) => r.ok).length;
+    $("#srcStatus").innerHTML = `<span class="ok">Done — ${okN}/${(d.results||[]).length} sources working, ${got} leads found this run.</span>`;
+    toast(`Tested ${(d.results||[]).length} sources · ${got} leads`);
+    await loadSources();
+  } catch (e) { $("#srcStatus").innerHTML = `<span class="err">${e.message}</span>`; toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const p = $("#srcProbe"), r = $("#srcRefresh");
+  if (p) p.addEventListener("click", probeSources);
+  if (r) r.addEventListener("click", loadSources);
+});
 
 // ---------- Populate stage selects ----------
 function fillStages() {

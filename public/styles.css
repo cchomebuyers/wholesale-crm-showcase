@@ -615,3 +615,14 @@ table.sched td:first-child, table.sched th:first-child, table.sched td:nth-child
   .two-col .activity-col { border-left: none; border-top: 1px solid var(--border); }
   header { flex-wrap: wrap; }
 }
+
+/* ---- Sources scoreboard ---- */
+.muted { color: #8b98a6; }
+.src-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.src-table th, .src-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line, #27313d); }
+.src-table th { color: #8b98a6; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+.src-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+.pill { font-size: 11px; border-radius: 20px; padding: 2px 9px; white-space: nowrap; }
+.pill.ok { background: rgba(63,185,80,.15); color: #3fb950; border: 1px solid rgba(63,185,80,.4); }
+.pill.err { background: rgba(248,81,73,.13); color: #f85149; border: 1px solid rgba(248,81,73,.4); }
+.ok { color: #3fb950; } .err { color: #f85149; }
