@@ -7,6 +7,7 @@ import { simpleParser } from "mailparser";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { mountCrmSubstrate, mirrorLead } from "./crm_thinga.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -140,6 +141,20 @@ if (!db.prepare("SELECT value FROM settings WHERE key='migrated_active_v1'").get
 }
 
 const now = () => new Date().toISOString();
+
+// ---------- Ankhor / Thinga substrate (non-destructive interop) ----------
+// Mirrors CRM rows into a `thingas` store living ALONGSIDE the eleven tables. The app is never
+// blocked by it: every mirror is guarded. Roadmap: dev/plans/6-26-26/01-SUBSTRATE.md. Runtime: thinga.js.
+const thinga = mountCrmSubstrate(db, {
+  handlers: {
+    // a CRM pure-function becomes a code Thinga (no eval) — score from stored ARV
+    score: (t) => (t.content && t.content.arv ? Math.min(100, Math.round(t.content.arv / 2000)) : 0),
+  },
+});
+const mirrorLeadSafe = (id) => {
+  try { const row = db.prepare("SELECT * FROM leads WHERE id=?").get(id); if (row) mirrorLead(thinga, row); }
+  catch (e) { console.error("thinga mirror (non-fatal):", e.message); }
+};
 
 // ---------- Settings (key/value) ----------
 const getSetting = (k) => {
@@ -548,6 +563,7 @@ app.post("/api/leads", async (req, res) => {
   // Auto-load free analysis (comps → ARV, underwrite, score) so the lead comes pre-filled — no buttons.
   let uw = null;
   if (b.address) { try { uw = await underwriteOne(id, acqConfig()); } catch { /* non-fatal */ } }
+  mirrorLeadSafe(id); // dual-write into the Thinga substrate (guarded)
   res.json({ id, underwrite: uw && uw.matched ? uw : null });
 });
 
@@ -562,6 +578,7 @@ app.put("/api/leads/:id", (req, res) => {
     logActivity(req.params.id, "stage_change", `Stage: ${existing.stage} → ${b.stage}`);
     markOfferSentIfNeeded(req.params.id, b.stage);
   }
+  mirrorLeadSafe(req.params.id); // keep the substrate in sync (guarded)
   res.json({ ok: true });
 });
 
@@ -605,7 +622,20 @@ app.patch("/api/leads/:id/stage", (req, res) => {
     logActivity(req.params.id, "stage_change", `Stage: ${existing.stage} → ${stage}`);
     markOfferSentIfNeeded(req.params.id, stage);
   }
+  mirrorLeadSafe(req.params.id); // keep the substrate in sync (guarded)
   res.json({ ok: true });
+});
+
+// --- Thinga substrate: read access (additive; the substrate mirrors leads → kind:lead/comps) ---
+app.get("/api/thinga/:id", (req, res) => {
+  const depth = Math.max(0, Math.min(5, Number(req.query.depth) || 0));
+  const t = thinga.get(req.params.id, depth);
+  if (!t) return res.status(404).json({ error: "not found" });
+  res.json(t);
+});
+app.get("/api/thinga", (req, res) => {
+  const kind = req.query.kind || undefined;
+  res.json({ items: thinga.query(null, kind ? { kind } : {}) });
 });
 
 // --- Tasks / reminders ---
