@@ -11,6 +11,7 @@ import pg from "pg";
 function probeTarget(conn) {
   if (conn.type === "violations") return { days: 7 };
   if (conn.type === "comps") return { address: "13335 STRATHMOOR, Detroit, MI" };
+  if (conn.type === "geocode") return { address: "1600 Pennsylvania Avenue NW, Washington, DC 20500" };
   return { city: "Detroit", state: "MI", status: "Active" }; // listings
 }
 

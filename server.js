@@ -12,6 +12,7 @@ import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfL
   mirrorProperty, mirrorCampaign } from "./crm_thinga.js";
 import { buildRegistry } from "./connectors/index.js";
 import { createSourceHealth } from "./source_health.js";
+import { canonicalAddr } from "./connectors/census.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -525,39 +526,54 @@ function collectContacts(obj, found = { phones: [], emails: [] }) {
   return found;
 }
 const fmtPhone = (p) => (p && p.length === 10) ? `(${p.slice(0,3)}) ${p.slice(3,6)}-${p.slice(6)}` : p;
+const batchdataKey = () => getSetting("batchdata_api_key") || process.env.BATCHDATA_API_KEY;
 
-app.post("/api/leads/:id/skiptrace", async (req, res) => {
-  const lead = db.prepare("SELECT * FROM leads WHERE id=?").get(req.params.id);
-  if (!lead) return res.status(404).json({ error: "Lead not found" });
-  const key = getSetting("batchdata_api_key") || process.env.BATCHDATA_API_KEY;
-  if (!key) return res.status(400).json({ error: "Connect BatchData first (Acquisitions → Connect skip tracing)." });
-  if (!lead.address) return res.status(400).json({ error: "This lead has no address to skip trace." });
-  const ad = parseAddr(lead.address);
+// Reusable: skip-trace one address via BatchData. Returns { ok, phones, emails, error }.
+async function skipTraceOne(addressStr) {
+  const key = batchdataKey();
+  if (!key) return { ok: false, error: "no_key", phones: [], emails: [] };
+  if (!addressStr) return { ok: false, error: "no_address", phones: [], emails: [] };
+  const ad = parseAddr(addressStr);
   try {
     const r = await fetch("https://api.batchdata.com/api/v1/property/skip-trace", {
       method: "POST",
       headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ requests: [ { propertyAddress: { street: ad.street, city: ad.city, state: ad.state, zip: ad.zip } } ] }),
+      body: JSON.stringify({ requests: [{ propertyAddress: { street: ad.street, city: ad.city, state: ad.state, zip: ad.zip } }] }),
     });
     const text = await r.text();
-    let j; try { j = JSON.parse(text); } catch { j = { raw: text }; }
-    if (!r.ok) {
-      const msg = (j && (j.message || (j.status && j.status.message))) || `Skip trace failed (HTTP ${r.status})`;
-      return res.status(r.status === 401 ? 400 : 502).json({ error: r.status === 401 ? "BatchData rejected the key — check it in Acquisitions." : msg });
-    }
-    const { phones, emails } = collectContacts(j);
-    const phone = phones[0] ? fmtPhone(phones[0]) : null;
-    const email = emails[0] || null;
-    const t = now();
-    db.prepare(`UPDATE leads SET seller_phone=COALESCE(NULLIF(?,''), seller_phone),
-        seller_email=COALESCE(NULLIF(?,''), seller_email), skiptraced_at=?, skiptrace_raw=?, updated_at=? WHERE id=?`)
-      .run(phone || "", email || "", t, JSON.stringify({ phones, emails }), t, lead.id);
-    db.prepare("INSERT INTO activities (lead_id, created_at, type, body) VALUES (?, ?, 'skiptrace', ?)")
-      .run(lead.id, t, `Skip traced — ${phones.length} phone(s), ${emails.length} email(s) found.`);
-    res.json({ ok: true, phones: phones.map(fmtPhone), emails, phone, email });
+    let jb; try { jb = JSON.parse(text); } catch { jb = { raw: text }; }
+    if (!r.ok) return { ok: false, error: r.status === 401 ? "bad_key" : `http_${r.status}`, phones: [], emails: [] };
+    const { phones, emails } = collectContacts(jb);
+    return { ok: true, phones, emails };
   } catch (err) {
-    res.status(502).json({ error: "Skip trace error: " + String(err.message || err) });
+    return { ok: false, error: String(err.message || err), phones: [], emails: [] };
   }
+}
+// Apply a skip-trace result onto a lead row (fills phone/email if found), logs it.
+function applySkipTrace(leadId, st) {
+  const phone = st.phones[0] ? fmtPhone(st.phones[0]) : null;
+  const email = st.emails[0] || null;
+  const t = now();
+  db.prepare(`UPDATE leads SET seller_phone=COALESCE(NULLIF(?,''), seller_phone),
+      seller_email=COALESCE(NULLIF(?,''), seller_email), skiptraced_at=?, skiptrace_raw=?, updated_at=? WHERE id=?`)
+    .run(phone || "", email || "", t, JSON.stringify({ phones: st.phones, emails: st.emails }), t, leadId);
+  logActivity(leadId, "skiptrace", `Skip traced — ${st.phones.length} phone(s), ${st.emails.length} email(s) found.`);
+  return { phone, email };
+}
+
+app.post("/api/leads/:id/skiptrace", async (req, res) => {
+  const lead = db.prepare("SELECT * FROM leads WHERE id=?").get(req.params.id);
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  if (!batchdataKey()) return res.status(400).json({ error: "Connect BatchData first (Acquisitions → Connect skip tracing)." });
+  if (!lead.address) return res.status(400).json({ error: "This lead has no address to skip trace." });
+  const st = await skipTraceOne(lead.address);
+  if (!st.ok) {
+    const msg = st.error === "bad_key" ? "BatchData rejected the key — check it in Acquisitions." : "Skip trace failed: " + st.error;
+    return res.status(502).json({ error: msg });
+  }
+  const { phone, email } = applySkipTrace(lead.id, st);
+  mirrorLeadSafe(lead.id);
+  res.json({ ok: true, phones: st.phones.map(fmtPhone), emails: st.emails, phone, email });
 });
 
 // Bulk-import leads from a parsed CSV list (tax-delinquent, code violations, probate, D4D).
@@ -1759,7 +1775,7 @@ app.post("/api/area/pull", async (req, res) => {
     status: "Active", days: Math.max(1, Math.min(365, Number(b.days) || 30)) };
   if (!target.city && !target.zip) return res.status(400).json({ error: "Enter a city or ZIP." });
   const t = now(); const bySource = []; let found = 0, inserted = 0, skipped = 0, withContact = 0;
-  const seen = new Set();
+  const seen = new Set(); const insertedIds = [];
   const ins = db.prepare(`INSERT INTO leads (created_at, updated_at, stage, active, seller_name, seller_phone, seller_email, address, city, state, zip, motivation, source, notes)
       VALUES (?, ?, 'New', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const conn of Object.values(registry)) {
@@ -1778,20 +1794,44 @@ app.post("/api/area/pull", async (req, res) => {
     for (const r of results) {
       const lead = areaResultToLead(r, conn.id);
       if (!lead.address) { skipped++; continue; }
-      const key = lead.address.toLowerCase();
+      const key = canonicalAddr(lead.address); // "123 Main St" == "123 MAIN STREET" → one lead
       if (seen.has(key)) { skipped++; continue; }
       seen.add(key);
       if (db.prepare("SELECT id FROM leads WHERE lower(address)=lower(?)").get(lead.address)) { skipped++; continue; }
       const info = ins.run(t, t, lead.seller_name, lead.seller_phone, lead.seller_email, lead.address,
         lead.city, lead.state, lead.zip, lead.motivation, lead.source, lead.notes);
       mirrorLeadSafe(info.lastInsertRowid);
+      insertedIds.push({ id: info.lastInsertRowid, address: lead.address, hadContact: Boolean(lead.seller_phone || lead.seller_email) });
       if (lead.seller_phone || lead.seller_email) withContact++;
       added++; inserted++;
     }
     found += results.length;
     bySource.push({ source_id: conn.id, type: conn.type, ok, found: results.length, added, latency_ms: latency, error_kind: error ? "error" : null });
   }
-  res.json({ area: `${target.city || ""} ${target.state || ""} ${target.zip || ""}`.trim(), found, inserted, skipped, withContact, bySource });
+
+  // Optional skip-trace enrichment pass (BatchData) — capped to control cost; key-gated.
+  let skiptraced = 0, skiptraceFound = 0, skiptraceNote = null;
+  if (b.skiptrace) {
+    if (!batchdataKey()) {
+      skiptraceNote = "Skip-trace requested but no BatchData key — add it in Acquisitions.";
+    } else {
+      const limit = Math.max(1, Math.min(200, Number(b.skiptraceLimit) || 25));
+      const targets = insertedIds.filter((x) => !x.hadContact).slice(0, limit);
+      for (const lead of targets) {
+        const st = await skipTraceOne(lead.address);
+        skiptraced++;
+        if (st.ok && (st.phones.length || st.emails.length)) {
+          applySkipTrace(lead.id, st); mirrorLeadSafe(lead.id);
+          withContact++; skiptraceFound++;
+        }
+        if (st.error === "bad_key") { skiptraceNote = "BatchData rejected the key."; break; }
+      }
+      if (!skiptraceNote) skiptraceNote = `Skip-traced ${skiptraced} (cap ${limit}); ${skiptraceFound} got contact.`;
+    }
+  }
+
+  res.json({ area: `${target.city || ""} ${target.state || ""} ${target.zip || ""}`.trim(),
+    found, inserted, skipped, withContact, skiptraced, skiptraceFound, skiptraceNote, bySource });
 });
 
 const PORT = process.env.PORT || 4000;

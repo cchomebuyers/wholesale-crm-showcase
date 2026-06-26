@@ -7,6 +7,7 @@
 import { rentcastConnector } from "./rentcast.js";
 import { resoConnector } from "./reso.js";
 import { detroitBlightConnector, detroitCompsConnector } from "./detroit.js";
+import { censusConnector } from "./census.js";
 
 export function buildRegistry(deps) {
   const list = [
@@ -14,6 +15,7 @@ export function buildRegistry(deps) {
     resoConnector(deps),           // listings (on-market) — scaffolded, gated on a RESO token
     detroitBlightConnector(deps),  // violations (off-market) — free ArcGIS
     detroitCompsConnector(deps),   // comps (ARV) — free ArcGIS recorded sales
+    censusConnector(),             // geocode — free, no key (dedup + lat/lng)
   ];
   const registry = {};
   for (const c of list) registry[c.id] = c;

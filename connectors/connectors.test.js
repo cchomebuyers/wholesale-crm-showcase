@@ -16,13 +16,19 @@ const deps = (over = {}) => ({
   ...over,
 });
 
-test("registry exposes the four connectors keyed by id, each with the search interface", () => {
+test("registry exposes all connectors keyed by id, each with the search interface", () => {
   const r = buildRegistry(deps());
-  assert.deepEqual(Object.keys(r).sort(), ["detroit-blight", "detroit-comps", "rentcast-sale", "reso-mls"]);
+  assert.deepEqual(Object.keys(r).sort(), ["census-geocode", "detroit-blight", "detroit-comps", "rentcast-sale", "reso-mls"]);
   for (const c of Object.values(r)) {
     assert.equal(typeof c.search, "function");
     assert.ok(c.id && c.region && c.type);
   }
+});
+
+test("canonicalAddr normalizes suffixes/directionals so variants dedupe to one key", async () => {
+  const { canonicalAddr } = await import("./census.js");
+  assert.equal(canonicalAddr("123 Main St"), canonicalAddr("123 MAIN STREET"));
+  assert.equal(canonicalAddr("45 North Oak Ave."), "45 N OAK AVE");
 });
 
 test("rentcast connector normalizes listings to the property shape", async () => {
