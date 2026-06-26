@@ -31,8 +31,53 @@ $$(".tab").forEach((b) =>
     if (b.dataset.tab === "offers") loadOffers();
     if (b.dataset.tab === "acquisitions") openAcquisitions();
     if (b.dataset.tab === "sources") loadSources();
+    if (b.dataset.tab === "map") loadMap();
   })
 );
+
+// ---------- Built-in map (free OpenStreetMap; no key) ----------
+let _map = null, _markers = null;
+function loadMap() {
+  if (typeof L === "undefined") { $("#mapStatus").innerHTML = '<span class="err">Map needs internet to load tiles.</span>'; return; }
+  if (!_map) {
+    _map = L.map("mapCanvas").setView([42.331, -83.046], 11); // default: Detroit
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(_map);
+    _markers = L.layerGroup().addTo(_map);
+  }
+  refreshMapPoints();
+}
+async function refreshMapPoints() {
+  if (!_map) return;
+  try {
+    const d = await api("/api/map/points");
+    _markers.clearLayers();
+    const pts = d.points || [];
+    $("#mapStatus").textContent = `${pts.length} located lead${pts.length === 1 ? "" : "s"}`;
+    const bounds = [];
+    for (const p of pts) {
+      const m = L.marker([p.latitude, p.longitude]).bindPopup(
+        `<b>${p.address || ""}</b><br>${p.seller_name || ""} ${p.seller_phone ? "· " + p.seller_phone : ""}<br>` +
+        `Stage: ${p.stage || "—"}<br>ARV ${money(p.arv)} · MAO ${money(p.mao)}`);
+      _markers.addLayer(m); bounds.push([p.latitude, p.longitude]);
+    }
+    if (bounds.length) _map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    setTimeout(() => _map.invalidateSize(), 80); // ensure correct sizing now the tab is visible
+  } catch (e) { $("#mapStatus").innerHTML = `<span class="err">${e.message}</span>`; }
+}
+async function geocodeLeads() {
+  const btn = $("#mapGeocode"); btn.disabled = true; const l = btn.textContent; btn.textContent = "Geocoding…";
+  $("#mapStatus").textContent = "Geocoding addresses (free Census)…";
+  try {
+    const d = await api("/api/map/geocode", { method: "POST", body: JSON.stringify({ limit: 100 }) });
+    toast(`Geocoded ${d.geocoded} · ${d.remaining} left`);
+    await refreshMapPoints();
+  } catch (e) { toast(e.message, true); } finally { btn.disabled = false; btn.textContent = l; }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const g = $("#mapGeocode"), r = $("#mapRefresh");
+  if (g) g.addEventListener("click", geocodeLeads);
+  if (r) r.addEventListener("click", refreshMapPoints);
+});
 
 // ---------- Sources scoreboard (auto-run APIs, track which are good / get leads) ----------
 function srcStatusCell(r) {

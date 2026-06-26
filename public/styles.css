@@ -626,3 +626,7 @@ table.sched td:first-child, table.sched th:first-child, table.sched td:nth-child
 .pill.ok { background: rgba(63,185,80,.15); color: #3fb950; border: 1px solid rgba(63,185,80,.4); }
 .pill.err { background: rgba(248,81,73,.13); color: #f85149; border: 1px solid rgba(248,81,73,.4); }
 .ok { color: #3fb950; } .err { color: #f85149; }
+
+/* ---- Lead map ---- */
+#mapCanvas { height: 72vh; min-height: 420px; border-radius: 8px; border: 1px solid var(--line, #27313d); }
+.leaflet-popup-content { font: 13px ui-monospace, Menlo, Consolas, monospace; }

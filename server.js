@@ -12,7 +12,7 @@ import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfL
   mirrorProperty, mirrorCampaign } from "./crm_thinga.js";
 import { buildRegistry } from "./connectors/index.js";
 import { createSourceHealth } from "./source_health.js";
-import { canonicalAddr } from "./connectors/census.js";
+import { canonicalAddr, geocodeAddress } from "./connectors/census.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -136,9 +136,18 @@ db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_emails_uid ON emails(uid) WHERE u
 for (const col of ["offer_sent_at TEXT", "offer_amount REAL", "active INTEGER DEFAULT 1",
   "mao REAL", "equity REAL", "opportunity_score INTEGER", "assessed_value REAL", "last_sale_price REAL", "uw_at TEXT",
   "skiptraced_at TEXT", "skiptrace_raw TEXT", "fee_collected REAL", "fee_collected_at TEXT",
-  "rent_estimate REAL", "latitude REAL", "longitude REAL", "comps_json TEXT", "arv_source TEXT"]) {
+  "rent_estimate REAL", "latitude REAL", "longitude REAL", "comps_json TEXT", "arv_source TEXT",
+  "addr_canon TEXT"]) {
   try { db.exec(`ALTER TABLE leads ADD COLUMN ${col}`); } catch { /* already exists */ }
 }
+db.exec("CREATE INDEX IF NOT EXISTS idx_leads_canon ON leads(addr_canon)"); // never-duplicates lookup
+// One-time backfill so cross-run dedup works against pre-existing leads.
+try {
+  const rows = db.prepare("SELECT id, address FROM leads WHERE addr_canon IS NULL AND address IS NOT NULL").all();
+  const upd = db.prepare("UPDATE leads SET addr_canon=? WHERE id=?");
+  for (const r of rows) upd.run(canonicalAddr(r.address), r.id);
+} catch { /* canonicalAddr available post-import */ }
+const setCanon = (id, address) => { try { db.prepare("UPDATE leads SET addr_canon=? WHERE id=?").run(canonicalAddr(address || ""), id); } catch {} };
 // One-time: bulk-pulled records (code violations / imported lists) start as Prospects, not active leads.
 if (!db.prepare("SELECT value FROM settings WHERE key='migrated_active_v1'").get()) {
   db.prepare("UPDATE leads SET active=0 WHERE source='Detroit code violations' OR source LIKE '% list'").run();
@@ -1797,9 +1806,10 @@ app.post("/api/area/pull", async (req, res) => {
       const key = canonicalAddr(lead.address); // "123 Main St" == "123 MAIN STREET" → one lead
       if (seen.has(key)) { skipped++; continue; }
       seen.add(key);
-      if (db.prepare("SELECT id FROM leads WHERE lower(address)=lower(?)").get(lead.address)) { skipped++; continue; }
+      if (db.prepare("SELECT id FROM leads WHERE addr_canon=?").get(key)) { skipped++; continue; } // never duplicates, across runs
       const info = ins.run(t, t, lead.seller_name, lead.seller_phone, lead.seller_email, lead.address,
         lead.city, lead.state, lead.zip, lead.motivation, lead.source, lead.notes);
+      setCanon(info.lastInsertRowid, lead.address);
       mirrorLeadSafe(info.lastInsertRowid);
       insertedIds.push({ id: info.lastInsertRowid, address: lead.address, hadContact: Boolean(lead.seller_phone || lead.seller_email) });
       if (lead.seller_phone || lead.seller_email) withContact++;
@@ -1832,6 +1842,28 @@ app.post("/api/area/pull", async (req, res) => {
 
   res.json({ area: `${target.city || ""} ${target.state || ""} ${target.zip || ""}`.trim(),
     found, inserted, skipped, withContact, skiptraced, skiptraceFound, skiptraceNote, bySource });
+});
+
+// ---- Built-in map: free OpenStreetMap pins + free Census geocoding (no keys) ----
+app.get("/api/map/points", (req, res) => {
+  const rows = db.prepare(`SELECT id, address, city, state, seller_name, seller_phone, stage,
+      latitude, longitude, arv, mao, opportunity_score, source
+    FROM leads WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND stage != 'Dead'`).all();
+  res.json({ points: rows });
+});
+app.post("/api/map/geocode", async (req, res) => {
+  const limit = Math.max(1, Math.min(300, Number(req.body && req.body.limit) || 100));
+  const rows = db.prepare("SELECT id, address FROM leads WHERE latitude IS NULL AND address IS NOT NULL AND stage != 'Dead' LIMIT ?").all(limit);
+  let geocoded = 0;
+  for (const r of rows) {
+    const g = await geocodeAddress(r.address);
+    if (g.matched && g.lat && g.lon) {
+      db.prepare("UPDATE leads SET latitude=?, longitude=?, updated_at=? WHERE id=?").run(g.lat, g.lon, now(), r.id);
+      mirrorLeadSafe(r.id); geocoded++;
+    }
+  }
+  const remaining = db.prepare("SELECT COUNT(*) n FROM leads WHERE latitude IS NULL AND address IS NOT NULL AND stage != 'Dead'").get().n;
+  res.json({ ok: true, geocoded, remaining });
 });
 
 const PORT = process.env.PORT || 4000;

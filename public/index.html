@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wholesale CRM</title>
-  <link rel="stylesheet" href="styles.css?v=42" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="styles.css?v=43" />
 </head>
 <body>
   <header>
@@ -18,6 +20,7 @@
       <button class="tab" data-tab="inbox">Inbox</button>
       <button class="tab" data-tab="acquisitions">Acquisitions</button>
       <button class="tab" data-tab="sources">Sources</button>
+      <button class="tab" data-tab="map">Map</button>
     </nav>
     <button class="bell" id="bellBtn" title="Notifications">🔔<span class="bell-count" id="bellCount" style="display:none">0</span></button>
     <button class="btn primary" id="newLeadBtn">+ New Lead</button>
@@ -389,6 +392,19 @@
           </tr></thead>
           <tbody id="srcBody"><tr><td colspan="10" class="muted">No runs yet — click “Test all sources”.</td></tr></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- Map — see your leads as pins (free OpenStreetMap, no external searching) -->
+    <section id="map" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <b>🗺️ Lead map</b>
+          <span class="muted" id="mapStatus" style="margin-left:8px"></span>
+          <button class="btn" id="mapGeocode" style="margin-left:auto">📍 Geocode leads</button>
+          <button class="btn xs" id="mapRefresh">Refresh</button>
+        </div>
+        <div id="mapCanvas"></div>
       </div>
     </section>
   </main>
