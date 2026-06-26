@@ -140,6 +140,19 @@ test("version banner is ankhor.v1", () => {
   assert.equal(ANKHOR_VERSION, "ankhor.v1");
 });
 
+test("re-entrancy guard: a subscriber that re-PUTs its target does not infinite-loop", () => {
+  const s = createThingaStore(":memory:");
+  const target = s.put({ kind: "lead", content: { n: 0 } });
+  let calls = 0;
+  s.registerHandler("bump", (_subscriber, args, caps) => {
+    calls++;
+    caps.put({ id: args.changed, kind: "lead", content: { n: calls } }); // re-PUT target → would recurse
+  });
+  s.put({ kind: "code", code: { handler: "bump" }, links: [{ kind: "subscribes_to", to: target }] });
+  assert.doesNotThrow(() => s.put({ id: target, kind: "lead", content: { n: 1 } }));
+  assert.ok(calls >= 1 && calls < 5, `expected bounded subscriber calls, got ${calls}`);
+});
+
 // ---- remaining API surface + error paths (every public method exercised) ----
 
 test("PUT requires a kind", () => {

@@ -228,9 +228,16 @@ export function createThingaStore(dbOrPath = ":memory:") {
   }
 
   // Anything linking TO this Thinga with kind "subscribes_to" gets INVOKEd on change.
+  // Re-entrancy guard: if a subscriber re-PUTs the same Thinga, we don't recurse forever.
+  const notifying = new Set();
   function notifySubscribers(id) {
+    if (notifying.has(id)) return; // already notifying for this id — break the cycle
     const subs = db.prepare("SELECT from_id FROM thinga_links WHERE to_id=? AND link_kind='subscribes_to'").all(id);
-    for (const s of subs) { try { invoke(s.from_id, { changed: id }); } catch { /* a subscriber must not break the PUT */ } }
+    if (!subs.length) return;
+    notifying.add(id);
+    try {
+      for (const s of subs) { try { invoke(s.from_id, { changed: id }); } catch { /* a subscriber must not break the PUT */ } }
+    } finally { notifying.delete(id); }
   }
 
   // Reverse containment/edges: who points AT this Thinga (the regret #6 index, read side).

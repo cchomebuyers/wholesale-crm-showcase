@@ -678,6 +678,13 @@ app.get("/api/thinga", (req, res) => {
 app.get("/api/thinga/lead/:leadId/children", (req, res) => {
   res.json({ items: childrenOfLead(thinga, Number(req.params.leadId)) });
 });
+// INVOKE a code Thinga (verbs→INVOKE): e.g. POST /api/thinga/thinga:code-score/invoke {propertyId}.
+app.post("/api/thinga/:id/invoke", async (req, res) => {
+  try {
+    const result = await thinga.invoke(req.params.id, req.body || {});
+    res.json({ ok: true, result });
+  } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
+});
 
 // --- Tasks / reminders ---
 app.get("/api/tasks", (req, res) => {
@@ -1669,6 +1676,36 @@ app.get("/api/export/leads.csv", (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="castle-leads-${new Date().toISOString().slice(0, 10)}.csv"`);
   res.send(csv);
 });
+
+// ---- iter 9: the CRM's pure functions exposed as INVOKE-able code Thingas ----
+// Handlers take (codeThinga, args, caps); args carries the target row id. All functions referenced
+// here are defined above (function declarations hoisted; acqConfig/persistAnalysis in scope by now).
+thinga.registerHandler("score_property", (_t, args) => {
+  const p = db.prepare("SELECT * FROM properties WHERE id=?").get(args && args.propertyId);
+  if (!p) return { error: "property not found" };
+  const s = scoreListing(p);
+  db.prepare("UPDATE properties SET motivation_score=?, distress_score=?, lead_score=?, updated_at=? WHERE id=?")
+    .run(s.motivation, s.distress, blendLead(s, p.wholesale_score), now(), p.id);
+  mirrorPropertySafe(p.id);
+  return s;
+});
+thinga.registerHandler("underwrite_lead", async (_t, args) => {
+  if (!args || !args.leadId) return { error: "leadId required" };
+  const r = await underwriteOne(args.leadId, acqConfig());
+  mirrorLeadSafe(args.leadId);
+  return r;
+});
+thinga.registerHandler("analyze_property", (_t, args) => {
+  const p = db.prepare("SELECT * FROM properties WHERE id=?").get(args && args.propertyId);
+  if (!p) return { error: "property not found" };
+  const out = persistAnalysis(p, deriveAnalysis(p));
+  mirrorPropertySafe(p.id);
+  return out;
+});
+// Persist the three code Thingas that reference these handlers (idempotent on each boot).
+thinga.put({ id: "thinga:code-score", kind: "code", name: "score_property", category_path: "Code", code: { handler: "score_property" } });
+thinga.put({ id: "thinga:code-underwrite", kind: "code", name: "underwrite_lead", category_path: "Code", code: { handler: "underwrite_lead" } });
+thinga.put({ id: "thinga:code-analyze", kind: "code", name: "analyze_property", category_path: "Code", code: { handler: "analyze_property" } });
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
