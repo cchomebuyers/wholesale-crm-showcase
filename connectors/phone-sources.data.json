@@ -5,5 +5,9 @@
   {"id":"ny-mold-contractors","domain":"data.ny.gov","datasetId":"ikqx-ispy","phoneCol":"phone","nameCol":"business_name","addrCol":"address","region":"us-ny","state":"NY"},
   {"id":"ny-farm-dealers","domain":"data.ny.gov","datasetId":"ehtk-kzxa","phoneCol":"phone_number","nameCol":"business_name","addrCol":"street","region":"us-ny","state":"NY"},
   {"id":"wa-li-contractors","domain":"data.wa.gov","datasetId":"m8qx-ubtq","phoneCol":"phonenumber","nameCol":"primaryprincipalname","addrCol":"address1","region":"us-wa","state":"WA"},
-  {"id":"missouri-alcohol-licenses","domain":"data.mo.gov","datasetId":"yyhn-562y","phoneCol":"phone","nameCol":"licensee","addrCol":"street_number","region":"us-mo","state":"MO"}
+  {"id":"missouri-alcohol-licenses","domain":"data.mo.gov","datasetId":"yyhn-562y","phoneCol":"phone","nameCol":"licensee","addrCol":"street_number","region":"us-mo","state":"MO"},
+  {"id":"new-orleans-businesses","domain":"data.nola.gov","datasetId":"hjcd-grvu","phoneCol":"phonenumber","nameCol":"ownername","addrCol":"address","cityCol":"city","zipCol":"zip","region":"us-la-neworleans","state":"LA"},
+  {"id":"seattle-businesses","domain":"cos-data.seattle.gov","datasetId":"wnbq-64tb","phoneCol":"business_phone","nameCol":"business_legal_name","addrCol":"street_address","cityCol":"city","zipCol":"zip","region":"us-wa-seattle","state":"WA"},
+  {"id":"orlando-str-owners","domain":"data.cityoforlando.net","datasetId":"ssrj-rbua","phoneCol":"license_holder_phone","nameCol":"property_owner_name1","addrCol":"property_address","cityCol":"property_owner_city","zipCol":"property_owner_zip","region":"us-fl-orlando","state":"FL"},
+  {"id":"delaware-well-contractors","domain":"data.delaware.gov","datasetId":"2dnk-irgr","phoneCol":"workphone","nameCol":"orgname","addrCol":"workaddress","region":"us-de","state":"DE"}
 ]
