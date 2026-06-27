@@ -12,6 +12,7 @@ import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfL
   mirrorProperty, mirrorCampaign } from "./crm_thinga.js";
 import { buildRegistry } from "./connectors/index.js";
 import { createSourceHealth } from "./source_health.js";
+import { findContact } from "./contact_router.js";
 import { canonicalAddr, geocodeAddress } from "./connectors/census.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -583,6 +584,32 @@ app.post("/api/leads/:id/skiptrace", async (req, res) => {
   const { phone, email } = applySkipTrace(lead.id, st);
   mirrorLeadSafe(lead.id);
   res.json({ ok: true, phones: st.phones.map(fmtPhone), emails: st.emails, phone, email });
+});
+
+// Multi-route contact finder: try ALL free public-contact sources first, escalate only if empty.
+// Goal-driven subsystem of the contact-pathfinding engine (free routes → paid → research agent).
+app.post("/api/leads/:id/find-contact", async (req, res) => {
+  const lead = db.prepare("SELECT * FROM leads WHERE id=?").get(req.params.id);
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  try {
+    const subject = {
+      address: lead.address, owner_name: lead.seller_name, business_name: lead.seller_name,
+      city: lead.city, state: lead.state, zip: lead.zip,
+    };
+    const result = await findContact(registry, subject, { batchdataKey: Boolean(batchdataKey()) });
+    // If a free phone/email was found and the lead has none, fill it (never overwrite existing).
+    const best = result.candidates.find((c) => c.phone) || result.candidates.find((c) => c.email);
+    if (best) {
+      db.prepare(`UPDATE leads SET seller_phone=COALESCE(NULLIF(seller_phone,''), ?),
+          seller_email=COALESCE(NULLIF(seller_email,''), ?), updated_at=? WHERE id=?`)
+        .run(best.phone || "", best.email || "", now(), lead.id);
+      logActivity(lead.id, "note", `🔎 Contact route: ${result.freePhoneCount} free phone(s) via ${best.source_id} — ${best.phone || best.email} (${best.relation}, compliance unchecked)`);
+      mirrorLeadSafe(lead.id);
+    } else {
+      logActivity(lead.id, "note", `🔎 Contact route: no free phone. Next: ${result.nextStep}`);
+    }
+    res.json({ ok: true, ...result });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 // Bulk-import leads from a parsed CSV list (tax-delinquent, code violations, probate, D4D).
