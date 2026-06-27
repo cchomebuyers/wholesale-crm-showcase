@@ -13,6 +13,7 @@ import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfL
 import { buildRegistry } from "./connectors/index.js";
 import { createSourceHealth } from "./source_health.js";
 import { findContact } from "./contact_router.js";
+import { buildRealEstateEngine } from "./packs/real_estate_acquisition.js";
 import { canonicalAddr, geocodeAddress } from "./connectors/census.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1765,6 +1766,14 @@ for (const conn of Object.values(registry)) {
     content: { id: conn.id, region: conn.region, type: conn.type },
   });
 }
+
+// ---- route engine (real-estate domain pack): the kernel runs the real pipeline as config ----
+const routeEngine = buildRealEstateEngine({ registry, batchdataKey: Boolean(batchdataKey()) });
+app.get("/api/route", (req, res) => res.json({ routes: [...routeEngine.routes.keys()], plan: routeEngine.plan(req.query.goal || undefined) }));
+app.post("/api/route/:id/run", async (req, res) => {
+  try { const out = await routeEngine.runRoute(req.params.id, (req.body && req.body.target) || {}); res.json({ ok: true, ...out }); }
+  catch (e) { res.status(400).json({ error: String(e.message || e) }); }
+});
 
 // ---- source health: auto-run every connector, record ALL metrics to Postgres ----
 const sourceHealth = createSourceHealth(process.env.DATABASE_URL, () => registry);
