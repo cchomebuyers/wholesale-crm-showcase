@@ -1,0 +1,8 @@
+[
+  {"id":"vermont-continuing-ed","domain":"data.vermont.gov","datasetId":"espz-8k4k","phoneCol":"contact_phone","nameCol":"company","addrCol":"company_street_address","cityCol":"company_city","zipCol":"company_zip","region":"us-vt","state":"VT"},
+  {"id":"nj-savi-businesses","domain":"data.nj.gov","datasetId":"tfhb-8beb","phoneCol":"primary_phone","nameCol":"business_name","addrCol":"business_address","cityCol":"business_city","zipCol":"business_zip","region":"us-nj","state":"NJ"},
+  {"id":"ny-elevator-contractors","domain":"data.ny.gov","datasetId":"jrac-r9vc","phoneCol":"phone","nameCol":"business_name","addrCol":"address","cityCol":"city","zipCol":"zip_code","region":"us-ny","state":"NY"},
+  {"id":"ny-nyscb-contractors","domain":"data.ny.gov","datasetId":"gthh-7nri","phoneCol":"phone_number","nameCol":"agency_name","addrCol":"address","cityCol":"city","zipCol":"zip_code","region":"us-ny","state":"NY"},
+  {"id":"seattle-tree-services","domain":"cos-data.seattle.gov","datasetId":"uy6s-ine5","phoneCol":"phone_number","nameCol":"business_name","addrCol":"company_address","region":"us-wa-seattle","state":"WA"},
+  {"id":"delaware-asbestos-vendors","domain":"data.delaware.gov","datasetId":"f677-ahd9","phoneCol":"phone1","nameCol":"name","addrCol":"address1","cityCol":"city","zipCol":"zipcode","region":"us-de","state":"DE"}
+]
