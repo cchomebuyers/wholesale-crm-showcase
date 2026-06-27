@@ -1,0 +1,8 @@
+[
+  {"id":"il-home-services","domain":"illinois-edp.data.socrata.com","datasetId":"9miz-pbzm","phoneCol":"phone","nameCol":"facility_name","addrCol":"address","cityCol":"city","zipCol":"zip","region":"us-il","state":"IL"},
+  {"id":"il-home-health","domain":"illinois-edp.data.socrata.com","datasetId":"p7mg-cnpx","phoneCol":"phone","nameCol":"facility_name","addrCol":"address","cityCol":"city","zipCol":"zip","region":"us-il","state":"IL"},
+  {"id":"il-asbestos-contractors","domain":"illinois-edp.data.socrata.com","datasetId":"kt5u-9dcu","phoneCol":"phone","nameCol":"contractor_name","addrCol":"address","cityCol":"city","zipCol":"zip","region":"us-il","state":"IL"},
+  {"id":"md-new-home-builders","domain":"data.montgomerycountymd.gov","datasetId":"c7hs-c9qq","phoneCol":"telephone","nameCol":"applicant","addrCol":"addr1","cityCol":"city","zipCol":"zip","region":"us-md-montgomery","state":"MD"},
+  {"id":"nyc-trade-waste-haulers","domain":"data.cityofnewyork.us","datasetId":"867j-5pgi","phoneCol":"phone","nameCol":"account_name","addrCol":"address","cityCol":"city","region":"us-ny-nyc","state":"NY"},
+  {"id":"orlando-business-tax","domain":"data.cityoforlando.net","datasetId":"7388-4re5","phoneCol":"phone","nameCol":"business_owner_name","addrCol":"business_address","region":"us-fl-orlando","state":"FL"}
+]

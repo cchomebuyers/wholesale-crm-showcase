@@ -3,7 +3,10 @@
 // Writes connector-ready winners. Run: node tools/discover_phone_sources.mjs
 const CAT = "https://api.us.socrata.com/api/catalog/v1";
 const TERMS = ["business license", "active businesses", "contractor", "trade license",
-  "business tax", "registered business", "vendor", "food service license", "tobacco license"];
+  "business tax", "registered business", "vendor", "food service license", "tobacco license",
+  "liquor license", "alcohol license", "food establishment", "rental registration", "short term rental",
+  "salon", "tow", "dealer license", "pharmacy", "child care", "day care", "permit applicant",
+  "professional license", "occupational license", "home improvement", "plumbing", "electrical license"];
 const PHONE = /phone|telephone/i, NAME = /(name|owner|business|applicant|licensee|dba|contact|vendor)/i,
   ADDR = /(address|street|addr|situs|location)/i;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -44,9 +47,9 @@ for (const term of TERMS) {
       console.log(`    phone=${v.phoneCol} name=${v.nameCol} addr=${v.addrCol}  e.g. ${v.sample.name} | ${v.sample.phone}`);
     }
     await sleep(120);
-    if (winners.length >= 20) break;
+    if (winners.length >= 45) break;
   }
-  if (winners.length >= 20) break;
+  if (winners.length >= 45) break;
 }
 import { writeFileSync } from "node:fs"; import { join, dirname } from "node:path"; import { fileURLToPath } from "node:url";
 const dir = dirname(fileURLToPath(import.meta.url));
