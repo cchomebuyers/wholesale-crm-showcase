@@ -16,8 +16,25 @@ import { epaEnvirofactsConnector } from "./epa-envirofacts.js";
 import { chicagoBusinessLicensesConnector } from "./chicago-business-licenses.js";
 import { nycBusinessLicensesConnector } from "./nyc-business-licenses.js";
 import { batchDataSkipTraceConnector } from "./batchdata-skiptrace.js";
+import { buildSocrataPhoneConnectors } from "./socrata-phone.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Load verified nationwide phone datasets (Socrata) from phone-sources.data.json + phone-sources.add.*.json.
+export function loadPhoneSources() {
+  const out = [];
+  try {
+    const main = join(__dirname, "phone-sources.data.json");
+    if (existsSync(main)) out.push(...(JSON.parse(readFileSync(main, "utf8")) || []));
+    for (const f of readdirSync(__dirname)) {
+      if (/^phone-sources\.add\..*\.json$/.test(f)) {
+        try { out.push(...(JSON.parse(readFileSync(join(__dirname, f), "utf8")) || [])); } catch {}
+      }
+    }
+  } catch (e) { console.error("phone source load:", e.message); }
+  const byId = {}; for (const c of out) if (c && c.id && c.datasetId) byId[c.id] = c;
+  return Object.values(byId);
+}
 
 // Load verified county configs from counties.data.json + any counties.add.*.json (one per agent,
 // so parallel background agents never write the same file). Returns a flat verified-config array.
@@ -49,6 +66,7 @@ export function buildRegistry(deps) {
     epaEnvirofactsConnector(),         // EPA FRS industrial facilities (nationwide, no phone)
     chicagoBusinessLicensesConnector(), // Chicago business licenses (no phone, identity only)
     nycBusinessLicensesConnector(),     // NYC business licenses (HAS contact_phone — live-verified)
+    ...buildSocrataPhoneConnectors(loadPhoneSources()), // nationwide phone datasets (FL/NV/NY/WA/MO/...)
     // Paid skip-trace (disabled until key exists)
     batchDataSkipTraceConnector({ apiKey: deps.getSetting ? deps.getSetting("batchdata_api_key") : null }),
   ];

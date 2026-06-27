@@ -1,0 +1,9 @@
+[
+  {"id":"gainesville-fl-businesses","domain":"data.cityofgainesville.org","datasetId":"hk2b-em59","phoneCol":"business_phone","nameCol":"owner","addrCol":"mailing_address","region":"us-fl-gainesville","city":"GAINESVILLE","state":"FL"},
+  {"id":"henderson-nv-businesses","domain":"performance.cityofhenderson.com","datasetId":"n8gp-u2pj","phoneCol":"establishment_phone","nameCol":"establishment_name","addrCol":"billing_address","region":"us-nv-henderson","city":"HENDERSON","state":"NV"},
+  {"id":"ny-contractor-registry","domain":"data.ny.gov","datasetId":"i4jv-zkey","phoneCol":"phone","nameCol":"business_name","addrCol":"address","region":"us-ny","state":"NY"},
+  {"id":"ny-mold-contractors","domain":"data.ny.gov","datasetId":"ikqx-ispy","phoneCol":"phone","nameCol":"business_name","addrCol":"address","region":"us-ny","state":"NY"},
+  {"id":"ny-farm-dealers","domain":"data.ny.gov","datasetId":"ehtk-kzxa","phoneCol":"phone_number","nameCol":"business_name","addrCol":"street","region":"us-ny","state":"NY"},
+  {"id":"wa-li-contractors","domain":"data.wa.gov","datasetId":"m8qx-ubtq","phoneCol":"phonenumber","nameCol":"primaryprincipalname","addrCol":"address1","region":"us-wa","state":"WA"},
+  {"id":"missouri-alcohol-licenses","domain":"data.mo.gov","datasetId":"yyhn-562y","phoneCol":"phone","nameCol":"licensee","addrCol":"street_number","region":"us-mo","state":"MO"}
+]
