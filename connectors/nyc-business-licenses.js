@@ -37,6 +37,23 @@ export function nycBusinessLicensesConnector({ fetchImpl = fetch } = {}) {
     dialect: "socrata",
     free: true,
     legal_status: "public_official_api",
+    // bulk harvest: paginate the dataset for records that HAVE a phone (powers the harvest_leads workflow).
+    async harvest({ limit = 1000, offset = 0 } = {}) {
+      const u = new URL(NYC_URL);
+      u.searchParams.set("$where", "contact_phone IS NOT NULL");
+      u.searchParams.set("$limit", String(limit));
+      u.searchParams.set("$offset", String(offset));
+      u.searchParams.set("$order", "license_nbr");
+      try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 20000);
+        const r = await fetchImpl(u, { signal: ctl.signal });
+        clearTimeout(t);
+        if (!r.ok) return [];
+        const rows = await r.json();
+        return (Array.isArray(rows) ? rows : []).map(normalizeNycLicense).filter((x) => x && x.phone);
+      } catch { return []; }
+    },
     async search(target = {}) {
       const u = new URL(NYC_URL);
       const clauses = [];

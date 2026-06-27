@@ -13,3 +13,4 @@ knowledge-graph/local/
 data/leads_1000_with_phone.jsonl
 data/leads_accumulating.jsonl
 data/.harvest_state.json
+data/leads_workflow_1000.jsonl
