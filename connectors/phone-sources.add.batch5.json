@@ -1,0 +1,13 @@
+[
+  {"id":"ma-education-providers-dn4d","domain":"educationtocareer.data.mass.gov","datasetId":"dn4d-tjbb","phoneCol":"phone","nameCol":"name","addrCol":"street_address2","region":"us-ma","state":"MA"},
+  {"id":"pa-businesses-8p7f","domain":"data.pa.gov","datasetId":"8p7f-3pj5","phoneCol":"phonenumber","nameCol":"name","addrCol":"address","region":"us-pa","state":"PA"},
+  {"id":"ct-facilities-rm6f","domain":"data.ct.gov","datasetId":"rm6f-b9qj","phoneCol":"facility_telephone","nameCol":"facility_name","addrCol":"address","region":"us-ct","state":"CT"},
+  {"id":"chicago-facilities-9a77","domain":"data.cityofchicago.org","datasetId":"9a77-69d3","phoneCol":"phone","nameCol":"facility_name","addrCol":"street2","region":"us-il-chicago","state":"IL"},
+  {"id":"ny-nursing-izta","domain":"health.data.ny.gov","datasetId":"izta-vnpq","phoneCol":"phone_number","nameCol":"facility_name","addrCol":"street_address","region":"us-ny","state":"NY"},
+  {"id":"ny-nursing-uhyy","domain":"health.data.ny.gov","datasetId":"uhyy-xp9s","phoneCol":"phone_number","nameCol":"facility_name","addrCol":"street_address","region":"us-ny","state":"NY"},
+  {"id":"bayarea-applicants-yspg","domain":"data.bayareametro.gov","datasetId":"yspg-yqv7","phoneCol":"lfdcphone","nameCol":"lfdcapplicant","addrCol":"mailing_address","region":"us-ca-bayarea","state":"CA"},
+  {"id":"nj-auto-dealers-9qpt","domain":"data.nj.gov","datasetId":"9qpt-bnm4","phoneCol":"phone_number","nameCol":"facility_name","addrCol":"street_address","region":"us-nj","state":"NJ"},
+  {"id":"mo-businesses-vfrr","domain":"data.mo.gov","datasetId":"vfrr-8z5c","phoneCol":"phone","nameCol":"name","addrCol":"address","region":"us-mo","state":"MO"},
+  {"id":"henderson-professionals-fpc9","domain":"performance.cityofhenderson.com","datasetId":"fpc9-568j","phoneCol":"professionalphone","nameCol":"ownername","addrCol":"parceladdressstreet","region":"us-nv-henderson","state":"NV"},
+  {"id":"austin-permit-contractors-3syk","domain":"datahub.austintexas.gov","datasetId":"3syk-w9eu","phoneCol":"contractor_phone","nameCol":"contractor_company_name","addrCol":"original_address1","region":"us-tx-austin","state":"TX"}
+]
