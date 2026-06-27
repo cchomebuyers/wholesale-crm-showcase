@@ -1,0 +1,21 @@
+[
+  {
+    "id": "collin-tx-taxroll",
+    "region": "us-tx-collin",
+    "name": "Collin County",
+    "state": "TX",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://services2.arcgis.com/uXyoacYrZTPTKD3R/arcgis/rest/services/CCAD_Parcel_Feature_Set/FeatureServer/3/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "owner": "Grantee",
+      "address": null,
+      "city": null,
+      "zip": null
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 6 layer discovery. Owner data found in layer 3 (\"Abstracts\") of 7 total layers."
+  }
+]

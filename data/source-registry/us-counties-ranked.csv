@@ -1,0 +1,101 @@
+county_fips,state_fips,state,county,population,population_rank
+06037,06,CA,Los Angeles County,9810000,1
+17031,17,IL,Cook County,5200000,2
+48201,48,TX,Harris County,4800000,3
+04013,04,AZ,Maricopa County,4600000,4
+06073,06,CA,San Diego County,3300000,5
+06059,06,CA,Orange County,3200000,6
+12086,12,FL,Miami-Dade County,2700000,7
+36047,36,NY,Kings County,2600000,8
+48113,48,TX,Dallas County,2600000,9
+06065,06,CA,Riverside County,2500000,10
+36081,36,NY,Queens County,2300000,11
+32003,32,NV,Clark County,2300000,12
+53033,53,WA,King County,2300000,13
+06071,06,CA,San Bernardino County,2200000,14
+48439,48,TX,Tarrant County,2200000,15
+48029,48,TX,Bexar County,2100000,16
+12011,12,FL,Broward County,1900000,17
+06085,06,CA,Santa Clara County,1900000,18
+26163,26,MI,Wayne County,1800000,19
+36061,36,NY,New York County,1600000,20
+06001,06,CA,Alameda County,1600000,21
+25017,25,MA,Middlesex County,1600000,22
+36103,36,NY,Suffolk County,1500000,23
+42101,42,PA,Philadelphia County,1500000,24
+06067,06,CA,Sacramento County,1600000,25
+36005,36,NY,Bronx County,1400000,26
+36059,36,NY,Nassau County,1400000,27
+12099,12,FL,Palm Beach County,1500000,28
+39035,39,OH,Cuyahoga County,1200000,29
+12057,12,FL,Hillsborough County,1500000,30
+42003,42,PA,Allegheny County,1200000,31
+26125,26,MI,Oakland County,1300000,32
+39049,39,OH,Franklin County,1300000,33
+27053,27,MN,Hennepin County,1300000,34
+12095,12,FL,Orange County,1500000,35
+51059,51,VA,Fairfax County,1200000,36
+06013,06,CA,Contra Costa County,1200000,37
+49035,49,UT,Salt Lake County,1200000,38
+48453,48,TX,Travis County,1300000,39
+37119,37,NC,Mecklenburg County,1200000,40
+29189,29,MO,St. Louis County,1000000,41
+04019,04,AZ,Pima County,1100000,42
+24031,24,MD,Montgomery County,1100000,43
+13121,13,GA,Fulton County,1100000,44
+36029,36,NY,Erie County,900000,45
+37183,37,NC,Wake County,1200000,46
+17043,17,IL,DuPage County,900000,47
+36119,36,NY,Westchester County,1000000,48
+06019,06,CA,Fresno County,1000000,49
+18097,18,IN,Marion County,900000,50
+48085,48,TX,Collin County,1060000,51
+06029,06,CA,Kern County,909000,52
+13135,13,GA,Gwinnett County,957000,53
+15003,15,HI,Honolulu County,1016000,54
+34013,34,NJ,Essex County,860000,55
+34023,34,NJ,Middlesex County,860000,56
+48141,48,TX,El Paso County,870000,57
+36055,36,NY,Monroe County,750000,58
+22071,22,LA,Jefferson Parish,440000,59
+48157,48,TX,Fort Bend County,820000,60
+47157,47,TN,Shelby County,930000,61
+36027,36,NY,Dutchess County,300000,62
+32031,32,NV,Washoe County,490000,63
+12031,12,FL,Duval County,1000000,64
+39061,39,OH,Hamilton County,830000,65
+42071,42,PA,Lancaster County,550000,66
+12009,12,FL,Brevard County,620000,67
+12073,12,FL,Leon County,300000,68
+37081,37,NC,Guilford County,540000,69
+47113,47,TN,Davidson County,716000,70
+41051,41,OR,Multnomah County,815000,71
+08031,08,CO,Denver County,716000,72
+08005,08,CO,Arapahoe County,655000,73
+04109,04,AZ,Pinal County,450000,74
+06083,06,CA,Santa Barbara County,450000,75
+37063,37,NC,Durham County,330000,76
+42011,42,PA,Berks County,430000,77
+12001,12,FL,Alachua County,280000,78
+55079,55,WI,Milwaukee County,940000,79
+12005,12,FL,Bay County,180000,80
+13121,13,GA,DeKalb County,760000,81
+17097,17,IL,Lake County,710000,82
+34003,34,NJ,Bergen County,950000,83
+34029,34,NJ,Ocean County,640000,84
+42045,42,PA,Delaware County,570000,85
+34007,34,NJ,Camden County,520000,86
+12021,12,FL,Collier County,390000,87
+37101,37,NC,Johnston County,230000,88
+12081,12,FL,Manatee County,420000,89
+36091,36,NY,Saratoga County,240000,90
+12097,12,FL,Osceola County,420000,91
+42133,42,PA,York County,460000,92
+06095,06,CA,Solano County,450000,93
+12071,12,FL,Lee County,790000,94
+04015,04,AZ,Mohave County,220000,95
+48493,48,TX,Wilson County,55000,96
+12083,12,FL,Marion County,390000,97
+37129,37,NC,New Hanover County,230000,98
+48491,48,TX,Williamson County,630000,99
+12033,12,FL,Escambia County,320000,100

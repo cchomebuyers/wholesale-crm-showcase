@@ -1,0 +1,117 @@
+[
+  {
+    "id": "harris-tx-parcels",
+    "region": "us-tx-harris",
+    "name": "Harris County",
+    "state": "TX",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://www.gis.hctx.net/arcgis/rest/services/HCAD/Parcels/MapServer/0/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "owner_mailing": "mail_city",
+      "address": null,
+      "land_use": "land_use",
+      "building_sqft": "land_sqft",
+      "acres": "Acreage"
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 5 owner-field reprobe. 62 fields scanned. Owner: NONE. Parcel: NONE. LandUse: land_use. Sample: OK."
+  },
+  {
+    "id": "maricopa-az-parcels",
+    "region": "us-az-maricopa",
+    "name": "Maricopa County",
+    "state": "AZ",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://gis.mcassessor.maricopa.gov/arcgis/rest/services/MaricopaDynamicQueryService/MapServer/3/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "parcel_id": "APN",
+      "owner": "OWNER_NAME",
+      "owner_mailing": "MAIL_CITY",
+      "address": "PHYSICAL_ADDRESS",
+      "lat": "LATITUDE",
+      "lon": "LONGITUDE"
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 5 owner-field reprobe. 57 fields scanned. Owner: OWNER_NAME. Parcel: APN. LandUse: NONE. Sample: OK."
+  },
+  {
+    "id": "bexar-tx-parcels",
+    "region": "us-tx-bexar",
+    "name": "Bexar County",
+    "state": "TX",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://services.arcgis.com/g1fRTDLeMgspWrYp/arcgis/rest/services/BCAD_Parcels/FeatureServer/0/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "owner": "Owner_Name",
+      "address": "Situs"
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 5 owner-field reprobe. 23 fields scanned. Owner: Owner_Name. Parcel: NONE. LandUse: NONE. Sample: OK."
+  },
+  {
+    "id": "fulton-ga-parcels",
+    "region": "us-ga-fulton",
+    "name": "Fulton County",
+    "state": "GA",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/AQDHTHDrZzfsFsB5/arcgis/rest/services/Tax_Parcels/FeatureServer/0/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "parcel_id": "ParcelID",
+      "owner": "Owner",
+      "address": null,
+      "land_use": "LUCode"
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 5 owner-field reprobe. 28 fields scanned. Owner: Owner. Parcel: ParcelID. LandUse: LUCode. Sample: OK."
+  },
+  {
+    "id": "wake-nc-parcels",
+    "region": "us-nc-wake",
+    "name": "Wake County",
+    "state": "NC",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://maps.wake.gov/arcgis/rest/services/Property/Parcels/MapServer/0/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "owner": "OWNER",
+      "address": "SITE_ADDRESS",
+      "building_sqft": "BLDG_VAL"
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 5 owner-field reprobe. 60 fields scanned. Owner: OWNER. Parcel: NONE. LandUse: NONE. Sample: OK."
+  },
+  {
+    "id": "stlouis-mo-parcels",
+    "region": "us-mo-st.louis",
+    "name": "St. Louis County",
+    "state": "MO",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://maps.stlouisco.com/hosting/rest/services/Maps/AGS_Parcels/MapServer/0/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "owner": "OWNER_NAME",
+      "address": null,
+      "land_use": "LUCODE",
+      "zoning": "ZONING",
+      "acres": "ACRES"
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 5 owner-field reprobe. 74 fields scanned. Owner: OWNER_NAME. Parcel: NONE. LandUse: LUCODE. Sample: OK."
+  }
+]

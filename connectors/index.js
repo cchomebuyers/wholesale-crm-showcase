@@ -12,6 +12,10 @@ import { resoConnector } from "./reso.js";
 import { detroitBlightConnector, detroitCompsConnector } from "./detroit.js";
 import { censusConnector } from "./census.js";
 import { buildCountyConnectors } from "./county.js";
+import { epaEnvirofactsConnector } from "./epa-envirofacts.js";
+import { chicagoBusinessLicensesConnector } from "./chicago-business-licenses.js";
+import { nycBusinessLicensesConnector } from "./nyc-business-licenses.js";
+import { batchDataSkipTraceConnector } from "./batchdata-skiptrace.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +45,12 @@ export function buildRegistry(deps) {
     detroitCompsConnector(deps),   // comps (ARV) — free ArcGIS recorded sales
     censusConnector(),             // geocode — free, no key (dedup + lat/lng)
     ...buildCountyConnectors(loadCountyConfigs()), // every verified free county endpoint
+    // Public-contact connectors (free, live-verified)
+    epaEnvirofactsConnector(),         // EPA FRS industrial facilities (nationwide, no phone)
+    chicagoBusinessLicensesConnector(), // Chicago business licenses (no phone, identity only)
+    nycBusinessLicensesConnector(),     // NYC business licenses (HAS contact_phone — live-verified)
+    // Paid skip-trace (disabled until key exists)
+    batchDataSkipTraceConnector({ apiKey: deps.getSetting ? deps.getSetting("batchdata_api_key") : null }),
   ];
   const registry = {};
   for (const c of list) registry[c.id] = c;

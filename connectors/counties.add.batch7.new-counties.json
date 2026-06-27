@@ -1,0 +1,24 @@
+[
+  {
+    "id": "wayne-mi-parcels",
+    "region": "us-mi-wayne",
+    "name": "Wayne County",
+    "state": "MI",
+    "type": "parcels",
+    "dialect": "arcgis",
+    "endpoint": "https://services1.arcgis.com/b6rkZNtCd6Mx2gvB/ArcGIS/rest/services/Wayne_County_Parcels/FeatureServer/0/query",
+    "where": "1=1",
+    "max": 2000,
+    "fieldmap": {
+      "address": "propstreetcombined",
+      "owner": "ownername1",
+      "parcel_id": "packedParcelNumber",
+      "city": null,
+      "zip": null,
+      "lat": null,
+      "lon": null
+    },
+    "verified_at": "2026-06-26",
+    "note": "Batch 7: newly discovered. Wayne County parcels with owner name."
+  }
+]
