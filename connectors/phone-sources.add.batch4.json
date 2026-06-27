@@ -1,0 +1,16 @@
+[
+  {"id":"la-city-businesses-v2mg","domain":"controllerdata.lacity.org","datasetId":"v2mg-qsxf","phoneCol":"phone","nameCol":"name","addrCol":"street_address","region":"us-ca-losangeles","state":"CA"},
+  {"id":"alaska-businesses-46bc","domain":"stateofalaska.data.socrata.com","datasetId":"46bc-ekd3","phoneCol":"phone_number_voice","nameCol":"legal_name","addrCol":"street_name_1","region":"us-ak","state":"AK"},
+  {"id":"austin-businesses-uxwx","domain":"datahub.austintexas.gov","datasetId":"uxwx-55kj","phoneCol":"phone","nameCol":"legal_name","addrCol":"street_1","region":"us-tx-austin","state":"TX"},
+  {"id":"kingcounty-food-f29f","domain":"data.kingcounty.gov","datasetId":"f29f-zza5","phoneCol":"phone","nameCol":"inspection_business_name","addrCol":"address","region":"us-wa-kingcounty","state":"WA"},
+  {"id":"baton-rouge-businesses-xhjf","domain":"data.brla.gov","datasetId":"xhjf-mdnv","phoneCol":"phone_number","nameCol":"business_name","addrCol":"street_name_complete","region":"us-la-batonrouge","state":"LA"},
+  {"id":"nola-operators-2ei9","domain":"data.nola.gov","datasetId":"2ei9-wqw2","phoneCol":"operator_phone","nameCol":"owner","addrCol":"address","region":"us-la-neworleans","state":"LA"},
+  {"id":"nola-businesses-e3a9","domain":"data.nola.gov","datasetId":"e3a9-erd7","phoneCol":"phonenumber","nameCol":"businessname","addrCol":"address","region":"us-la-neworleans","state":"LA"},
+  {"id":"nyc-licensees-2n4x","domain":"data.cityofnewyork.us","datasetId":"2n4x-d97d","phoneCol":"telephone_number","nameCol":"licensee_name","addrCol":"street_address","region":"us-ny-nyc","state":"NY"},
+  {"id":"nyc-facilities-tc6u","domain":"data.cityofnewyork.us","datasetId":"tc6u-8rnp","phoneCol":"phone_number_s_","nameCol":"facility_name","addrCol":"street_address","region":"us-ny-nyc","state":"NY"},
+  {"id":"nyc-restaurants-camis-xkn7","domain":"bronx.lehman.cuny.edu","datasetId":"xkn7-67xc","phoneCol":"camis_phone_number","nameCol":"camis_trade_name","addrCol":"street_address","region":"us-ny-nyc","state":"NY"},
+  {"id":"ny-health-agencies-g4i5","domain":"health.data.ny.gov","datasetId":"g4i5-r6zx","phoneCol":"phone_number","nameCol":"agency_name","addrCol":"street_address","region":"us-ny","state":"NY"},
+  {"id":"mo-facilities-q8me","domain":"data.mo.gov","datasetId":"q8me-hzr8","phoneCol":"phone","nameCol":"facility_name","addrCol":"address","region":"us-mo","state":"MO"},
+  {"id":"delaware-builders-h9bb","domain":"data.delaware.gov","datasetId":"h9bb-iyu6","phoneCol":"phone1","nameCol":"companyname","addrCol":"address1","region":"us-de","state":"DE"},
+  {"id":"fmcsa-carriers-az4n","domain":"datahub.transportation.gov","datasetId":"az4n-8mr2","phoneCol":"cell_phone","nameCol":"legal_name","addrCol":"carrier_mailing_street","region":"us-fmcsa","state":null}
+]
