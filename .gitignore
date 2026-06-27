@@ -10,3 +10,4 @@ crm.db-shm
 lifesWork/
 realization.md
 knowledge-graph/local/
+data/leads_1000_with_phone.jsonl
