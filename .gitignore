@@ -6,3 +6,7 @@ server.log
 crm.db-journal
 crm.db-wal
 crm.db-shm
+# life's work staging — local only; copy PORTIONS into committed code, never vendor whole repos
+lifesWork/
+realization.md
+knowledge-graph/local/
