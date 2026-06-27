@@ -1,0 +1,18 @@
+[
+  {"id":"oregon-emergency-vendors","domain":"data.oregon.gov","datasetId":"3wxk-gaen","phoneCol":"company_phone","nameCol":"company_name","addrCol":"company_address","region":"us-or","state":"OR"},
+  {"id":"texas-pool-licensees","domain":"data.texas.gov","datasetId":"7358-krk7","phoneCol":"owner_telephone","nameCol":"owner_name","addrCol":"mailing_address_line2","region":"us-tx","state":"TX"},
+  {"id":"mo-licensees-vatz","domain":"data.mo.gov","datasetId":"vatz-3gek","phoneCol":"telephone","nameCol":"owner","addrCol":"address","region":"us-mo","state":"MO"},
+  {"id":"mo-licensees-ezr3","domain":"data.mo.gov","datasetId":"ezr3-ufzz","phoneCol":"business_phone","nameCol":"licensee_name","addrCol":"street_name","region":"us-mo","state":"MO"},
+  {"id":"ny-licensees-hder","domain":"data.ny.gov","datasetId":"hder-iq9y","phoneCol":"phone","nameCol":"business_name","addrCol":"address1","region":"us-ny","state":"NY"},
+  {"id":"wa-prime-contractors-t9je","domain":"data.wa.gov","datasetId":"t9je-9qwa","phoneCol":"prime_phone_number","nameCol":"prime_company_name","addrCol":"companyaddress1","region":"us-wa","state":"WA"},
+  {"id":"wa-contractors-9ncw","domain":"data.wa.gov","datasetId":"9ncw-tqjn","phoneCol":"primecompanyphone","nameCol":"name","addrCol":"address1","region":"us-wa","state":"WA"},
+  {"id":"il-home-services-juzg","domain":"illinois-edp.data.socrata.com","datasetId":"juzg-38pw","phoneCol":"phone","nameCol":"facility_name","addrCol":"address","region":"us-il","state":"IL"},
+  {"id":"il-dialysis-2ndd","domain":"illinois-edp.data.socrata.com","datasetId":"2ndd-7vjz","phoneCol":"phone","nameCol":"facility_name","addrCol":"address","region":"us-il","state":"IL"},
+  {"id":"il-hospice-iigv","domain":"illinois-edp.data.socrata.com","datasetId":"iigv-ktef","phoneCol":"phone","nameCol":"facility_name","addrCol":"address","region":"us-il","state":"IL"},
+  {"id":"il-companion-care-2ega","domain":"illinois-edp.data.socrata.com","datasetId":"2ega-5s5s","phoneCol":"phone","nameCol":"facility_name","addrCol":"address","region":"us-il","state":"IL"},
+  {"id":"md-second-hand-2pp9","domain":"data.montgomerycountymd.gov","datasetId":"2pp9-yjcs","phoneCol":"phone","nameCol":"trade_name","addrCol":"street_address","region":"us-md-montgomery","state":"MD"},
+  {"id":"nyc-sanitation-accounts-p2d7","domain":"data.cityofnewyork.us","datasetId":"p2d7-vcsb","phoneCol":"account_phone","nameCol":"account_name","addrCol":"complaint_inquiry_street","region":"us-ny-nyc","state":"NY"},
+  {"id":"nyc-businesses-m4ph","domain":"data.cityofnewyork.us","datasetId":"m4ph-grrm","phoneCol":"contact_phone_number","nameCol":"business_name","addrCol":"secondary_address_street","region":"us-ny-nyc","state":"NY"},
+  {"id":"nyc-dob-licensees-t8hj","domain":"data.cityofnewyork.us","datasetId":"t8hj-ruu2","phoneCol":"business_phone_number","nameCol":"business_name","addrCol":"business_street_name","region":"us-ny-nyc","state":"NY"},
+  {"id":"nyc-license-apps-ptev","domain":"data.cityofnewyork.us","datasetId":"ptev-4hud","phoneCol":"contact_phone","nameCol":"business_name","addrCol":"street3","region":"us-ny-nyc","state":"NY"}
+]

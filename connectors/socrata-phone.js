@@ -5,8 +5,11 @@
 export function normalizeSocrataPhone(cfg, r) {
   const phoneRaw = r[cfg.phoneCol];
   if (!phoneRaw) return null;
-  const phone = String(phoneRaw).replace(/[^0-9]/g, "");
-  if (phone.length < 10) return null; // drop junk/partial numbers
+  let phone = String(phoneRaw).replace(/[^0-9]/g, "");
+  if (phone.length === 11 && phone.startsWith("1")) phone = phone.slice(1); // strip US country code
+  if (phone.length !== 10) return null;            // require a clean 10-digit US number
+  if (/^(\d)\1{9}$/.test(phone)) return null;      // all-same-digit (0000000000, 5555555555)
+  if (phone.startsWith("000") || phone.startsWith("999")) return null; // placeholder ranges
   const name = (cfg.nameCol && r[cfg.nameCol]) || null;
   const addr = (cfg.addrCol && r[cfg.addrCol]) || null;
   return {
