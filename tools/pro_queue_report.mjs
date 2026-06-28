@@ -9,6 +9,7 @@ import { writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { skiptraceDecision, summarizeSkiptrace } from "../skiptrace_gate.js";
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repo = join(dir, "..");
@@ -50,6 +51,27 @@ lines.push("```");
 lines.push("");
 lines.push("call_now is 0 because reaching the seller needs a phone (paid skip-trace / DNC-checked);");
 lines.push("every row below is owner-known + distressed + has investor demand = a real skip-trace target.");
+lines.push("");
+
+// Cost-to-unlock: run the skip-trace spend gate across every spend-eligible record.
+const spendRows = db.prepare(`
+  SELECT q.tier, q.signals_json, p.owner_name, p.owner_mailing, p.address, p.formatted_address
+  FROM pro_queue q JOIN properties p ON p.id = q.property_id
+  WHERE q.tier IN ('call_now','pay_to_unlock')
+`).all();
+const spendDecisions = spendRows.map((r) => skiptraceDecision(
+  { owner_name: r.owner_name, owner_mailing: r.owner_mailing, address: r.address, formatted_address: r.formatted_address },
+  { tier: r.tier, signals: (() => { try { return JSON.parse(r.signals_json); } catch { return {}; } })() },
+));
+const spend = summarizeSkiptrace(spendDecisions);
+lines.push("## Cost to unlock (paid step)");
+lines.push("```");
+lines.push(`skip-trace approved: ${spend.allowed} of ${spend.total} spend-eligible records`);
+lines.push(`est. max spend:      $${spend.est_max_spend}   (@ $0.15/lookup) to get seller phones`);
+lines.push(`denied (free first): ${spend.denied}   (owner-join / ARV / demand still needed)`);
+lines.push("```");
+lines.push("Approved = owner known + distress + ARV/demand. Found phones stay outreach_allowed:false");
+lines.push("until DNC/consent — skip-trace unlocks the number, compliance unlocks the call.");
 lines.push("");
 lines.push(`## Top ${rows.length} skip-trace targets`);
 lines.push("");
