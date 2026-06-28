@@ -29,14 +29,23 @@ const byState = new Map();
 for (const s of sources) if (s.state) byState.set(s.state.toUpperCase(), s);
 console.log(`owner sources: ${sources.length} [${[...byState.keys()].join(", ") || "none"}]`);
 
+const stateFilter = (opt("state", "") || "").toUpperCase();
 const db = new DatabaseSync(DB);
-const rows = db.prepare(`
-  SELECT p.id, p.address, p.formatted_address, p.state, p.owner_name
-  FROM properties p
-  JOIN pro_queue q ON q.property_id = p.id
-  WHERE q.tier = ? AND (p.owner_name IS NULL OR p.owner_name = '')
-  ${max ? `LIMIT ${max}` : ""}
-`).all(tier);
+// tier=all -> every property (no pro_queue join); otherwise scope to one queue tier.
+const where = ["(p.owner_name IS NULL OR p.owner_name = '')"];
+const params = [];
+if (stateFilter) { where.push("upper(p.state) = ?"); params.push(stateFilter); }
+let sql;
+if (tier === "all") {
+  sql = `SELECT p.id, p.address, p.formatted_address, p.state, p.owner_name FROM properties p
+         WHERE ${where.join(" AND ")} ${max ? `LIMIT ${max}` : ""}`;
+} else {
+  where.unshift("q.tier = ?"); params.unshift(tier);
+  sql = `SELECT p.id, p.address, p.formatted_address, p.state, p.owner_name
+         FROM properties p JOIN pro_queue q ON q.property_id = p.id
+         WHERE ${where.join(" AND ")} ${max ? `LIMIT ${max}` : ""}`;
+}
+const rows = db.prepare(sql).all(...params);
 
 const upd = db.prepare(`UPDATE properties SET owner_name=?, owner_mailing=COALESCE(?, owner_mailing),
   owner_source=?, owner_enriched_at=?, updated_at=? WHERE id=?`);
