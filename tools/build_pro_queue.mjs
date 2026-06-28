@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { classifyProQueue, summarizeProQueue } from "../pro_wholesaler_queue.js";
+import { buyerMarketDemand } from "../buyer_discovery.js";
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repo = join(dir, "..");
@@ -54,10 +55,17 @@ const upsert = persist ? db.prepare(`
     missing_json=excluded.missing_json, reasons_json=excluded.reasons_json, signals_json=excluded.signals_json
 `) : null;
 
+// Load discovered cash buyers (+ any CRM buyers) once, so market demand can light up.
+const loadBuyers = (tbl) => { try { return db.prepare(`SELECT name, areas, property_types, max_price, source_id FROM ${tbl}`).all(); } catch { return []; } };
+const allBuyers = [...loadBuyers("buyer_discovery_candidates"), ...loadBuyers("buyers")];
+
 const now = new Date().toISOString();
 const decisions = [];
 const lines = [];
+let demandLit = 0;
 for (const r of rows) {
+  const demand = buyerMarketDemand(r, allBuyers);
+  if (demand.has_demand) { r.buyer_matches = [demand.top_buyer]; demandLit++; }
   const d = classifyProQueue(r, { minScore, hotScore });
   decisions.push(d);
   lines.push(JSON.stringify({
@@ -71,7 +79,7 @@ for (const r of rows) {
 }
 
 writeFileSync(SNAP, lines.join("\n") + (lines.length ? "\n" : ""));
-const summary = { built_at: now, db: DB, ...summarizeProQueue(decisions), thresholds: { minScore, hotScore }, persisted: persist };
+const summary = { built_at: now, db: DB, ...summarizeProQueue(decisions), thresholds: { minScore, hotScore }, persisted: persist, buyers_loaded: allBuyers.length, market_demand_lit: demandLit };
 
 // Top call-now / pay-to-unlock examples for a quick human read.
 const top = (tier) => decisions

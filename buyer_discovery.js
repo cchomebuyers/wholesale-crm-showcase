@@ -69,6 +69,34 @@ export function buyerConfidence(purchases) {
   return n >= 20 ? "high" : n >= 10 ? "medium" : "low";
 }
 
+const tok = (v) => String(v || "").toLowerCase().split(/[,;|/]+/).map((s) => s.trim()).filter(Boolean);
+
+// Market demand = active cash investors whose stated buy-box AREA covers this property.
+// Contact-independent on purpose: a thriving investor market IS demand; reaching a specific
+// buyer is a separate skip-trace step (same as the seller side). Price is only applied as a
+// filter when the property's value is actually known.
+export function buyerMarketDemand(property = {}, buyers = []) {
+  const propAreas = [property.county, property.city, property.state]
+    .map((v) => String(v || "").toLowerCase().trim()).filter(Boolean);
+  const val = Number(property.mao || property.arv || property.price || property.asking_price) || 0;
+  let demand_count = 0;
+  let top = null;
+  for (const b of buyers) {
+    const areas = tok(b.areas);
+    const areaHit = !areas.length || areas.some((a) => propAreas.some((h) => h.includes(a) || a.includes(h)));
+    if (!areaHit) continue;
+    const max = Number(b.max_price) || 0;
+    if (val > 0 && max > 0 && val > max * 1.15) continue; // property too pricey for this buyer
+    demand_count++;
+    if (!top || max > (Number(top.max_price) || 0)) top = b;
+  }
+  return {
+    demand_count,
+    has_demand: demand_count > 0,
+    top_buyer: top ? { name: top.name, max_price: top.max_price ?? null, source_id: top.source_id || null } : null,
+  };
+}
+
 export function normalizeBuyerCandidate(input = {}) {
   const name = clean(input.name || input.buyer_name || input.business_name || input.owner_name);
   if (!name) return null;

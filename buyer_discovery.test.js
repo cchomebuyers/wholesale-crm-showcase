@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BUYER_DISCOVERY_SOURCE_FAMILIES, normalizeBuyerCandidate, rankBuyerDemand, isRealBuyer, buyerConfidence } from "./buyer_discovery.js";
+import { BUYER_DISCOVERY_SOURCE_FAMILIES, normalizeBuyerCandidate, rankBuyerDemand, isRealBuyer, buyerConfidence, buyerMarketDemand } from "./buyer_discovery.js";
 
 test("normalizes future buyer candidates into buyer-compatible buy boxes", () => {
   const c = normalizeBuyerCandidate({
@@ -41,6 +41,24 @@ test("buyerConfidence scales with purchase volume", () => {
   assert.equal(buyerConfidence(118), "high");
   assert.equal(buyerConfidence(12), "medium");
   assert.equal(buyerConfidence(5), "low");
+});
+
+test("buyerMarketDemand counts area-matching cash buyers (contact-independent)", () => {
+  const buyers = [
+    { name: "GRANDVIEW HOMES LLC", areas: "Cook County, IL", max_price: 425000 },
+    { name: "SYLVA LLC", areas: "Cook County, IL", max_price: 126000 },
+    { name: "PHX FLIP LLC", areas: "Maricopa County, AZ", max_price: 300000 },
+  ];
+  const d = buyerMarketDemand({ county: "Cook County", state: "IL" }, buyers);
+  assert.equal(d.demand_count, 2);            // two Cook buyers, AZ excluded
+  assert.equal(d.has_demand, true);
+  assert.equal(d.top_buyer.name, "GRANDVIEW HOMES LLC"); // highest max_price
+});
+
+test("buyerMarketDemand applies price filter only when property value is known", () => {
+  const buyers = [{ name: "SMALL LLC", areas: "Cook County, IL", max_price: 80000 }];
+  assert.equal(buyerMarketDemand({ county: "Cook County", state: "IL" }, buyers).demand_count, 1); // value unknown -> kept
+  assert.equal(buyerMarketDemand({ county: "Cook County", state: "IL", arv: 200000 }, buyers).demand_count, 0); // 200k > 80k*1.15
 });
 
 test("buyer discovery source families are data, not hardcoded buyer count", () => {
