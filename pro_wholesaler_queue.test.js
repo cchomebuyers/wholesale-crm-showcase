@@ -85,6 +85,25 @@ test("summarizeProQueue tallies tiers, spend, and missing", () => {
   assert.ok(s.top_missing.owner >= 1);
 });
 
+test("institutional/govt owner is forced to hold regardless of score", () => {
+  const d = classifyProQueue({
+    source: "cook-il-violations", lead_score: 80, distress_score: 76,
+    owner_name: "CHICAGO TRANSIT AUTHOR", address: "2842 W BELDEN AVE",
+  });
+  assert.equal(d.tier, "hold");
+  assert.ok(d.signals.institutional_owner);
+});
+
+test("absentee owner boosts priority over an owner-occupied peer", () => {
+  const base = { source: "cook-il-violations", lead_score: 71, distress_score: 76, motivation_score: 65 };
+  const absentee = classifyProQueue({ ...base, address: "11306 S DRAKE AVE", owner_name: "TERRENCE SHANKLIN", owner_mailing: "3501 OLYMPUS BLVD#500" });
+  const occupied = classifyProQueue({ ...base, address: "1429 N SPRINGFIELD AVE", owner_name: "MIGUEL FLORES", owner_mailing: "1429 N SPRINGFIELD" });
+  assert.equal(absentee.signals.absentee_owner, true);
+  assert.equal(occupied.signals.absentee_owner, false);
+  assert.ok(absentee.priority_score > occupied.priority_score, "absentee should rank higher than owner-occupied");
+  assert.ok(absentee.reasons.some((r) => /absentee/i.test(r)));
+});
+
 test("B2B/operator phone record is never elevated as a seller lead by this gate", () => {
   // A property-shaped record is what this classifier consumes; a record with no property
   // distress and no property score must fall to hold, never call_now.

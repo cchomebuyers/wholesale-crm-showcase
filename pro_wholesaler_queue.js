@@ -15,6 +15,7 @@
 //   hold          -- parcel-only / weak / no distress -> ignore until something changes
 
 import { evaluateWholesaleSpread } from "./wholesale_spread.js";
+import { deriveSignals } from "./property_signals.js";
 
 const num = (v) => {
   if (v === null || v === undefined || v === "") return null;
@@ -77,7 +78,7 @@ export function valueState(record = {}, spread) {
 // priority_score: a single 0-100 ranking number inside a tier. Built from the existing
 // lead_score with bumps for the things a wholesaler actually values: real contact,
 // known value, and a spread that can work.
-function priorityScore(record, dist, contact, value) {
+function priorityScore(record, dist, contact, value, sig) {
   let s = num(record.lead_score) ?? num(record.wholesale_score) ?? num(record.distress_score) ?? 0;
   if (dist.fromSource) s += 4;
   if (contact.ownerName) s += 6;
@@ -86,6 +87,7 @@ function priorityScore(record, dist, contact, value) {
   if (value.buyerDemand) s += 6;
   if (value.spreadStatus === "works") s += 8;
   else if (value.spreadStatus === "thin") s += 4;
+  if (sig) s += sig.signal_score; // absentee/entity boost; institutional penalty
   return Math.max(0, Math.min(100, Math.round(s)));
 }
 
@@ -102,6 +104,7 @@ export function classifyProQueue(record = {}, opts = {}) {
 
   const dist = distressSignal(record);
   const contact = contactState(record);
+  const sig = deriveSignals(record);
   // Spread audit is optional; compute from the record if not supplied.
   const spread = opts.spread ?? (opts.skipSpread ? null : safeSpread(record, opts.spreadOptions));
   const value = valueState(record, spread);
@@ -115,7 +118,12 @@ export function classifyProQueue(record = {}, opts = {}) {
   const reasons = [];
   let tier, next_action, spend_allowed = false;
 
-  if (leadScore >= hotScore && contact.callable && value.valueKnown && value.spreadStatus !== "fails") {
+  if (sig.institutional_owner) {
+    // city/county/authority/transit/bank owner is not a seller lead, regardless of score.
+    tier = "hold";
+    next_action = "hold (institutional/govt/lender owner — not a seller)";
+    reasons.push(...sig.reasons);
+  } else if (leadScore >= hotScore && contact.callable && value.valueKnown && value.spreadStatus !== "fails") {
     // Everything a wholesaler needs to dial: reach, value, and a spread that isn't dead.
     tier = "call_now";
     next_action = "call seller / make offer";
@@ -140,9 +148,11 @@ export function classifyProQueue(record = {}, opts = {}) {
     else reasons.push("no actionable signal yet");
   }
 
+  if (!sig.institutional_owner) for (const r of sig.reasons) if (!reasons.includes(r)) reasons.push(r);
+
   return {
     tier,
-    priority_score: priorityScore(record, dist, contact, value),
+    priority_score: priorityScore(record, dist, contact, value, sig),
     missing,
     reasons,
     next_action,
@@ -157,6 +167,10 @@ export function classifyProQueue(record = {}, opts = {}) {
       arv: value.arv,
       buyer_demand: value.buyerDemand,
       spread_status: value.spreadStatus,
+      absentee_owner: sig.absentee_owner,
+      entity_owner: sig.entity_owner,
+      institutional_owner: sig.institutional_owner,
+      signal_score: sig.signal_score,
     },
   };
 }
