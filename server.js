@@ -1952,6 +1952,31 @@ app.post("/api/seller-price/extract", (req, res) => {
   res.json({ ok: true, extracted, totalEvidence: db.prepare("SELECT COUNT(*) n FROM seller_price_evidence").get().n });
 });
 
+// Pro wholesaler queue — read-only view of the tiered, enriched work list
+// (built by tools/build_pro_queue.mjs --persist). Optional ?tier= and ?limit=.
+app.get("/api/pro-queue", (req, res) => {
+  try {
+    const tier = req.query.tier || null;
+    const limit = Math.max(1, Math.min(2000, Number(req.query.limit) || 100));
+    const rows = db.prepare(`SELECT q.tier, q.priority_score, q.next_action, q.spend_allowed, q.signals_json,
+        p.id AS property_id, p.address, p.formatted_address, p.city, p.state, p.county, p.source,
+        p.owner_name, p.owner_mailing, p.arv, p.mao
+      FROM pro_queue q JOIN properties p ON p.id = q.property_id
+      ${tier ? "WHERE q.tier = ?" : ""}
+      ORDER BY CASE q.tier WHEN 'call_now' THEN 0 WHEN 'pay_to_unlock' THEN 1 WHEN 'research' THEN 2 ELSE 3 END, q.priority_score DESC
+      LIMIT ${limit}`).all(...(tier ? [tier] : []));
+    const counts = Object.fromEntries(db.prepare("SELECT tier, COUNT(*) c FROM pro_queue GROUP BY tier").all().map((r) => [r.tier, r.c]));
+    const items = rows.map((r) => {
+      let signals = {}; try { signals = JSON.parse(r.signals_json || "{}"); } catch { signals = {}; }
+      const { signals_json, ...rest } = r;
+      return { ...rest, signals };
+    });
+    res.json({ counts, items });
+  } catch (e) {
+    res.status(503).json({ error: "pro-queue not built yet — run: node tools/build_pro_queue.mjs --persist", detail: String(e.message || e) });
+  }
+});
+
 app.get("/api/wholesale-spread/audit", (req, res) => {
   const cfg = acqConfig();
   const limit = Math.max(1, Math.min(5000, Number(req.query.limit) || 1000));
