@@ -43,6 +43,16 @@ test("ownerSourceConnector.lookup returns owner via stub fetch and queries norma
   assert.match(capturedUrl.searchParams.get("$where"), /153 CHAMBERS STREET/);
 });
 
+test("ownerSourceConnector.lookup adds latestBy ordering when configured (Cook year roll)", async () => {
+  let capturedUrl;
+  const stub = async (u) => { capturedUrl = u; return { ok: true, json: async () => ([{ owner_address_name: "MIGUEL FLORES" }]) }; };
+  const c = ownerSourceConnector({ id: "cook", domain: "datacatalog.cookcountyil.gov", datasetId: "3723-97qp", addrCol: "prop_address_full", ownerCol: "owner_address_name", addrStyle: "raw", latestBy: "year" }, { fetchImpl: stub });
+  const r = await c.lookup("1429 N SPRINGFIELD AVE");
+  assert.equal(r.owner_name, "MIGUEL FLORES");
+  assert.equal(capturedUrl.searchParams.get("$order"), "year DESC");
+  assert.equal(capturedUrl.searchParams.get("$where"), "upper(prop_address_full)=upper('1429 N SPRINGFIELD AVE')");
+});
+
 test("ownerSourceConnector.lookup returns null on empty result or fetch failure", async () => {
   const empty = ownerSourceConnector({ id: "x", domain: "d", datasetId: "i", addrCol: "address", ownerCol: "ownername" }, { fetchImpl: async () => ({ ok: true, json: async () => [] }) });
   assert.equal(await empty.lookup("1 Main St"), null);

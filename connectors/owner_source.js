@@ -67,6 +67,7 @@ export function ownerSourceConnector(cfg, { fetchImpl = fetch } = {}) {
       const cols = [cfg.addrCol, cfg.ownerCol, cfg.mailingCol, cfg.apnCol].filter(Boolean);
       u.searchParams.set("$select", cols.join(","));
       u.searchParams.set("$where", `upper(${cfg.addrCol})=upper('${norm.replace(/'/g, "''")}')`);
+      if (cfg.latestBy) u.searchParams.set("$order", `${cfg.latestBy} DESC`); // rolls with one row/year -> take latest
       u.searchParams.set("$limit", "1");
       try {
         const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 15000);

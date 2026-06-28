@@ -1,3 +1,4 @@
 [
-  {"id":"nyc-pluto","region":"us-ny-nyc","state":"NY","domain":"data.cityofnewyork.us","datasetId":"64uk-42ks","addrCol":"address","ownerCol":"ownername","apnCol":"bbl","addrStyle":"full","note":"NYC Dept of City Planning PLUTO — public owner of record (ownername). Live-verified 2026-06-28. Covers all 5 boroughs."}
+  {"id":"nyc-pluto","region":"us-ny-nyc","state":"NY","domain":"data.cityofnewyork.us","datasetId":"64uk-42ks","addrCol":"address","ownerCol":"ownername","apnCol":"bbl","addrStyle":"full","note":"NYC Dept of City Planning PLUTO — public owner of record (ownername). Live-verified 2026-06-28. Covers all 5 boroughs."},
+  {"id":"cook-il-parcel-addresses","region":"us-il-cook","state":"IL","domain":"datacatalog.cookcountyil.gov","datasetId":"3723-97qp","addrCol":"prop_address_full","ownerCol":"owner_address_name","mailingCol":"mail_address_full","apnCol":"pin","addrStyle":"raw","latestBy":"year","note":"Cook County Assessor Parcel Addresses — owner_address_name + mail_address_full (public). Live-verified 2026-06-28. One row/year -> latestBy=year."}
 ]
