@@ -30,7 +30,7 @@ $$(".tab").forEach((b) =>
     if (b.dataset.tab === "inbox") openInbox();
     if (b.dataset.tab === "offers") loadOffers();
     if (b.dataset.tab === "acquisitions") openAcquisitions();
-    if (b.dataset.tab === "sources") loadSources();
+    if (b.dataset.tab === "sources") { loadSearchPlans(); loadEcosystemMeta(); loadSources(); loadSpreadAudit(); loadEngineHistory(); loadLeadEngineSettings(); loadCouncilJobs(); }
     if (b.dataset.tab === "map") loadMap();
   })
 );
@@ -80,6 +80,60 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ---------- Sources scoreboard (auto-run APIs, track which are good / get leads) ----------
+let searchPlans = [];
+
+async function loadSearchPlans() {
+  const sel = $("#enginePlan");
+  if (!sel) return [];
+  try {
+    const current = sel.value || "all-enabled";
+    const d = await api("/api/ecosystem/plans");
+    searchPlans = d.plans || [];
+    sel.innerHTML = searchPlans.map((p) => `<option value="${esc(p.id)}">${esc(p.name || p.id)}</option>`).join("");
+    sel.value = searchPlans.some((p) => p.id === current) ? current : (sel.value || "all-enabled");
+    return searchPlans;
+  } catch {
+    return searchPlans;
+  }
+}
+
+async function loadEcosystemMeta() {
+  const el = $("#ecosystemMeta");
+  if (!el) return;
+  try {
+    const planId = $("#enginePlan") ? $("#enginePlan").value : "";
+    const e = await api(`/api/ecosystem${planId ? `?planId=${encodeURIComponent(planId)}` : ""}`);
+    el.textContent = `Ecosystem: ${e.counts.connectors_total} connector(s), ${e.counts.connectors_selected} selected by "${e.plan.name || e.plan.id}", ${e.counts.participants} participant(s).`;
+    loadPlanChildren(planId || e.plan.id);
+  } catch {
+    el.textContent = "";
+  }
+}
+
+function renderPlanChildren(d) {
+  const el = $("#ecosystemPlanChildren");
+  if (!el) return;
+  const counts = Object.entries(d.counts || {}).map(([k, v]) => `${esc(k)}:${v}`).join(" · ") || "no children yet";
+  const rows = (d.items || []).slice(0, 8).map((t) => {
+    const parser = t.content?.parser_family || t.content?.parser_schema || t.schema || "";
+    return `<tr><td><b>${esc(t.kind)}</b></td><td>${esc(t.name || t.id)}</td><td class="muted">${esc(t.schema || "")}</td><td class="muted">${esc(parser)}</td></tr>`;
+  }).join("");
+  el.innerHTML = `<div class="muted">Plan Thinga: <b>${esc(d.plan_thinga_id)}</b> · ${counts}</div>${
+    rows ? `<table class="src-table" style="margin-top:6px"><thead><tr><th>Kind</th><th>Child</th><th>Schema</th><th>Parser</th></tr></thead><tbody>${rows}</tbody></table>` : ""
+  }`;
+}
+
+async function loadPlanChildren(planId) {
+  const el = $("#ecosystemPlanChildren");
+  if (!el || !planId) return;
+  try {
+    const d = await api(`/api/ecosystem/plans/${encodeURIComponent(planId)}/children?limit=80`);
+    renderPlanChildren(d);
+  } catch {
+    el.innerHTML = "";
+  }
+}
+
 function srcStatusCell(r) {
   if (r.last_ok) return '<span class="pill ok">working</span>';
   const k = r.last_error_kind || "error";
@@ -142,11 +196,297 @@ async function pullArea() {
   } catch (e) { $("#areaStatus").innerHTML = `<span class="err">${e.message}</span>`; toast(e.message, true); }
   finally { btn.disabled = false; btn.textContent = label; }
 }
+
+let currentEngineRunId = null;
+function renderEngineShortlist(items) {
+  const el = $("#engineShortlist");
+  if (!el) return;
+  if (!items || !items.length) {
+    el.innerHTML = `<div class="empty">No converged properties reached review score.</div>`;
+    return;
+  }
+  el.innerHTML = `<table class="src-table"><thead><tr><th>Score</th><th>Property</th><th>Spend</th><th>Buyer demand</th><th>Reasons</th><th>Actions</th></tr></thead><tbody>${
+    items.map((x) => `<tr>
+      <td><b>${x.score}</b><div class="muted">${esc(x.tier)}</div></td>
+      <td>${esc(x.address || x.name || x.id)}</td>
+      <td>${x.status ? `<div class="muted">${esc(x.status)}</div>` : ""}${x.spend_allowed ? '<span class="pill ok">review spend</span>' : '<span class="pill err">hold</span>'}</td>
+      <td>${(x.buyer_matches || []).slice(0, 2).map((b) => `${esc(b.name || "buyer")} (${b.score})`).join("<br>") || "none"}</td>
+      <td class="muted">${x.spread_status ? `<b>${esc(x.spread_status)}</b>${x.projected_spread != null ? ` ${money(x.projected_spread)}` : ""}<br>` : ""}${esc((x.reasons || []).join("; "))}</td>
+      <td>${x.candidate_id ? `
+        <button class="btn xs cand-approve" data-id="${x.candidate_id}">Approve</button>
+        <button class="btn xs cand-import" data-id="${x.candidate_id}">Import</button>
+        <button class="btn xs cand-skip" data-id="${x.candidate_id}">Skiptrace</button>` : ""}</td>
+    </tr>`).join("")
+  }</tbody></table>`;
+  $$("#engineShortlist .cand-approve").forEach((b) => b.addEventListener("click", () => updateCandidateStatus(b.dataset.id, "approved_for_skiptrace")));
+  $$("#engineShortlist .cand-import").forEach((b) => b.addEventListener("click", () => importEngineCandidate(b.dataset.id)));
+  $$("#engineShortlist .cand-skip").forEach((b) => b.addEventListener("click", () => skiptraceEngineCandidate(b.dataset.id)));
+}
+
+function renderSpreadAudit(d) {
+  const el = $("#spreadAudit");
+  if (!el) return;
+  const c = d.counts || {};
+  const missing = Object.entries(d.missing || {}).sort((a, b) => b[1] - a[1]).slice(0, 4)
+    .map(([k, v]) => `${esc(k)} (${v})`).join(" · ");
+  const rows = [...(d.works || []), ...(d.thin || []), ...(d.fails || []), ...(d.unproven || [])].slice(0, 12);
+  el.innerHTML = `<div class="spread-summary">
+    <span class="pill ok">works ${c.works || 0}</span>
+    <span class="pill">thin ${c.thin || 0}</span>
+    <span class="pill err">fails ${c.fails || 0}</span>
+    <span class="pill">unproven ${c.unproven || 0}</span>
+    <span class="muted">${missing || "no missing-field summary"}</span>
+  </div>${
+    rows.length ? `<table class="src-table"><thead><tr><th>Status</th><th>Property</th><th>Spread</th><th>Buyer</th><th>What fails next</th></tr></thead><tbody>${
+      rows.map((r) => `<tr>
+        <td><span class="pill ${r.status === "works" ? "ok" : r.status === "fails" ? "err" : ""}">${esc(r.status)}</span></td>
+        <td><b>${esc(r.address || `#${r.id}`)}</b><div class="muted">${esc(r.record_type)} · ${esc(r.source || "")}</div></td>
+        <td>${r.projected_spread != null ? money(r.projected_spread) : "—"}<div class="muted">buyer ${money(r.buyer_assignment_price)} · offer ${money(r.acquisition_offer_price)} · anchor ${money(r.seller_anchor_price || r.seller_acceptable_price)}</div>${r.anchor_spread != null && r.anchor_spread < 0 ? `<div class="muted">anchor gap ${money(r.anchor_spread)}</div>` : ""}${r.best_negotiation_path ? `<div class="muted">best ${esc(r.best_negotiation_path.name)} ${money(r.best_negotiation_path.spread)}</div>` : ""}</td>
+        <td>${(r.buyer_matches || []).slice(0, 2).map((b) => `${esc(b.name || "buyer")} (${b.score})`).join("<br>") || "none"}</td>
+        <td class="muted">${esc([...(r.next_needed || []), ...(r.buyer_gaps || [])].join("; "))}</td>
+      </tr>`).join("")
+    }</tbody></table>` : `<div class="empty">No records audited yet.</div>`
+  }`;
+}
+
+async function loadSpreadAudit() {
+  const el = $("#spreadAudit");
+  if (!el) return;
+  try {
+    const d = await api("/api/wholesale-spread/audit?limit=1500");
+    renderSpreadAudit(d);
+  } catch (e) {
+    el.innerHTML = `<div class="err-line">${esc(e.message)}</div>`;
+  }
+}
+
+async function extractSellerPrices() {
+  const btn = $("#sellerPriceExtract");
+  if (btn) { btn.disabled = true; btn.textContent = "Extracting..."; }
+  try {
+    const d = await api("/api/seller-price/extract", { method: "POST", body: JSON.stringify({ limit: 2000 }) });
+    toast(`Extracted ${d.extracted} seller price evidence item(s)`);
+    await loadSpreadAudit();
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Extract seller prices"; }
+  }
+}
+
+function renderEngineRuns(runs) {
+  const el = $("#engineHistory");
+  if (!el) return;
+  if (!runs || !runs.length) {
+    el.innerHTML = `<div class="empty">No lead-engine runs yet.</div>`;
+    return;
+  }
+  el.innerHTML = `<table class="src-table"><thead><tr><th>Run</th><th>Target</th><th>Records</th><th>Converged</th><th>Shortlist</th><th>Council</th></tr></thead><tbody>${
+    runs.map((r) => `<tr class="engine-run-row" data-run="${r.id}">
+      <td><b>#${r.id}</b><div class="muted">${new Date(r.created_at).toLocaleString()}</div></td>
+      <td>${esc([r.target?.city, r.target?.state, r.target?.zip].filter(Boolean).join(", ") || JSON.stringify(r.target || {}))}</td>
+      <td>${r.raw_records}</td>
+      <td>${r.converged_properties}</td>
+      <td><b>${r.shortlist_count}</b></td>
+      <td>${r.dispatched_council ? '<span class="pill ok">sent</span>' : '<span class="muted">not sent</span>'}</td>
+    </tr>`).join("")
+  }</tbody></table>`;
+  $$("#engineHistory .engine-run-row").forEach((row) => row.addEventListener("click", () => loadEngineCandidates(row.dataset.run)));
+}
+
+function renderCouncilJobs(jobs) {
+  const el = $("#councilJobs");
+  if (!el) return;
+  if (!jobs || !jobs.length) {
+    el.innerHTML = `<div class="empty">No council review jobs yet.</div>`;
+    return;
+  }
+  const pill = (status) => {
+    const ok = status === "dispatched" || status === "responded";
+    const err = status === "failed";
+    return `<span class="pill ${ok ? "ok" : err ? "err" : ""}">${esc(status || "queued")}</span>`;
+  };
+  el.innerHTML = `<table class="src-table"><thead><tr><th>Job</th><th>Status</th><th>Target</th><th>Participants</th><th>Packet</th><th>Responses</th><th>Actions</th></tr></thead><tbody>${
+    jobs.map((j) => `<tr>
+      <td><b>${esc(j.id)}</b><div class="muted">${j.updated_at ? new Date(j.updated_at).toLocaleString() : ""}</div></td>
+      <td>${pill(j.status)}</td>
+      <td>${esc([j.target?.city, j.target?.state, j.target?.zip].filter(Boolean).join(", ") || JSON.stringify(j.target || {}))}<div class="muted">${j.count || 0} candidate(s)</div></td>
+      <td>${esc((j.delivered && j.delivered.length ? j.delivered : j.agents || []).join(", "))}</td>
+      <td class="muted">${esc(j.packet || "")}</td>
+      <td>${(j.responses || []).length || 0}<div class="muted">${esc(j.error || "")}</div></td>
+      <td>
+        <button class="btn xs council-sync" data-id="${esc(j.id)}">Sync</button>
+        <button class="btn xs council-retry" data-id="${esc(j.id)}">Retry</button>
+      </td>
+    </tr>`).join("")
+  }</tbody></table>`;
+  $$("#councilJobs .council-sync").forEach((b) => b.addEventListener("click", () => syncCouncilJob(b.dataset.id)));
+  $$("#councilJobs .council-retry").forEach((b) => b.addEventListener("click", () => retryCouncilJob(b.dataset.id)));
+}
+
+async function loadCouncilJobs() {
+  try {
+    const [d, p] = await Promise.all([
+      api("/api/council/jobs?limit=20"),
+      api("/api/council/participants"),
+    ]);
+    const meta = $("#councilParticipantsMeta");
+    if (meta) meta.textContent = `${(p.participants || []).length} participant(s) available`;
+    renderCouncilJobs(d.jobs || []);
+  } catch (e) {
+    const el = $("#councilJobs");
+    if (el) el.innerHTML = `<div class="err-line">${esc(e.message)}</div>`;
+  }
+}
+
+async function syncCouncilJob(id) {
+  try {
+    const d = await api(`/api/council/jobs/${encodeURIComponent(id)}/sync`, { method: "POST" });
+    toast((d.job.responses || []).length ? "Council response synced" : "No council response found yet");
+    loadCouncilJobs();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function retryCouncilJob(id) {
+  try {
+    await api(`/api/council/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" });
+    toast("Council job re-dispatched");
+    loadCouncilJobs();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function loadEngineHistory() {
+  try {
+    const d = await api("/api/lead-engine/runs");
+    renderEngineRuns(d.runs || []);
+  } catch (e) {
+    const el = $("#engineHistory");
+    if (el) el.innerHTML = `<div class="err-line">${esc(e.message)}</div>`;
+  }
+}
+
+async function loadLeadEngineSettings() {
+  const status = $("#engineAutoStatus");
+  if (!status) return;
+  try {
+    const s = await api("/api/lead-engine/settings");
+    $("#engineAutoCity").value = s.city || "";
+    $("#engineAutoState").value = s.state || "";
+    $("#engineAutoZip").value = s.zip || "";
+    $("#engineAutoHours").value = s.autoHours ?? 0;
+    $("#engineSourceLimit").value = s.sourceLimit ?? 0;
+    $("#engineShortlistLimit").value = s.shortlistLimit ?? 25;
+    $("#engineAutoCouncil").checked = Boolean(s.dispatchCouncil);
+    if ($("#enginePlan")) {
+      if (!searchPlans.length) await loadSearchPlans();
+      $("#enginePlan").value = s.planId || "all-enabled";
+      loadEcosystemMeta();
+    }
+    const last = s.lastRun ? new Date(s.lastRun).toLocaleString() : "never";
+    const cadence = s.autoHours > 0 ? `every ${s.autoHours}h` : "off";
+    status.innerHTML = `Auto-run: <b>${cadence}</b> Â· target: ${esc([s.city, s.state, s.zip].filter(Boolean).join(", ") || "none")} Â· last: ${esc(last)}${s.lastError ? ` <span class="err">Â· ${esc(s.lastError)}</span>` : ""}`;
+  } catch (e) {
+    status.innerHTML = `<span class="err">${esc(e.message)}</span>`;
+  }
+}
+
+async function saveLeadEngineSettings() {
+  const body = {
+    city: $("#engineAutoCity").value.trim(),
+    state: $("#engineAutoState").value.trim(),
+    zip: $("#engineAutoZip").value.trim(),
+    planId: $("#enginePlan") ? $("#enginePlan").value : "all-enabled",
+    autoHours: Number($("#engineAutoHours").value || 0),
+    sourceLimit: Number($("#engineSourceLimit").value || 0),
+    shortlistLimit: Number($("#engineShortlistLimit").value || 25),
+    dispatchCouncil: $("#engineAutoCouncil").checked,
+  };
+  try {
+    const s = await api("/api/lead-engine/settings", { method: "POST", body: JSON.stringify(body) });
+    toast(s.autoHours > 0 ? "Lead engine auto-run saved" : "Lead engine auto-run off");
+    loadLeadEngineSettings();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function loadEngineCandidates(runId) {
+  currentEngineRunId = runId;
+  $("#engineStatus").textContent = `Loading candidates for run #${runId}...`;
+  try {
+    const d = await api(`/api/lead-engine/runs/${runId}/candidates`);
+    $("#engineStatus").innerHTML = `<span class="ok">Loaded run #${runId}: ${d.candidates.length} candidate${d.candidates.length === 1 ? "" : "s"}.</span>`;
+    renderEngineShortlist((d.candidates || []).map((c) => ({ ...c.data, candidate_id: c.id, status: c.status })));
+  } catch (e) {
+    $("#engineStatus").innerHTML = `<span class="err">${esc(e.message)}</span>`;
+  }
+}
+
+async function updateCandidateStatus(id, status) {
+  try {
+    await api(`/api/lead-engine/candidates/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+    toast("Candidate approved for skiptrace");
+    if (currentEngineRunId) loadEngineCandidates(currentEngineRunId);
+    loadEngineHistory();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function importEngineCandidate(id) {
+  try {
+    const r = await api(`/api/lead-engine/candidates/${id}/import`, { method: "POST" });
+    toast(r.duplicate ? "Linked to existing lead" : "Imported as prospect");
+    loadLeads();
+    if (currentEngineRunId) loadEngineCandidates(currentEngineRunId);
+    loadEngineHistory();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function skiptraceEngineCandidate(id) {
+  try {
+    const r = await api(`/api/lead-engine/candidates/${id}/skiptrace`, { method: "POST" });
+    toast(`Skiptraced prospect ${r.leadId}: ${r.phones.length} phone(s)`);
+    loadLeads();
+    if (currentEngineRunId) loadEngineCandidates(currentEngineRunId);
+    loadEngineHistory();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function runLeadEngine() {
+  const city = $("#areaCity").value.trim(), state = $("#areaState").value.trim(), zip = $("#areaZip").value.trim();
+  const dispatchCouncil = $("#engineCouncil") && $("#engineCouncil").checked;
+  const planId = $("#enginePlan") ? $("#enginePlan").value : "all-enabled";
+  if (!city && !zip) { toast("Enter a city or ZIP", true); return; }
+  const btn = $("#engineRun"); btn.disabled = true; const label = btn.textContent; btn.textContent = "Converging...";
+  $("#engineStatus").textContent = "Running source APIs, converting to Thingas, merging duplicates, analyzing spend candidates...";
+  try {
+    const d = await api("/api/lead-engine/run", {
+      method: "POST",
+      body: JSON.stringify({ city, state, zip, planId, dispatchCouncil }),
+    });
+    const c = d.cycle || {};
+    const packet = d.councilDispatch ? ` Council packet: ${d.councilDispatch.packet}` : "";
+    $("#engineStatus").innerHTML = `<span class="ok">Run #${d.runId}: converged ${c.raw_records || 0} records into ${c.converged_properties || 0} properties; ${c.shortlist?.length || 0} shortlisted.</span>${packet ? `<span class="muted">${esc(packet)}</span>` : ""}`;
+    currentEngineRunId = d.runId;
+    renderEngineShortlist(c.shortlist || []);
+    loadEngineHistory();
+    loadCouncilJobs();
+    loadPlanChildren(planId);
+    toast(dispatchCouncil ? "Lead engine ran and dispatched council review" : "Lead engine ran");
+  } catch (e) {
+    $("#engineStatus").innerHTML = `<span class="err">${esc(e.message)}</span>`;
+    toast(e.message, true);
+  } finally { btn.disabled = false; btn.textContent = label; }
+}
 document.addEventListener("DOMContentLoaded", () => {
-  const p = $("#srcProbe"), r = $("#srcRefresh"), a = $("#areaPull");
+  const p = $("#srcProbe"), r = $("#srcRefresh"), a = $("#areaPull"), e = $("#engineRun"), h = $("#engineHistoryRefresh"), s = $("#engineSaveSettings"), cj = $("#councilJobsRefresh"), plan = $("#enginePlan"), spread = $("#spreadAuditRefresh"), sellerPx = $("#sellerPriceExtract");
   if (p) p.addEventListener("click", probeSources);
   if (r) r.addEventListener("click", loadSources);
   if (a) a.addEventListener("click", pullArea);
+  if (e) e.addEventListener("click", runLeadEngine);
+  if (h) h.addEventListener("click", loadEngineHistory);
+  if (s) s.addEventListener("click", saveLeadEngineSettings);
+  if (cj) cj.addEventListener("click", loadCouncilJobs);
+  if (spread) spread.addEventListener("click", loadSpreadAudit);
+  if (sellerPx) sellerPx.addEventListener("click", extractSellerPrices);
+  if (plan) plan.addEventListener("change", () => { loadEcosystemMeta(); loadPlanChildren(plan.value); });
 });
 
 // ---------- Populate stage selects ----------
@@ -1290,6 +1630,7 @@ async function loadRcSettings() {
   renderAcqSettings();
   renderAiPanel();
   renderBtPanel();
+  renderGmPanel();
   const on = acqSettings.rentcastConnected;
   const p = $("#rcPanel");
   p.innerHTML = `
@@ -1333,6 +1674,31 @@ function renderBtPanel() {
     await api("/api/acq/settings", { method: "POST", body: JSON.stringify({ batchdata_api_key: k }) });
     acqSettings = await api("/api/acq/settings");
     renderBtPanel(); toast("Skip tracing connected ✅");
+  });
+}
+
+// --- Property imagery (Google Street View + satellite; parcel lines come from county geometry) ---
+function renderGmPanel() {
+  const on = acqSettings.googleMapsConnected;
+  const p = $("#gmPanel");
+  if (!p) return;
+  p.innerHTML = `
+    <div class="connect-head">
+      <div class="status ${on ? "on" : "off"}">${on ? "Google imagery connected - Street View + satellite evidence enabled" : "Connect Google Maps for property images, Street View, and satellite evidence"}</div>
+      <button class="btn" id="toggleGm">${on ? "Edit key" : "Connect imagery"}</button>
+    </div>
+    <div id="gmForm" class="connect-form" style="display:${on ? "none" : "block"}">
+      <p class="hint">Use a Google Maps Platform key with Street View Static API and Maps Static API enabled. Parcel lines still come from county GIS; Google supplies the imagery layer.</p>
+      <div class="field"><label>Google Maps API key</label><input id="gmKey" placeholder="${on ? "saved - leave blank to keep" : "paste your Maps key"}" /></div>
+      <div class="compose-actions"><button class="btn primary" id="saveGmBtn">Save key</button></div>
+    </div>`;
+  $("#toggleGm").addEventListener("click", () => { const f = $("#gmForm"); f.style.display = f.style.display === "none" ? "block" : "none"; });
+  $("#saveGmBtn").addEventListener("click", async () => {
+    const k = $("#gmKey").value.trim();
+    if (!k) return toast("Paste your Google Maps key", true);
+    await api("/api/acq/settings", { method: "POST", body: JSON.stringify({ google_maps_api_key: k }) });
+    acqSettings = await api("/api/acq/settings");
+    renderGmPanel(); toast("Google imagery connected");
   });
 }
 
@@ -1509,6 +1875,8 @@ function propRowHtml(p) {
     <div class="prop-actions">
       <button class="btn xs analyze-btn" data-id="${p.id}">📊 ${p.arv != null ? "Re-analyze" : "Analyze"} $</button>
       <button class="btn xs ai-btn" data-id="${p.id}">🤖 AI $${p.ai_analysis ? " ✓" : ""}</button>
+      <button class="btn xs evidence-btn" data-id="${p.id}">Images</button>
+      <button class="btn xs buyers-btn" data-id="${p.id}">Buyers</button>
       ${imported}
     </div>`;
 }
@@ -1516,7 +1884,64 @@ function wirePropRows() {
   $$("#propFeed .analyze-btn").forEach((b) => b.addEventListener("click", () => analyzeProperty(b.dataset.id)));
   $$("#propFeed .import-btn").forEach((b) => b.addEventListener("click", () => importProperty(b.dataset.id)));
   $$("#propFeed .ai-btn").forEach((b) => b.addEventListener("click", () => aiAnalyze(b.dataset.id)));
+  $$("#propFeed .evidence-btn").forEach((b) => b.addEventListener("click", () => openPropertyEvidence(b.dataset.id)));
+  $$("#propFeed .buyers-btn").forEach((b) => b.addEventListener("click", () => openBuyerMatches(b.dataset.id)));
 }
+
+function imageryBlock(e) {
+  const d = e && e.data ? e.data : e;
+  if (!d) return "";
+  const imgs = [
+    d.street_view && d.street_view.image_url ? ["Street View", d.street_view.image_url] : null,
+    d.satellite && d.satellite.image_url ? ["Satellite", d.satellite.image_url] : null,
+    d.parcel_overlay && d.parcel_overlay.image_url ? ["Parcel overlay", d.parcel_overlay.image_url] : null,
+  ].filter(Boolean);
+  return `
+    <div class="evidence-meta">
+      <b>${esc(d.address || "Property imagery")}</b>
+      <span class="muted">${esc(d.street_view?.metadata?.status || d.error || "OK")}</span>
+    </div>
+    ${imgs.length ? `<div class="evidence-grid">${imgs.map(([label, url]) => `
+      <figure><img src="${esc(url)}" alt="${esc(label)}" /><figcaption>${esc(label)}</figcaption></figure>`).join("")}</div>` :
+      `<div class="empty">${esc(d.error || "No imagery available yet.")}</div>`}`;
+}
+
+async function openPropertyEvidence(id) {
+  $("#evidenceTitle").textContent = "Property Images";
+  $("#evidenceContent").innerHTML = `<div class="ai-loading">Fetching Street View and satellite evidence...</div>`;
+  $("#evidenceModal").classList.add("open");
+  try {
+    const r = await api(`/api/properties/${id}/imagery`, { method: "POST" });
+    $("#evidenceContent").innerHTML = imageryBlock(r.evidence);
+  } catch (e) {
+    $("#evidenceContent").innerHTML = `<div class="err-line">${esc(e.message)}</div>`;
+  }
+}
+
+function buyerRows(matches, gaps = []) {
+  if (!matches || !matches.length) return `<div class="empty">No buyers in the buyer database yet.</div>`;
+  return `${gaps && gaps.length ? `<div class="muted" style="margin-bottom:8px">Buyer discovery gaps: ${esc(gaps.join("; "))}</div>` : ""}<table class="src-table buyer-match-table"><thead><tr><th>Score</th><th>Buyer</th><th>Contact</th><th>Why</th></tr></thead><tbody>${
+    matches.map((m) => `<tr>
+      <td><b>${m.score}</b><div class="muted">${esc(m.fit)}</div></td>
+      <td>${esc(m.name || "Buyer #" + m.buyer_id)}<div class="muted">${esc(m.demand_source || "")}${m.max_price ? ` · max ${money(m.max_price)}` : ""}</div></td>
+      <td>${esc([m.phone, m.email].filter(Boolean).join(" · ") || "no contact")}</td>
+      <td class="muted">${esc((m.reasons || []).join("; "))}</td>
+    </tr>`).join("")
+  }</tbody></table>`;
+}
+
+async function openBuyerMatches(id) {
+  $("#evidenceTitle").textContent = "Motivated Buyer Matches";
+  $("#evidenceContent").innerHTML = `<div class="ai-loading">Ranking buyers against this property...</div>`;
+  $("#evidenceModal").classList.add("open");
+  try {
+    const r = await api(`/api/properties/${id}/buyer-matches`);
+    $("#evidenceContent").innerHTML = buyerRows(r.matches, r.gaps || []);
+  } catch (e) {
+    $("#evidenceContent").innerHTML = `<div class="err-line">${esc(e.message)}</div>`;
+  }
+}
+
 async function importProperty(id) {
   const row = document.querySelector(`.prop[data-id="${id}"]`);
   const btn = row && row.querySelector(".import-btn");

@@ -33,6 +33,15 @@ test("canonicalAddr normalizes suffixes/directionals so variants dedupe to one k
   assert.equal(canonicalAddr("45 North Oak Ave."), "45 N OAK AVE");
 });
 
+test("parseCensusMatchedAddress extracts city/state/zip from Census standard address", async () => {
+  const { parseCensusMatchedAddress } = await import("./census.js");
+  const out = parseCensusMatchedAddress("1619 W 87TH ST, CHICAGO, IL, 60620");
+  assert.equal(out.address, "1619 W 87TH ST");
+  assert.equal(out.city, "CHICAGO");
+  assert.equal(out.state, "IL");
+  assert.equal(out.zip, "60620");
+});
+
 test("rentcast connector normalizes listings to the property shape", async () => {
   const r = buildRegistry(deps({
     rentcastGet: async () => [{ formattedAddress: "5 ELM, Detroit, MI 48235", addressLine1: "5 ELM", city: "Detroit", state: "MI", zipCode: "48235", price: 50000, bedrooms: 3, propertyType: "Single Family", listingAgent: { name: "Ann", phone: "313" } }],

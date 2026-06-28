@@ -37,7 +37,7 @@ export function nycBusinessLicensesConnector({ fetchImpl = fetch } = {}) {
     dialect: "socrata",
     free: true,
     legal_status: "public_official_api",
-    // bulk harvest: paginate the dataset for records that HAVE a phone (powers the harvest_leads workflow).
+    // bulk harvest: paginate the dataset for records that HAVE a phone (powers the B2B harvest workflow).
     async harvest({ limit = 1000, offset = 0 } = {}) {
       const u = new URL(NYC_URL);
       u.searchParams.set("$where", "contact_phone IS NOT NULL");

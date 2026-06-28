@@ -1,0 +1,72 @@
+{
+  "exported_at": "2026-06-28T20:29:52.170Z",
+  "total": 10000,
+  "hot_score_70_plus": 404,
+  "score_60_plus": 2763,
+  "with_owner": 0,
+  "with_listing_contact": 0,
+  "with_price": 0,
+  "with_arv": 0,
+  "with_city": 4641,
+  "with_state": 10000,
+  "with_county": 10000,
+  "states": [
+    [
+      "CA",
+      8441
+    ],
+    [
+      "NY",
+      1027
+    ],
+    [
+      "IL",
+      532
+    ]
+  ],
+  "sources": [
+    [
+      "losangeles-ca-violations",
+      1206
+    ],
+    [
+      "sandiego-ca-parcels",
+      1206
+    ],
+    [
+      "orange-ca-parcels",
+      1206
+    ],
+    [
+      "riverside-ca-parcels",
+      1206
+    ],
+    [
+      "sanbernardino-ca-parcels",
+      1206
+    ],
+    [
+      "santaclara-ca-parcels",
+      1206
+    ],
+    [
+      "alameda-ca-parcels",
+      1205
+    ],
+    [
+      "nyc-ny-violations",
+      1027
+    ],
+    [
+      "cook-il-violations",
+      532
+    ]
+  ],
+  "b2b_excluded": true,
+  "input": "data/properties_context_enriched.jsonl",
+  "files": [
+    "data/wholesale_property_leads_10000.jsonl",
+    "data/wholesale_property_leads_10000_hot.jsonl",
+    "data/wholesale_property_leads_10000_summary.json"
+  ]
+}

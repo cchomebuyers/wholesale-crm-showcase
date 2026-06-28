@@ -1,0 +1,21 @@
+{
+  "exported_at": "2026-06-28T20:23:11.157Z",
+  "total": 300,
+  "hot_score_70_plus": 28,
+  "score_60_plus": 300,
+  "with_owner": 0,
+  "with_listing_contact": 0,
+  "with_price": 0,
+  "with_arv": 0,
+  "source_counts": [
+    [
+      "cook-il-violations",
+      300
+    ]
+  ],
+  "b2b_excluded": true,
+  "files": [
+    "data/wholesale_property_leads_300.jsonl",
+    "data/wholesale_property_leads_300_hot.jsonl"
+  ]
+}

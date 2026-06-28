@@ -18,6 +18,21 @@ export function canonicalAddr(s) {
   return v;
 }
 
+export function parseCensusMatchedAddress(matchedAddress) {
+  if (!matchedAddress) return {};
+  const parts = String(matchedAddress).split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 3) return { formatted_address: matchedAddress };
+  const zipPart = parts.at(-1) || "";
+  const zipMatch = zipPart.match(/\b\d{5}(?:-\d{4})?\b/);
+  return {
+    formatted_address: matchedAddress,
+    address: parts.slice(0, -3).join(", ") || parts[0] || null,
+    city: parts.at(-3) || null,
+    state: parts.at(-2) || null,
+    zip: zipMatch ? zipMatch[0] : null,
+  };
+}
+
 // Free geocode via the US Census one-line geocoder (no key, US addresses).
 export async function geocodeAddress(address) {
   if (!address) return { matched: false };
@@ -30,7 +45,13 @@ export async function geocodeAddress(address) {
     const j = await r.json();
     const m = j && j.result && j.result.addressMatches && j.result.addressMatches[0];
     if (!m) return { matched: false };
-    return { matched: true, standardized: m.matchedAddress, lat: m.coordinates && m.coordinates.y, lon: m.coordinates && m.coordinates.x };
+    return {
+      matched: true,
+      standardized: m.matchedAddress,
+      ...parseCensusMatchedAddress(m.matchedAddress),
+      lat: m.coordinates && m.coordinates.y,
+      lon: m.coordinates && m.coordinates.x,
+    };
   } catch (e) {
     return { matched: false, error: String(e.message || e) };
   }
@@ -43,7 +64,7 @@ export function censusConnector() {
     id: "census-geocode", region: "us", type: "geocode",
     async search(target) {
       const g = await geocodeAddress(target && target.address);
-      return g.matched ? [{ formatted_address: g.standardized, latitude: g.lat, longitude: g.lon, source: "census" }] : [];
+      return g.matched ? [{ formatted_address: g.standardized, address: g.address, city: g.city, state: g.state, zip: g.zip, latitude: g.lat, longitude: g.lon, source: "census" }] : [];
     },
   };
 }

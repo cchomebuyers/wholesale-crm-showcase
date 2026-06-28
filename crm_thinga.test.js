@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
   mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
-  mirrorProperty, mirrorCampaign, isSensitiveSetting,
-  leadToThinga, leadCategoryPath, leadThingaId } from "./crm_thinga.js";
+  mirrorProperty, mirrorCampaign, mirrorPlan, isSensitiveSetting,
+  leadToThinga, leadCategoryPath, leadThingaId, planThingaId } from "./crm_thinga.js";
 
 const leadRow = (over = {}) => ({
   id: 1, stage: "New", status: null,
@@ -233,4 +233,27 @@ test("INVOKE on a campaign Thinga calls its registered run handler", () => {
   const id = mirrorCampaign(store, { id: 5, name: "Run me", active: 1 });
   assert.deepEqual(store.invoke(id), { found: 7 });
   assert.equal(ran, 5);
+});
+
+test("a search plan is a normal kind:plan Thinga and generated records can be its children", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  const pid = mirrorPlan(store, {
+    id: "distress-contact",
+    name: "Distress + public contact",
+    includeSourceTypes: ["violations", "property", "public-contact"],
+    costPolicy: "free_first",
+  });
+  const plan = store.get(pid);
+  assert.equal(pid, planThingaId("distress-contact"));
+  assert.equal(plan.kind, "plan");
+  assert.equal(plan.schema, "ankhor.v1.plan");
+
+  const child = store.put({
+    id: "thinga:test-property",
+    kind: "realEstate",
+    schema: "realEstate.facets.v1",
+    parents: [pid],
+    content: { parser_family: "realEstate.faceted.v1", facets: { property: { address: "5 ELM" } } },
+  });
+  assert.equal(store.incomingLinks(pid, "child_of")[0].from_id, child);
 });

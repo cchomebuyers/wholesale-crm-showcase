@@ -26,9 +26,19 @@ export function buildMap(fieldmap, source) {
 // ArcGIS FeatureServer connector. cfg:
 //   { id, region, type, url, where(target)|string, fields[], map(attrs)->lead | fieldmap, max }
 export function arcgisCounty(cfg) {
-  const map = cfg.map || buildMap(cfg.fieldmap, cfg.id);
+  const rawMap = cfg.map || buildMap(cfg.fieldmap, cfg.id);
+  const map = (attrs) => {
+    const row = rawMap(attrs);
+    if (!row) return null;
+    return {
+      ...row,
+      state: row.state || cfg.state || null,
+      county: row.county || cfg.county || cfg.name || null,
+      legal_status: cfg.legal_status || "public_official_api",
+    };
+  };
   return {
-    id: cfg.id, region: cfg.region, type: cfg.type || "violations",
+    id: cfg.id, region: cfg.region, state: cfg.state, county: cfg.county || cfg.name, type: cfg.type || "violations",
     async search(target = {}) {
       const where = typeof cfg.where === "function" ? cfg.where(target) : (cfg.where || "1=1");
       const out = []; let offset = 0; const page = 1000; const max = cfg.max || 2000;
@@ -54,9 +64,19 @@ export function arcgisCounty(cfg) {
 
 // Socrata connector. cfg: { id, region, type, url (resource .json), where(target)|string, map|fieldmap, max }
 export function socrataCounty(cfg) {
-  const map = cfg.map || buildMap(cfg.fieldmap, cfg.id);
+  const rawMap = cfg.map || buildMap(cfg.fieldmap, cfg.id);
+  const map = (attrs) => {
+    const row = rawMap(attrs);
+    if (!row) return null;
+    return {
+      ...row,
+      state: row.state || cfg.state || null,
+      county: row.county || cfg.county || cfg.name || null,
+      legal_status: cfg.legal_status || "public_official_api",
+    };
+  };
   return {
-    id: cfg.id, region: cfg.region, type: cfg.type || "violations",
+    id: cfg.id, region: cfg.region, state: cfg.state, county: cfg.county || cfg.name, type: cfg.type || "violations",
     async search(target = {}) {
       const where = typeof cfg.where === "function" ? cfg.where(target) : cfg.where;
       const u = new URL(cfg.url);

@@ -324,6 +324,7 @@
       <div id="rcPanel" class="connect-panel"></div>
       <div id="aiPanel" class="connect-panel"></div>
       <div id="btPanel" class="connect-panel"></div>
+      <div id="gmPanel" class="connect-panel"></div>
       <div id="acqSettings"></div>
       <div class="acq-main">
         <div class="camp-col">
@@ -362,6 +363,8 @@
           <span class="muted" style="margin-left:8px">fans across every connected source at once</span>
         </div>
         <div class="toolbar" style="margin:8px 0 4px">
+          <div id="ecosystemMeta" class="muted" style="flex-basis:100%;margin:-2px 0 0"></div>
+          <select id="enginePlan" style="min-width:220px"><option value="all-enabled">All enabled sources</option></select>
           <input id="areaCity" placeholder="City (e.g. Detroit)" style="min-width:160px" />
           <input id="areaState" placeholder="State" style="max-width:90px" />
           <input id="areaZip" placeholder="ZIP (optional)" style="max-width:130px" />
@@ -372,6 +375,44 @@
         </div>
         <div id="areaStatus" class="muted" style="margin-bottom:6px"></div>
         <div id="areaBreakdown"></div>
+        <div class="toolbar" style="margin:10px 0 4px">
+          <label class="muted" style="display:flex;align-items:center;gap:5px;font-size:13px">
+            <input type="checkbox" id="engineCouncil" /> council review
+          </label>
+          <button class="btn" id="engineRun">Run lead engine</button>
+        </div>
+        <div class="mini-grid lead-engine-auto" style="margin:8px 0 4px">
+          <label>Auto city<input id="engineAutoCity" placeholder="Detroit" /></label>
+          <label>State<input id="engineAutoState" placeholder="MI" /></label>
+          <label>ZIP<input id="engineAutoZip" placeholder="optional" /></label>
+          <label>Every hrs<input id="engineAutoHours" type="number" min="0" max="168" step="1" placeholder="0 off" /></label>
+          <label>Sources<input id="engineSourceLimit" type="number" min="0" max="100" step="1" placeholder="0 all" /></label>
+          <label>Shortlist<input id="engineShortlistLimit" type="number" min="1" max="100" step="1" /></label>
+          <label class="checkline"><input type="checkbox" id="engineAutoCouncil" /> auto council</label>
+          <button class="btn xs" id="engineSaveSettings">Save auto-run</button>
+        </div>
+        <div id="engineAutoStatus" class="muted" style="margin-bottom:6px"></div>
+        <div id="ecosystemPlanChildren" class="muted" style="margin-bottom:8px"></div>
+        <div id="engineStatus" class="muted" style="margin-top:8px"></div>
+        <div id="engineShortlist"></div>
+        <div class="panel-head" style="margin-top:14px">
+          <b>Wholesale spread audit</b>
+          <span class="muted" style="margin-left:8px">buyer price minus seller acceptable price</span>
+          <button class="btn xs" id="sellerPriceExtract" style="margin-left:auto">Extract seller prices</button>
+          <button class="btn xs" id="spreadAuditRefresh" style="margin-left:auto">Run audit</button>
+        </div>
+        <div id="spreadAudit"></div>
+        <div class="panel-head" style="margin-top:14px">
+          <b>Lead engine run history</b>
+          <button class="btn xs" id="engineHistoryRefresh" style="margin-left:auto">Refresh</button>
+        </div>
+        <div id="engineHistory"></div>
+        <div class="panel-head" style="margin-top:14px">
+          <b>Council review jobs</b>
+          <span class="muted" id="councilParticipantsMeta" style="margin-left:8px"></span>
+          <button class="btn xs" id="councilJobsRefresh" style="margin-left:auto">Refresh</button>
+        </div>
+        <div id="councilJobs"></div>
       </div>
       <div class="panel">
         <div class="panel-head">
@@ -710,7 +751,20 @@
     </div>
   </div>
 
+  <!-- Property evidence modal -->
+  <div class="modal-bg" id="evidenceModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2 id="evidenceTitle">Property Evidence</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div id="evidenceContent" class="evidence-content"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=41"></script>
+  <script src="app.js?v=42"></script>
 </body>
 </html>

@@ -18,3 +18,12 @@ data/leads_workflow_1000.jsonl
 data/pro_queue_snapshot.jsonl
 data/properties_accumulating.jsonl
 data/.property_harvest_state.json
+# large regenerable property data exports (keep manifests/summaries committed, not the raw jsonl)
+data/wholesale_property_leads_10000.jsonl
+data/wholesale_property_leads_10000_hot.jsonl
+data/properties_context_enriched.jsonl
+data/property_geo_enrichment.jsonl
+data/property_geo_enrichment.v2.jsonl
+data/property_photo_candidates.jsonl
+data/.listing_poll_state.json
+data/.property_photo_state.json

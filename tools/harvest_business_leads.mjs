@@ -1,18 +1,25 @@
-// tools/harvest_leads.mjs — MULTI-SOURCE recurring lead harvester (scale-safe rewrite).
-// Pulls address+phone+owner leads from every public-contact connector with harvest(), appends to an
+// tools/harvest_business_leads.mjs — B2B PUBLIC-CONTACT harvester (scale-safe rewrite).
+// Pulls business/operator phone records from every public-contact connector with harvest(), appends to an
 // accumulating store. Scale-safe dedup: per-source offsets are MONOTONIC (never reset), and a source
 // that returns an empty page is marked EXHAUSTED and skipped thereafter — so we never re-fetch the same
 // records and never need to read the (now huge) output file into memory. Compliance-gated.
-// Run: node tools/harvest_leads.mjs [pagesPerSource]
-import { writeFileSync, readFileSync, existsSync, appendFileSync, createReadStream } from "node:fs";
+//
+// IMPORTANT: this is NOT the property-first wholesale seller lead pipeline.
+// Use tools/harvest_properties.mjs for wholesale property inventory. These records are only enrichment:
+// commercial/industrial operator lookup, tenant/operator clues, contractor/flipper buyer discovery, or
+// other niche B2B context. They must not count toward "300 wholesale leads."
+// Run: node tools/harvest_business_leads.mjs [pagesPerSource]
+import { writeFileSync, readFileSync, existsSync, appendFileSync, createReadStream, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildRegistry } from "../connectors/index.js";
 
 const dir = dirname(fileURLToPath(import.meta.url));
-const OUT = join(dir, "..", "data", "leads_accumulating.jsonl");
-const STATE = join(dir, "..", "data", ".harvest_state.json");
+const B2B_DATA_DIR = process.env.B2B_LEADS_DIR || "D:\\wholesale-crm-data\\b2b-phone-asset";
+const OUT = join(B2B_DATA_DIR, "leads_accumulating.jsonl");
+const STATE = join(B2B_DATA_DIR, ".harvest_state.json");
+mkdirSync(B2B_DATA_DIR, { recursive: true });
 const PAGE = 1000;
 const PAGES_PER_SOURCE = Number(process.argv[2] || 3);
 

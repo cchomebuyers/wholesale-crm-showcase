@@ -187,6 +187,11 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; }
 /* Toolbar */
 .toolbar { display: flex; gap: 10px; margin-bottom: 16px; }
 .toolbar input, .toolbar select { flex: 0 1 auto; }
+.mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; align-items: end; }
+.mini-grid label { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.mini-grid label input { margin-top: 3px; }
+.mini-grid .checkline { min-height: 38px; display: flex; align-items: center; gap: 7px; text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+.mini-grid .checkline input { width: auto; margin: 0; }
 #leadSearch { flex: 1; }
 input, select, textarea {
   background: var(--panel2); border: 1px solid var(--border); color: var(--text);
@@ -522,6 +527,13 @@ table.sched td:first-child, table.sched th:first-child, table.sched td:nth-child
 .ai-content ul { margin: 6px 0; padding-left: 20px; }
 .ai-content li { margin: 4px 0; }
 .ai-loading { color: var(--amber); padding: 30px; text-align: center; }
+.evidence-content { display: flex; flex-direction: column; gap: 14px; }
+.evidence-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.evidence-grid figure { margin: 0; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.evidence-grid img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #0b0f14; }
+.evidence-grid figcaption { padding: 8px 10px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+.buyer-match-table td:first-child { width: 82px; }
 /* Inbox */
 .inbox-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .inbox-list { display: flex; flex-direction: column; gap: 6px; }

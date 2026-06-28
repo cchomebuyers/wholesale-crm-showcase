@@ -195,6 +195,35 @@ export function campaignToThinga(row) {
   };
 }
 
+// A saved ecosystem search plan is still the same Thinga shape: kind changes, axes do not.
+// Children are discovered through the reverse-link index from records whose parents include this plan id.
+export const planThingaId = (planId) => `thinga:plan-${String(planId || "all-enabled").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "all-enabled"}`;
+
+export function planToThinga(plan) {
+  return {
+    id: planThingaId(plan.id),
+    kind: "plan",
+    name: plan.name || plan.id || "Search plan",
+    schema: "ankhor.v1.plan",
+    category_path: "Plans/Search",
+    content: {
+      id: plan.id,
+      description: plan.description || "",
+      includeConnectorIds: plan.includeConnectorIds || [],
+      excludeConnectorIds: plan.excludeConnectorIds || [],
+      includeSourceTypes: plan.includeSourceTypes || [],
+      excludeSourceTypes: plan.excludeSourceTypes || [],
+      includeGroups: plan.includeGroups || [],
+      maxConnectors: plan.maxConnectors ?? null,
+      costPolicy: plan.costPolicy || "free_first",
+      participants: plan.participants || [],
+      notes: plan.notes || [],
+      parser_family: "realEstate.faceted.v1",
+    },
+    tags: ["search-plan", plan.costPolicy || "free_first"].filter(Boolean),
+  };
+}
+
 // Mount the substrate and register the CRM's schemas + handlers. Returns the store.
 export function mountCrmSubstrate(db, { handlers = {} } = {}) {
   const store = createThingaStore(db);
@@ -203,6 +232,10 @@ export function mountCrmSubstrate(db, { handlers = {} } = {}) {
   store.registerSchema("ankhor.v1.lead", (content) => {
     const st = String(content.status || content.stage || "").toLowerCase();
     if (SOLD.has(st)) return "sold/closed records are comps (kind:comps), never leads";
+    return true;
+  });
+  store.registerSchema("ankhor.v1.plan", (content) => {
+    if (!content.id) return "plan requires an id";
     return true;
   });
 
@@ -248,6 +281,9 @@ export function mirrorProperty(store, row) {
 }
 export function mirrorCampaign(store, row) {
   return store.put(campaignToThinga(row));
+}
+export function mirrorPlan(store, plan) {
+  return store.put(planToThinga(plan));
 }
 
 // The children of a lead Thinga (activities + messages), via the reverse-link index.

@@ -9,12 +9,21 @@ import { dirname, join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
   mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
-  mirrorProperty, mirrorCampaign } from "./crm_thinga.js";
+  mirrorProperty, mirrorCampaign, mirrorPlan, planThingaId } from "./crm_thinga.js";
 import { buildRegistry } from "./connectors/index.js";
 import { createSourceHealth } from "./source_health.js";
 import { findContact } from "./contact_router.js";
 import { buildRealEstateEngine } from "./packs/real_estate_acquisition.js";
 import { canonicalAddr, geocodeAddress } from "./connectors/census.js";
+import { buildPropertyImageryEvidence } from "./property_imagery.js";
+import { rankBuyersForProperty } from "./buyer_matching.js";
+import { normalizeBuyerCandidate, rankBuyerDemand, BUYER_DISCOVERY_SOURCE_FAMILIES } from "./buyer_discovery.js";
+import { runAutonomousLeadCycle } from "./autonomous_lead_engine.js";
+import { evaluateWholesaleSpread, summarizeSpreadAudits } from "./wholesale_spread.js";
+import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
+import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
+import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSettings } from "./lead_engine_scheduler.js";
+import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -116,6 +125,7 @@ db.exec(`
 // Migrations for columns added after first release
 for (const col of ["mao REAL", "discount_pct REAL",
   "listing_agent_name TEXT", "listing_agent_phone TEXT", "listing_agent_email TEXT",
+  "owner_name TEXT", "owner_mailing TEXT", "owner_source TEXT", "owner_enriched_at TEXT",
   "crime_shootings_30d INTEGER", "ai_analysis TEXT"]) {
   try { db.exec(`ALTER TABLE properties ADD COLUMN ${col}`); } catch { /* already exists */ }
 }
@@ -124,6 +134,89 @@ db.exec(`CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL, type TEXT, title TEXT, body TEXT,
   property_id INTEGER, read INTEGER DEFAULT 0
 );`);
+db.exec(`CREATE TABLE IF NOT EXISTS property_evidence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  property_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  evidence_type TEXT NOT NULL,
+  status TEXT,
+  summary TEXT,
+  data_json TEXT NOT NULL,
+  FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_property_evidence_prop ON property_evidence(property_id, created_at DESC)");
+db.exec(`CREATE TABLE IF NOT EXISTS lead_engine_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  target_json TEXT NOT NULL,
+  raw_records INTEGER DEFAULT 0,
+  raw_thingas INTEGER DEFAULT 0,
+  converged_properties INTEGER DEFAULT 0,
+  shortlist_count INTEGER DEFAULT 0,
+  dispatched_council INTEGER DEFAULT 0,
+  council_packet TEXT,
+  data_json TEXT NOT NULL
+);`);
+db.exec(`CREATE TABLE IF NOT EXISTS lead_engine_candidates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  thinga_id TEXT,
+  address TEXT,
+  score INTEGER,
+  tier TEXT,
+  spend_allowed INTEGER DEFAULT 0,
+  lead_id INTEGER,
+  status TEXT DEFAULT 'shortlisted',
+  data_json TEXT NOT NULL,
+  FOREIGN KEY (run_id) REFERENCES lead_engine_runs(id) ON DELETE CASCADE
+);`);
+try { db.exec("ALTER TABLE lead_engine_candidates ADD COLUMN lead_id INTEGER"); } catch { /* already exists */ }
+db.exec("CREATE INDEX IF NOT EXISTS idx_lead_engine_candidates_run ON lead_engine_candidates(run_id, score DESC)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_lead_engine_candidates_status ON lead_engine_candidates(status, score DESC)");
+db.exec(`CREATE TABLE IF NOT EXISTS ecosystem_search_plans (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  data_json TEXT NOT NULL
+);`);
+db.exec(`CREATE TABLE IF NOT EXISTS buyer_discovery_candidates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  areas TEXT,
+  property_types TEXT,
+  max_price REAL,
+  cash INTEGER DEFAULT 1,
+  source_id TEXT,
+  source_type TEXT,
+  confidence TEXT,
+  evidence_json TEXT NOT NULL,
+  imported_buyer_id INTEGER
+);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_buyer_candidates_source ON buyer_discovery_candidates(source_id, name)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_buyer_candidates_imported ON buyer_discovery_candidates(imported_buyer_id)");
+db.exec(`CREATE TABLE IF NOT EXISTS seller_price_evidence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  record_type TEXT NOT NULL,
+  record_id INTEGER NOT NULL,
+  price REAL NOT NULL,
+  confidence TEXT,
+  source TEXT,
+  source_record_id TEXT,
+  context TEXT,
+  reason TEXT,
+  data_json TEXT NOT NULL,
+  UNIQUE(record_type, record_id, price, source, source_record_id, context)
+);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_seller_price_record ON seller_price_evidence(record_type, record_id, confidence)");
 // Unified email log — both inbound (synced from IMAP) and outbound (sent from the CRM).
 db.exec(`CREATE TABLE IF NOT EXISTS emails (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,6 +250,98 @@ if (!db.prepare("SELECT value FROM settings WHERE key='migrated_active_v1'").get
 }
 
 const now = () => new Date().toISOString();
+
+const DEFAULT_SEARCH_PLANS = [
+  {
+    id: "all-enabled",
+    name: "All enabled sources",
+    description: "Every enabled connector the ecosystem currently knows about.",
+    costPolicy: "free_first",
+    notes: ["No fixed source count. Execution limits are optional cost/rate controls."],
+  },
+  {
+    id: "distress-contact",
+    name: "Distress + public contact",
+    description: "Public violations, distressed property signals, and public contact sources.",
+    includeSourceTypes: ["violations", "property", "public-contact"],
+    costPolicy: "free_first",
+  },
+  {
+    id: "on-market",
+    name: "On-market listings",
+    description: "Licensed/keyed listing sources that can expose active listings and agent contacts.",
+    includeSourceTypes: ["listings"],
+    costPolicy: "licensed_or_keyed",
+  },
+];
+
+const slugifyPlanId = (v) => String(v || "search-plan")
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "")
+  .slice(0, 80) || "search-plan";
+
+function searchPlanRow(row) {
+  if (!row) return null;
+  let data = {};
+  try { data = JSON.parse(row.data_json || "{}"); } catch { data = {}; }
+  const plan = normalizeSearchPlan({ ...data, id: row.id, name: row.name });
+  return {
+    ...plan,
+    description: row.description || data.description || "",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function saveSearchPlan(input = {}) {
+  const id = slugifyPlanId(input.id || input.name);
+  const existing = db.prepare("SELECT id, created_at FROM ecosystem_search_plans WHERE id=?").get(id);
+  const plan = normalizeSearchPlan({ ...input, id });
+  const name = String(input.name || plan.name || id).trim() || id;
+  const description = String(input.description || "").trim();
+  const at = now();
+  db.prepare(`INSERT INTO ecosystem_search_plans (id, created_at, updated_at, name, description, data_json)
+      VALUES (?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET
+        updated_at=excluded.updated_at,
+        name=excluded.name,
+        description=excluded.description,
+        data_json=excluded.data_json`)
+    .run(id, existing?.created_at || at, at, name, description, JSON.stringify({ ...plan, name, description }));
+  return getSearchPlan(id);
+}
+
+function seedSearchPlans() {
+  for (const plan of DEFAULT_SEARCH_PLANS) {
+    if (!db.prepare("SELECT id FROM ecosystem_search_plans WHERE id=?").get(plan.id)) saveSearchPlan(plan);
+  }
+}
+
+function listSearchPlans() {
+  seedSearchPlans();
+  return db.prepare("SELECT * FROM ecosystem_search_plans ORDER BY name COLLATE NOCASE").all().map(searchPlanRow);
+}
+
+function getSearchPlan(id) {
+  seedSearchPlans();
+  return searchPlanRow(db.prepare("SELECT * FROM ecosystem_search_plans WHERE id=?").get(slugifyPlanId(id || "all-enabled")));
+}
+
+function searchPlanFromRequest(input = {}) {
+  const base = input.planId ? (getSearchPlan(input.planId) || {}) : {};
+  const maxConnectors = input.sourceLimit == null || input.sourceLimit === "" || Number(input.sourceLimit) <= 0
+    ? (input.maxConnectors ?? input.searchPlan?.maxConnectors ?? base.maxConnectors)
+    : input.sourceLimit;
+  return normalizeSearchPlan({
+    ...base,
+    ...(input.searchPlan || {}),
+    includeSourceTypes: Array.isArray(input.sourceTypes) ? input.sourceTypes : (base.includeSourceTypes || []),
+    includeConnectorIds: Array.isArray(input.connectorIds) ? input.connectorIds : (base.includeConnectorIds || []),
+    maxConnectors,
+  });
+}
+seedSearchPlans();
 
 // ---------- Ankhor / Thinga substrate (non-destructive interop) ----------
 // Mirrors CRM rows into a `thingas` store living ALONGSIDE the eleven tables. The app is never
@@ -199,6 +384,164 @@ const mirrorCampaignSafe = (id) => {
   try { const r = db.prepare("SELECT * FROM campaigns WHERE id=?").get(id); if (r) mirrorCampaign(thinga, r); }
   catch (e) { console.error("thinga mirror campaign (non-fatal):", e.message); }
 };
+const mirrorSearchPlanSafe = (plan) => {
+  try { if (plan) mirrorPlan(thinga, plan); }
+  catch (e) { console.error("thinga mirror plan (non-fatal):", e.message); }
+};
+for (const plan of listSearchPlans()) mirrorSearchPlanSafe(plan);
+
+function rowBuyerCandidate(row) {
+  if (!row) return null;
+  let evidence = {};
+  try { evidence = JSON.parse(row.evidence_json || "{}"); } catch { evidence = {}; }
+  return { ...row, evidence };
+}
+
+function mirrorBuyerCandidateSafe(row) {
+  try {
+    if (!row) return;
+    thinga.put({
+      id: `thinga:buyer-candidate-${row.id}`,
+      kind: "buyerCandidate",
+      name: row.name,
+      schema: "buyerDiscovery.candidate.v1",
+      category_path: row.imported_buyer_id ? "BuyerDiscovery/Imported" : "BuyerDiscovery/Candidates",
+      links: row.imported_buyer_id ? [{ kind: "promoted_to", to: `thinga:buyer-${row.imported_buyer_id}` }] : [],
+      content: {
+        candidate_id: row.id,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        areas: row.areas,
+        property_types: row.property_types,
+        max_price: row.max_price,
+        cash: row.cash,
+        source_id: row.source_id,
+        source_type: row.source_type,
+        confidence: row.confidence,
+        parser_family: "buyerDiscovery.candidate.v1",
+        evidence: row.evidence || {},
+      },
+      tags: [row.source_id, row.source_type, row.confidence].filter(Boolean),
+    });
+  } catch (e) { console.error("thinga mirror buyer candidate (non-fatal):", e.message); }
+}
+
+function saveBuyerCandidate(input = {}) {
+  const c = normalizeBuyerCandidate(input);
+  if (!c) throw new Error("buyer candidate requires a name");
+  const existing = db.prepare(`SELECT * FROM buyer_discovery_candidates
+    WHERE lower(name)=lower(?) AND coalesce(source_id,'')=coalesce(?,'')
+      AND coalesce(phone,'')=coalesce(?,'') AND coalesce(email,'')=coalesce(?,'')
+    ORDER BY id LIMIT 1`).get(c.name, c.source_id || "", c.phone || "", c.email || "");
+  const t = now();
+  let row;
+  if (existing) {
+    db.prepare(`UPDATE buyer_discovery_candidates SET updated_at=?, phone=?, email=?, areas=?, property_types=?,
+        max_price=?, cash=?, source_type=?, confidence=?, evidence_json=? WHERE id=?`)
+      .run(t, c.phone, c.email, c.areas, c.property_types, c.max_price, c.cash, c.source_type, c.confidence, JSON.stringify(c.evidence), existing.id);
+    row = db.prepare("SELECT * FROM buyer_discovery_candidates WHERE id=?").get(existing.id);
+  } else {
+    const info = db.prepare(`INSERT INTO buyer_discovery_candidates
+        (created_at, updated_at, name, phone, email, areas, property_types, max_price, cash, source_id, source_type, confidence, evidence_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(t, t, c.name, c.phone, c.email, c.areas, c.property_types, c.max_price, c.cash, c.source_id, c.source_type, c.confidence, JSON.stringify(c.evidence));
+    row = db.prepare("SELECT * FROM buyer_discovery_candidates WHERE id=?").get(info.lastInsertRowid);
+  }
+  const out = rowBuyerCandidate(row);
+  mirrorBuyerCandidateSafe(out);
+  return out;
+}
+
+const buyerCandidateRows = () => db.prepare("SELECT * FROM buyer_discovery_candidates ORDER BY updated_at DESC").all().map(rowBuyerCandidate);
+
+function rowSellerPriceEvidence(row) {
+  if (!row) return null;
+  let data = {};
+  try { data = JSON.parse(row.data_json || "{}"); } catch { data = {}; }
+  return { ...row, data };
+}
+
+function mirrorSellerPriceEvidenceSafe(row) {
+  try {
+    if (!row) return;
+    const parent = row.record_type === "lead" ? `thinga:lead-${row.record_id}` :
+      row.record_type === "property" ? `thinga:property-${row.record_id}` : null;
+    thinga.put({
+      id: `thinga:seller-price-evidence-${row.id}`,
+      kind: "evidence",
+      name: `seller price ${row.price}`,
+      schema: "sellerPrice.evidence.v1",
+      parents: parent ? [parent] : [],
+      links: parent ? [{ kind: "seller_price_for", to: parent }] : [],
+      category_path: `Evidence/SellerPrice/${row.confidence || "unknown"}`,
+      content: {
+        evidence_id: row.id,
+        record_type: row.record_type,
+        record_id: row.record_id,
+        price: row.price,
+        confidence: row.confidence,
+        source: row.source,
+        context: row.context,
+        reason: row.reason,
+        parser_family: "sellerPrice.evidence.v1",
+        data: row.data || {},
+      },
+      tags: ["seller-price", row.confidence, row.record_type].filter(Boolean),
+    });
+  } catch (e) { console.error("thinga mirror seller price evidence (non-fatal):", e.message); }
+}
+
+function saveSellerPriceEvidence(recordType, recordId, evidence = {}) {
+  if (!recordType || !recordId || !evidence.price) return null;
+  const info = db.prepare(`INSERT OR IGNORE INTO seller_price_evidence
+      (created_at, record_type, record_id, price, confidence, source, source_record_id, context, reason, data_json)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(now(), recordType, recordId, evidence.price, evidence.confidence || null, evidence.source || null,
+      evidence.record_id == null ? null : String(evidence.record_id), evidence.context || null, evidence.reason || null, JSON.stringify(evidence));
+  const row = db.prepare(`SELECT * FROM seller_price_evidence
+    WHERE record_type=? AND record_id=? AND price=? AND coalesce(source,'')=coalesce(?,'')
+      AND coalesce(source_record_id,'')=coalesce(?,'') AND coalesce(context,'')=coalesce(?,'')
+    ORDER BY id DESC LIMIT 1`)
+    .get(recordType, recordId, evidence.price, evidence.source || "", evidence.record_id == null ? "" : String(evidence.record_id), evidence.context || "");
+  const out = rowSellerPriceEvidence(row);
+  if (info.changes || out) mirrorSellerPriceEvidenceSafe(out);
+  return out;
+}
+
+function storedSellerPriceEvidence(recordType, recordId) {
+  return db.prepare(`SELECT * FROM seller_price_evidence WHERE record_type=? AND record_id=?
+    ORDER BY CASE confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC, price ASC, id DESC`)
+    .all(recordType, recordId).map(rowSellerPriceEvidence);
+}
+
+function extractLeadSellerPriceEvidence(leadId) {
+  const lead = db.prepare("SELECT * FROM leads WHERE id=?").get(leadId);
+  if (!lead) return [];
+  const texts = [];
+  if (lead.notes) texts.push({ source: "lead.notes", record_id: lead.id, text: lead.notes });
+  for (const a of db.prepare("SELECT id, body FROM activities WHERE lead_id=? ORDER BY created_at DESC LIMIT 50").all(leadId)) {
+    if (a.body) texts.push({ source: "activity", record_id: a.id, text: a.body });
+  }
+  for (const e of db.prepare("SELECT id, subject, body, snippet FROM emails WHERE lead_id=? ORDER BY msg_date DESC LIMIT 50").all(leadId)) {
+    const text = [e.subject, e.snippet, e.body].filter(Boolean).join("\n");
+    if (text) texts.push({ source: "email", record_id: e.id, text });
+  }
+  const found = sellerPriceEvidenceFromRecord(lead, texts);
+  return found.map((x) => saveSellerPriceEvidence("lead", lead.id, x)).filter(Boolean);
+}
+
+function extractPropertySellerPriceEvidence(propertyId) {
+  const p = db.prepare("SELECT * FROM properties WHERE id=?").get(propertyId);
+  if (!p) return [];
+  const found = sellerPriceEvidenceFromRecord({ ...p, asking_price: p.price }, []);
+  return found.map((x) => saveSellerPriceEvidence("property", p.id, x)).filter(Boolean);
+}
+
+function bestStoredSellerPrice(recordType, recordId) {
+  const stored = storedSellerPriceEvidence(recordType, recordId);
+  return bestSellerPriceEvidence(stored.map((x) => ({ ...x, record_id: x.source_record_id })));
+}
 
 // ---------- Settings (key/value) ----------
 const getSetting = (k) => {
@@ -538,6 +881,7 @@ function collectContacts(obj, found = { phones: [], emails: [] }) {
 }
 const fmtPhone = (p) => (p && p.length === 10) ? `(${p.slice(0,3)}) ${p.slice(3,6)}-${p.slice(6)}` : p;
 const batchdataKey = () => getSetting("batchdata_api_key") || process.env.BATCHDATA_API_KEY;
+const googleMapsKey = () => getSetting("google_maps_api_key") || process.env.GOOGLE_MAPS_API_KEY;
 
 // Reusable: skip-trace one address via BatchData. Returns { ok, phones, emails, error }.
 async function skipTraceOne(addressStr) {
@@ -1255,6 +1599,7 @@ app.get("/api/acq/settings", (req, res) => {
     rentcastConnected: Boolean(getSetting("rentcast_api_key") || process.env.RENTCAST_API_KEY),
     aiConnected: Boolean(getSetting("anthropic_api_key") || process.env.ANTHROPIC_API_KEY),
     batchdataConnected: Boolean(getSetting("batchdata_api_key") || process.env.BATCHDATA_API_KEY),
+    googleMapsConnected: Boolean(googleMapsKey()),
     ...acqConfig(),
   });
 });
@@ -1263,11 +1608,17 @@ app.post("/api/acq/settings", (req, res) => {
   if (b.rentcast_api_key) setSetting("rentcast_api_key", String(b.rentcast_api_key).trim());
   if (b.anthropic_api_key) setSetting("anthropic_api_key", String(b.anthropic_api_key).trim());
   if (b.batchdata_api_key) setSetting("batchdata_api_key", String(b.batchdata_api_key).trim());
+  if (b.google_maps_api_key) setSetting("google_maps_api_key", String(b.google_maps_api_key).trim());
   for (const k of ["rehab_per_sqft", "buyer_pct", "min_fee", "min_score", "auto_scan_hours", "hot_score"]) {
     if (b[k] !== undefined && b[k] !== "") setSetting(k, String(b[k]));
   }
   if (b.email_alerts !== undefined) setSetting("email_alerts", b.email_alerts ? "1" : "0");
-  res.json({ ok: true, rentcastConnected: Boolean(getSetting("rentcast_api_key")), ...acqConfig() });
+  res.json({
+    ok: true,
+    rentcastConnected: Boolean(getSetting("rentcast_api_key")),
+    googleMapsConnected: Boolean(googleMapsKey()),
+    ...acqConfig(),
+  });
 });
 
 async function rentcastGet(path, params) {
@@ -1494,6 +1845,177 @@ app.get("/api/properties/:id", (req, res) => {
   const p = db.prepare("SELECT * FROM properties WHERE id=?").get(req.params.id);
   if (!p) return res.status(404).json({ error: "not found" });
   res.json(p);
+});
+
+function storePropertyEvidence(propertyId, evidence) {
+  const status = evidence.error || evidence.street_view?.metadata?.status || "OK";
+  const summary = [
+    evidence.street_view?.available ? "street_view" : null,
+    evidence.satellite?.available ? "satellite" : null,
+    evidence.parcel_overlay?.status === "county_geometry_overlayed" ? "parcel_overlay" : null,
+  ].filter(Boolean).join(", ") || status;
+  const info = db.prepare(`INSERT INTO property_evidence
+      (property_id, created_at, source_id, evidence_type, status, summary, data_json)
+      VALUES (?,?,?,?,?,?,?)`)
+    .run(propertyId, now(), evidence.source_id || "unknown", evidence.source_type || "evidence",
+      status, summary, JSON.stringify(evidence));
+  try {
+    thinga.put({
+      id: `thinga:property-evidence-${info.lastInsertRowid}`,
+      kind: "evidence",
+      name: `${evidence.source_type || "evidence"} for property ${propertyId}`,
+      parents: [`thinga:property-${propertyId}`],
+      links: [{ kind: "evidence_for", to: `thinga:property-${propertyId}` }],
+      category_path: "Evidence/PropertyImagery",
+      content: { crm_id: info.lastInsertRowid, property_id: propertyId, ...evidence },
+    });
+  } catch (e) { console.error("thinga evidence mirror (non-fatal):", e.message); }
+  return { id: info.lastInsertRowid, summary, status };
+}
+
+app.get("/api/properties/:id/evidence", (req, res) => {
+  const p = db.prepare("SELECT id FROM properties WHERE id=?").get(req.params.id);
+  if (!p) return res.status(404).json({ error: "not found" });
+  const rows = db.prepare(`SELECT id, created_at, source_id, evidence_type, status, summary, data_json
+    FROM property_evidence WHERE property_id=? ORDER BY created_at DESC LIMIT 20`).all(req.params.id);
+  res.json({ items: rows.map((r) => ({ ...r, data: JSON.parse(r.data_json) })) });
+});
+
+app.post("/api/properties/:id/imagery", async (req, res) => {
+  const p = db.prepare("SELECT * FROM properties WHERE id=?").get(req.params.id);
+  if (!p) return res.status(404).json({ error: "not found" });
+  try {
+    const evidence = await buildPropertyImageryEvidence(p, { googleMapsKey: googleMapsKey() });
+    const stored = storePropertyEvidence(p.id, evidence);
+    res.json({ ok: !evidence.error, stored, evidence });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+app.get("/api/properties/:id/buyer-matches", (req, res) => {
+  const p = db.prepare("SELECT * FROM properties WHERE id=?").get(req.params.id);
+  if (!p) return res.status(404).json({ error: "not found" });
+  const rows = db.prepare("SELECT * FROM buyers ORDER BY created_at DESC").all();
+  const demand = rankBuyerDemand({
+    property: p,
+    crmBuyers: rows,
+    discoveredCandidates: buyerCandidateRows(),
+    limit: Number(req.query.limit) || 20,
+  });
+  res.json({ property_id: p.id, matches: demand.all, existing: demand.existing, discovered: demand.discovered, gaps: demand.gaps, discovery_paths: demand.discovery_paths });
+});
+
+app.get("/api/buyer-discovery/candidates", (_req, res) => {
+  res.json({ candidates: buyerCandidateRows(), source_families: BUYER_DISCOVERY_SOURCE_FAMILIES });
+});
+
+app.post("/api/buyer-discovery/candidates", (req, res) => {
+  try {
+    res.json({ ok: true, candidate: saveBuyerCandidate(req.body || {}) });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
+app.post("/api/buyer-discovery/candidates/:id/promote", (req, res) => {
+  const c = rowBuyerCandidate(db.prepare("SELECT * FROM buyer_discovery_candidates WHERE id=?").get(req.params.id));
+  if (!c) return res.status(404).json({ error: "candidate not found" });
+  const info = db.prepare(`INSERT INTO buyers (created_at, name, phone, email, areas, property_types, max_price, cash, notes)
+    VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(now(), c.name, c.phone, c.email, c.areas, c.property_types, c.max_price, c.cash ?? 1,
+      `Promoted from buyer discovery source ${c.source_id || "unknown"}.\nEvidence: ${JSON.stringify(c.evidence || {})}`);
+  db.prepare("UPDATE buyer_discovery_candidates SET imported_buyer_id=?, updated_at=? WHERE id=?").run(info.lastInsertRowid, now(), c.id);
+  mirrorBuyerSafe(info.lastInsertRowid);
+  const updated = rowBuyerCandidate(db.prepare("SELECT * FROM buyer_discovery_candidates WHERE id=?").get(c.id));
+  mirrorBuyerCandidateSafe(updated);
+  res.json({ ok: true, buyerId: info.lastInsertRowid, candidate: updated });
+});
+
+app.get("/api/seller-price/evidence", (req, res) => {
+  const recordType = req.query.recordType || null;
+  const recordId = req.query.recordId ? Number(req.query.recordId) : null;
+  let rows;
+  if (recordType && recordId) rows = storedSellerPriceEvidence(recordType, recordId);
+  else rows = db.prepare("SELECT * FROM seller_price_evidence ORDER BY created_at DESC LIMIT 500").all().map(rowSellerPriceEvidence);
+  res.json({ items: rows });
+});
+
+app.post("/api/seller-price/extract", (req, res) => {
+  const b = req.body || {};
+  const limit = Math.max(1, Math.min(5000, Number(b.limit) || 2000));
+  let extracted = 0;
+  const leads = b.recordType === "property" ? [] :
+    db.prepare("SELECT id FROM leads ORDER BY updated_at DESC LIMIT ?").all(limit);
+  for (const l of leads) extracted += extractLeadSellerPriceEvidence(l.id).length;
+  const props = b.recordType === "lead" ? [] :
+    db.prepare("SELECT id FROM properties ORDER BY updated_at DESC LIMIT ?").all(limit);
+  for (const p of props) extracted += extractPropertySellerPriceEvidence(p.id).length;
+  res.json({ ok: true, extracted, totalEvidence: db.prepare("SELECT COUNT(*) n FROM seller_price_evidence").get().n });
+});
+
+app.get("/api/wholesale-spread/audit", (req, res) => {
+  const cfg = acqConfig();
+  const limit = Math.max(1, Math.min(5000, Number(req.query.limit) || 1000));
+  const buyers = db.prepare("SELECT * FROM buyers ORDER BY created_at DESC").all();
+  const buyerCandidates = buyerCandidateRows();
+  const leadRows = db.prepare(`SELECT id, 'lead' record_type, address, city, state, zip, property_type,
+      asking_price, arv, repair_estimate, mao, contract_price, offer_amount, assignment_fee, source, stage,
+      seller_name, seller_phone, seller_email
+    FROM leads ORDER BY updated_at DESC LIMIT ?`).all(limit);
+  const propRows = db.prepare(`SELECT id, 'property' record_type, formatted_address address, city, state, zip, property_type,
+      price, arv, repair_estimate, mao, spread, source, status, listing_agent_name, listing_agent_phone, listing_agent_email,
+      lead_score, wholesale_score
+    FROM properties ORDER BY updated_at DESC LIMIT ?`).all(limit);
+  const records = [...leadRows, ...propRows];
+  const audited = records.map((r) => {
+    const bestSeller = bestStoredSellerPrice(r.record_type, r.id);
+    const demand = rankBuyerDemand({ property: r, crmBuyers: buyers, discoveredCandidates: buyerCandidates, limit: 5 });
+    const buyerMatches = demand.all;
+    const audit = evaluateWholesaleSpread({
+      ...r,
+      seller_acceptable_price: bestSeller?.price,
+      seller_price_source: bestSeller?.source,
+      seller_price_evidence: bestSeller,
+      buyer_matches: buyerMatches,
+    }, cfg);
+    return {
+      record_type: r.record_type,
+      id: r.id,
+      address: r.address,
+      source: r.source,
+      status: audit.status,
+      projected_spread: audit.projectedSpread,
+      target_fee: audit.targetFee,
+      buyer_assignment_price: audit.inputs.buyerAssignmentPrice,
+      seller_acceptable_price: audit.inputs.sellerAcceptablePrice,
+      seller_anchor_price: audit.inputs.sellerAnchorPrice,
+      acquisition_offer_price: audit.inputs.acquisitionOfferPrice,
+      acquisition_offer_source: audit.inputs.acquisitionOfferSource,
+      anchor_spread: audit.anchorSpread,
+      negotiation: audit.negotiation,
+      best_negotiation_path: audit.bestNegotiationPath,
+      required_buyer_at_seller_anchor: audit.inputs.requiredBuyerAtSellerAnchor,
+      max_seller_offer_for_target: audit.inputs.maxSellerOfferForTarget,
+      seller_price_evidence: bestSeller,
+      arv: audit.inputs.arv,
+      repairs: audit.inputs.repairs,
+      buyer_matches: buyerMatches,
+      buyer_gaps: demand.gaps,
+      buyer_discovery_paths: demand.discovery_paths.map((p) => p.id),
+      reasons: audit.reasons,
+      next_needed: audit.nextNeeded,
+    };
+  });
+  const counts = summarizeSpreadAudits(audited);
+  const missing = {};
+  for (const a of audited) for (const n of a.next_needed || []) missing[n] = (missing[n] || 0) + 1;
+  res.json({
+    counts,
+    missing,
+    works: audited.filter((a) => a.status === "works").slice(0, 25),
+    thin: audited.filter((a) => a.status === "thin").slice(0, 25),
+    fails: audited.filter((a) => a.status === "fails").slice(0, 25),
+    unproven: audited.filter((a) => a.status === "unproven").slice(0, 25),
+  });
 });
 
 // ---- Phase 2: scoring (free, from listing data) + analysis (AVM, on-demand) ----
@@ -1878,6 +2400,373 @@ app.post("/api/area/pull", async (req, res) => {
 
   res.json({ area: `${target.city || ""} ${target.state || ""} ${target.zip || ""}`.trim(),
     found, inserted, skipped, withContact, skiptraced, skiptraceFound, skiptraceNote, bySource });
+});
+
+// ---- Autonomous lead intelligence: APIs -> faceted Thingas -> convergence -> council shortlist ----
+function persistLeadEngineCycle(cycle, { councilDispatch = null } = {}) {
+  const planId = cycle.search_plan?.id || "all-enabled";
+  const planT = planThingaId(planId);
+  const info = db.prepare(`INSERT INTO lead_engine_runs
+      (created_at, target_json, raw_records, raw_thingas, converged_properties, shortlist_count,
+       dispatched_council, council_packet, data_json)
+      VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(now(), JSON.stringify(cycle.target || {}), cycle.raw_records || 0, cycle.raw_thingas || 0,
+      cycle.converged_properties || 0, (cycle.shortlist || []).length, councilDispatch ? 1 : 0,
+      councilDispatch?.packet || null, JSON.stringify(cycle));
+  const runId = info.lastInsertRowid;
+  const runThingaId = `thinga:lead-engine-run-${runId}`;
+  try {
+    thinga.put({
+      id: runThingaId,
+      kind: "run",
+      name: `lead-engine run ${runId}`,
+      schema: "leadEngine.run.v1",
+      parents: [planT],
+      links: [{ kind: "ran_plan", to: planT }],
+      category_path: "Runs/LeadEngine",
+      content: {
+        run_id: runId,
+        target: cycle.target || {},
+        search_plan: cycle.search_plan || {},
+        raw_records: cycle.raw_records || 0,
+        raw_thingas: cycle.raw_thingas || 0,
+        converged_properties: cycle.converged_properties || 0,
+        shortlist_count: (cycle.shortlist || []).length,
+        council_packet: councilDispatch?.packet || null,
+      },
+    });
+  } catch (e) { console.error("thinga mirror lead-engine run (non-fatal):", e.message); }
+  const ins = db.prepare(`INSERT INTO lead_engine_candidates
+      (run_id, created_at, thinga_id, address, score, tier, spend_allowed, status, data_json)
+      VALUES (?,?,?,?,?,?,?,?,?)`);
+  for (const c of cycle.shortlist || []) {
+    const ci = ins.run(runId, now(), c.id || null, c.address || c.name || null, c.score || 0, c.tier || null,
+      c.spend_allowed ? 1 : 0, c.spend_allowed ? "council_review" : "shortlisted", JSON.stringify(c));
+    try {
+      thinga.put({
+        id: `thinga:lead-engine-candidate-${ci.lastInsertRowid}`,
+        kind: "candidate",
+        name: c.address || c.name || `candidate ${ci.lastInsertRowid}`,
+        schema: "leadEngine.candidate.v1",
+        parents: [runThingaId, planT],
+        links: [
+          { kind: "candidate_for_run", to: runThingaId },
+          { kind: "candidate_from_plan", to: planT },
+          ...(c.id ? [{ kind: "candidate_real_estate", to: c.id }] : []),
+        ],
+        category_path: `Candidates/${c.tier || "shortlisted"}`,
+        content: {
+          candidate_id: ci.lastInsertRowid,
+          run_id: runId,
+          source_thinga_id: c.id || null,
+          score: c.score || 0,
+          tier: c.tier || null,
+          spend_allowed: Boolean(c.spend_allowed),
+          parser_family: "leadEngine.shortlist.v1",
+          data: c,
+        },
+      });
+    } catch (e) { console.error("thinga mirror lead-engine candidate (non-fatal):", e.message); }
+  }
+  return runId;
+}
+
+async function executeLeadEngineRun(opts = {}) {
+  const target = {
+    city: opts.city || undefined,
+    state: opts.state || undefined,
+    zip: opts.zip || undefined,
+    status: opts.status || "Active",
+    days: Math.max(1, Math.min(365, Number(opts.days) || 30)),
+  };
+  if (!target.city && !target.zip) throw new Error("Enter a city or ZIP.");
+  const buyers = db.prepare("SELECT * FROM buyers ORDER BY created_at DESC").all();
+  const buyerCandidates = buyerCandidateRows();
+  const searchPlan = searchPlanFromRequest(opts);
+  const cycle = await runAutonomousLeadCycle({
+    registry,
+    target,
+    sourceHealth,
+    thingaStore: thinga,
+    buyers,
+    buyerCandidates,
+    sourceLimit: searchPlan.maxConnectors == null ? null : Math.max(0, Math.min(100, Number(searchPlan.maxConnectors) || 0)),
+    resultLimitPerSource: Math.max(1, Math.min(500, Number(opts.resultLimitPerSource) || 100)),
+    shortlistLimit: Math.max(1, Math.min(100, Number(opts.shortlistLimit) || 25)),
+    searchPlan,
+  });
+  let councilDispatch = null;
+  if (opts.dispatchCouncil) {
+    councilDispatch = writeAndDispatchCouncilReview({
+      cycle,
+      target,
+      agents: Array.isArray(opts.agents) && opts.agents.length ? opts.agents : undefined,
+    });
+  }
+  const runId = persistLeadEngineCycle(cycle, { councilDispatch });
+  return { runId, cycle, councilDispatch };
+}
+
+const leadEngineConfig = () => normalizeLeadEngineSettings({
+  lead_engine_auto_hours: getSetting("lead_engine_auto_hours"),
+  lead_engine_city: getSetting("lead_engine_city"),
+  lead_engine_state: getSetting("lead_engine_state"),
+  lead_engine_zip: getSetting("lead_engine_zip"),
+  lead_engine_plan_id: getSetting("lead_engine_plan_id"),
+  lead_engine_source_limit: getSetting("lead_engine_source_limit"),
+  lead_engine_result_limit: getSetting("lead_engine_result_limit"),
+  lead_engine_shortlist_limit: getSetting("lead_engine_shortlist_limit"),
+  lead_engine_dispatch_council: getSetting("lead_engine_dispatch_council"),
+  last_lead_engine_run: getSetting("last_lead_engine_run"),
+  last_lead_engine_run_id: getSetting("last_lead_engine_run_id"),
+  last_lead_engine_error: getSetting("last_lead_engine_error"),
+});
+
+app.get("/api/lead-engine/settings", (req, res) => {
+  res.json(leadEngineConfig());
+});
+
+app.post("/api/lead-engine/settings", (req, res) => {
+  for (const [k, v] of Object.entries(leadEngineSettingsWrites(req.body || {}))) setSetting(k, v);
+  res.json({ ok: true, ...leadEngineConfig() });
+});
+
+app.post("/api/lead-engine/run", async (req, res) => {
+  const b = req.body || {};
+  try {
+    const { runId, cycle, councilDispatch } = await executeLeadEngineRun(b);
+    res.json({ ok: true, runId, cycle, councilDispatch });
+  } catch (e) {
+    const msg = String(e.message || e);
+    res.status(msg === "Enter a city or ZIP." ? 400 : 500).json({ error: msg });
+  }
+});
+
+let leadEngineAutoRunning = false;
+async function runScheduledLeadEngine() {
+  if (leadEngineAutoRunning) return;
+  const cfg = leadEngineConfig();
+  if (!cfg.autoHours || cfg.autoHours <= 0 || (!cfg.city && !cfg.zip)) return;
+  leadEngineAutoRunning = true;
+  try {
+    const { runId, cycle } = await executeLeadEngineRun({
+      city: cfg.city,
+      state: cfg.state,
+      zip: cfg.zip,
+      planId: cfg.planId,
+      sourceLimit: cfg.sourceLimit,
+      resultLimitPerSource: cfg.resultLimitPerSource,
+      shortlistLimit: cfg.shortlistLimit,
+      dispatchCouncil: cfg.dispatchCouncil,
+    });
+    setSetting("last_lead_engine_run", new Date().toISOString());
+    setSetting("last_lead_engine_run_id", String(runId));
+    setSetting("last_lead_engine_error", "");
+    console.log(`  Lead engine auto-run #${runId}: ${(cycle.shortlist || []).length} shortlisted`);
+  } catch (e) {
+    const msg = String(e.message || e);
+    setSetting("last_lead_engine_error", msg);
+    console.error("lead-engine auto-run error:", msg);
+  } finally {
+    leadEngineAutoRunning = false;
+  }
+}
+function maybeAutoLeadEngine() {
+  const cfg = leadEngineConfig();
+  const decision = leadEngineTickDecision(cfg);
+  if (decision.action === "disabled" || decision.action === "wait") return;
+  if (decision.action === "prime_clock") { setSetting("last_lead_engine_run", new Date().toISOString()); return; }
+  runScheduledLeadEngine();
+}
+setInterval(maybeAutoLeadEngine, 60 * 60 * 1000);
+setTimeout(maybeAutoLeadEngine, 60 * 1000);
+
+app.get("/api/lead-engine/runs", (req, res) => {
+  const rows = db.prepare(`SELECT id, created_at, target_json, raw_records, raw_thingas, converged_properties,
+      shortlist_count, dispatched_council, council_packet
+    FROM lead_engine_runs ORDER BY created_at DESC LIMIT ?`).all(Math.max(1, Math.min(100, Number(req.query.limit) || 20)));
+  res.json({ runs: rows.map((r) => ({ ...r, target: JSON.parse(r.target_json || "{}") })) });
+});
+
+app.get("/api/lead-engine/runs/:id/candidates", (req, res) => {
+  const run = db.prepare("SELECT * FROM lead_engine_runs WHERE id=?").get(req.params.id);
+  if (!run) return res.status(404).json({ error: "run not found" });
+  const rows = db.prepare(`SELECT id, run_id, created_at, thinga_id, address, score, tier, spend_allowed, lead_id, status, data_json
+    FROM lead_engine_candidates WHERE run_id=? ORDER BY score DESC`).all(req.params.id);
+  res.json({ run: { ...run, target: JSON.parse(run.target_json || "{}") }, candidates: rows.map((r) => ({ ...r, data: JSON.parse(r.data_json) })) });
+});
+
+app.get("/api/council/jobs", (req, res) => {
+  res.json({ jobs: listCouncilJobs({ limit: req.query.limit }) });
+});
+
+app.get("/api/council/participants", (req, res) => {
+  res.json({ participants: loadCouncilParticipants({ includeDisabled: req.query.includeDisabled === "1" }) });
+});
+
+app.get("/api/ecosystem/plans", (_req, res) => {
+  res.json({ plans: listSearchPlans() });
+});
+
+app.get("/api/ecosystem/plans/:id", (req, res) => {
+  const plan = getSearchPlan(req.params.id);
+  if (!plan) return res.status(404).json({ error: "search plan not found" });
+  res.json({ plan });
+});
+
+app.get("/api/ecosystem/plans/:id/children", (req, res) => {
+  const plan = getSearchPlan(req.params.id);
+  if (!plan) return res.status(404).json({ error: "search plan not found" });
+  const pid = planThingaId(plan.id);
+  const limit = Math.max(1, Math.min(250, Number(req.query.limit) || 80));
+  const ids = [...new Set(thinga.incomingLinks(pid).map((l) => l.from_id))];
+  const items = ids.map((id) => thinga.get(id)).filter(Boolean)
+    .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+    .slice(0, limit);
+  const counts = {};
+  for (const t of items) counts[t.kind] = (counts[t.kind] || 0) + 1;
+  res.json({ plan, plan_thinga_id: pid, counts, items });
+});
+
+app.post("/api/ecosystem/plans", (req, res) => {
+  try {
+    const plan = saveSearchPlan(req.body || {});
+    mirrorSearchPlanSafe(plan);
+    res.json({ ok: true, plan });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
+app.get("/api/ecosystem", (req, res) => {
+  const searchPlan = searchPlanFromRequest({
+    planId: req.query.planId,
+    sourceTypes: req.query.sourceTypes ? String(req.query.sourceTypes).split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+    connectorIds: req.query.connectorIds ? String(req.query.connectorIds).split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+    maxConnectors: req.query.maxConnectors,
+  });
+  res.json(buildEcosystemSnapshot({
+    registry,
+    participants: loadCouncilParticipants({ includeDisabled: req.query.includeDisabled === "1" }),
+    searchPlan,
+  }));
+});
+
+app.get("/api/council/jobs/:id", (req, res) => {
+  const job = readCouncilJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "council job not found" });
+  res.json({ job });
+});
+
+app.post("/api/council/jobs/:id/sync", (req, res) => {
+  try {
+    res.json({ ok: true, job: syncCouncilJobResponses(req.params.id) });
+  } catch (e) {
+    const msg = String(e.message || e);
+    res.status(msg.includes("not found") ? 404 : 500).json({ error: msg });
+  }
+});
+
+app.post("/api/council/jobs/:id/retry", (req, res) => {
+  try {
+    res.json({ ok: true, job: retryCouncilJob(req.params.id) });
+  } catch (e) {
+    const msg = String(e.message || e);
+    res.status(msg.includes("not found") ? 404 : 500).json({ error: msg });
+  }
+});
+
+app.patch("/api/lead-engine/candidates/:id", (req, res) => {
+  const c = db.prepare("SELECT * FROM lead_engine_candidates WHERE id=?").get(req.params.id);
+  if (!c) return res.status(404).json({ error: "candidate not found" });
+  const allowed = new Set(["shortlisted", "council_review", "approved_for_skiptrace", "rejected", "hold"]);
+  const status = String(req.body?.status || c.status);
+  if (!allowed.has(status)) return res.status(400).json({ error: "invalid status" });
+  db.prepare("UPDATE lead_engine_candidates SET status=? WHERE id=?").run(status, req.params.id);
+  res.json({ ok: true, status });
+});
+
+function candidateLeadPayload(candidate) {
+  const data = JSON.parse(candidate.data_json || "{}");
+  const prop = data.property || {};
+  const owner = data.owner || {};
+  const contact = data.contact || {};
+  const listing = data.listing || {};
+  const buyerLine = (data.buyer_matches || []).slice(0, 3)
+    .map((b) => `${b.name || "buyer"} (${b.score})`).join(", ");
+  const notes = [
+    `Lead engine score ${data.score}; tier ${data.tier}.`,
+    ...(data.reasons || []).map((r) => `Reason: ${r}`),
+    buyerLine ? `Buyer demand: ${buyerLine}` : null,
+    (data.spend_blocks || []).length ? `Spend blocks: ${data.spend_blocks.join("; ")}` : null,
+    `Thinga: ${data.id}`,
+  ].filter(Boolean).join("\n");
+  return {
+    seller_name: owner.owner_name || owner.seller_name || contact.contact_name || null,
+    seller_phone: contact.phone || contact.seller_phone || contact.listing_agent_phone || null,
+    seller_email: contact.email || contact.seller_email || contact.listing_agent_email || null,
+    address: prop.address || data.address || null,
+    city: prop.city || null,
+    state: prop.state || null,
+    zip: prop.zip || null,
+    property_type: prop.property_type || null,
+    asking_price: listing.price || null,
+    motivation: (data.reasons || []).join("; ") || "Lead engine shortlisted",
+    source: "Lead Engine",
+    notes,
+  };
+}
+
+function importCandidateToProspect(candidateId) {
+  const c = db.prepare("SELECT * FROM lead_engine_candidates WHERE id=?").get(candidateId);
+  if (!c) return { error: "candidate not found" };
+  if (c.lead_id && db.prepare("SELECT id FROM leads WHERE id=?").get(c.lead_id)) return { candidate: c, leadId: c.lead_id, already: true };
+  const lead = candidateLeadPayload(c);
+  if (!lead.address) return { error: "candidate has no address" };
+  const key = canonicalAddr(lead.address);
+  const existing = db.prepare("SELECT id FROM leads WHERE addr_canon=?").get(key);
+  if (existing) {
+    db.prepare("UPDATE lead_engine_candidates SET lead_id=?, status=? WHERE id=?").run(existing.id, "imported_prospect", candidateId);
+    return { candidate: { ...c, lead_id: existing.id }, leadId: existing.id, duplicate: true };
+  }
+  const t = now();
+  const info = db.prepare(`INSERT INTO leads
+      (created_at, updated_at, stage, active, seller_name, seller_phone, seller_email, address, city, state, zip,
+       property_type, asking_price, motivation, source, notes)
+      VALUES (?, ?, 'New', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(t, t, lead.seller_name, lead.seller_phone, lead.seller_email, lead.address, lead.city, lead.state, lead.zip,
+      lead.property_type, lead.asking_price, lead.motivation, lead.source, lead.notes);
+  setCanon(info.lastInsertRowid, lead.address);
+  logActivity(info.lastInsertRowid, "note", "Imported from Lead Engine candidate.\n" + lead.notes);
+  mirrorLeadSafe(info.lastInsertRowid);
+  db.prepare("UPDATE lead_engine_candidates SET lead_id=?, status=? WHERE id=?").run(info.lastInsertRowid, "imported_prospect", candidateId);
+  return { candidate: { ...c, lead_id: info.lastInsertRowid }, leadId: info.lastInsertRowid, already: false };
+}
+
+app.post("/api/lead-engine/candidates/:id/import", (req, res) => {
+  const out = importCandidateToProspect(req.params.id);
+  if (out.error) return res.status(out.error === "candidate not found" ? 404 : 400).json({ error: out.error });
+  res.json({ ok: true, leadId: out.leadId, already: Boolean(out.already), duplicate: Boolean(out.duplicate) });
+});
+
+app.post("/api/lead-engine/candidates/:id/skiptrace", async (req, res) => {
+  let c = db.prepare("SELECT * FROM lead_engine_candidates WHERE id=?").get(req.params.id);
+  if (!c) return res.status(404).json({ error: "candidate not found" });
+  if (c.status !== "approved_for_skiptrace" && !(req.body && req.body.force)) {
+    return res.status(409).json({ error: "candidate must be approved_for_skiptrace before paid phone spend" });
+  }
+  if (!batchdataKey()) return res.status(400).json({ error: "Connect BatchData first (Acquisitions -> Connect skip tracing)." });
+  const imported = importCandidateToProspect(req.params.id);
+  if (imported.error) return res.status(400).json({ error: imported.error });
+  c = db.prepare("SELECT * FROM lead_engine_candidates WHERE id=?").get(req.params.id);
+  const lead = db.prepare("SELECT * FROM leads WHERE id=?").get(imported.leadId);
+  if (!lead || !lead.address) return res.status(400).json({ error: "candidate lead has no address" });
+  const st = await skipTraceOne(lead.address);
+  if (!st.ok) return res.status(502).json({ error: st.error === "bad_key" ? "BatchData rejected the key." : "Skip trace failed: " + st.error });
+  const applied = applySkipTrace(lead.id, st);
+  mirrorLeadSafe(lead.id);
+  db.prepare("UPDATE lead_engine_candidates SET status=? WHERE id=?").run("skiptraced", req.params.id);
+  res.json({ ok: true, leadId: lead.id, phones: st.phones.map(fmtPhone), emails: st.emails, phone: applied.phone, email: applied.email });
 });
 
 // ---- Built-in map: free OpenStreetMap pins + free Census geocoding (no keys) ----
