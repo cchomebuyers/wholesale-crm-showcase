@@ -79,7 +79,10 @@ export function valueState(record = {}, spread) {
 // lead_score with bumps for the things a wholesaler actually values: real contact,
 // known value, and a spread that can work.
 function priorityScore(record, dist, contact, value, sig) {
-  let s = num(record.lead_score) ?? num(record.wholesale_score) ?? num(record.distress_score) ?? 0;
+  const base = num(record.lead_score) ?? num(record.wholesale_score) ?? num(record.distress_score) ?? 0;
+  // weight the source/distress base at 0.5 so enrichment + owner signals have headroom to
+  // differentiate (otherwise a flat per-source lead_score saturates everyone at 100).
+  let s = base * 0.5;
   if (dist.fromSource) s += 4;
   if (contact.ownerName) s += 6;
   if (contact.callable) s += 8;
