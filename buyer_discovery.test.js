@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BUYER_DISCOVERY_SOURCE_FAMILIES, normalizeBuyerCandidate, rankBuyerDemand } from "./buyer_discovery.js";
+import { BUYER_DISCOVERY_SOURCE_FAMILIES, normalizeBuyerCandidate, rankBuyerDemand, isRealBuyer, buyerConfidence } from "./buyer_discovery.js";
 
 test("normalizes future buyer candidates into buyer-compatible buy boxes", () => {
   const c = normalizeBuyerCandidate({
@@ -27,6 +27,20 @@ test("buyer demand ranks CRM buyers and discovered candidates together", () => {
   assert.equal(out.all.length, 2);
   assert.ok(out.all[0].score >= 70);
   assert.equal(out.gaps.length, 0);
+});
+
+test("isRealBuyer rejects title/land-trust/agency vehicles, keeps real investors", () => {
+  assert.equal(isRealBuyer("GRANDVIEW HOMES 1, LLC"), true);
+  assert.equal(isRealBuyer("KENDALL PARTNERS LTD"), true);
+  assert.equal(isRealBuyer("CHICAGO TITLE LAND TRUST COMPANY"), false);
+  assert.equal(isRealBuyer("TULE RIVER HOMEBUYER EARNED EQUITY AGENCY"), false);
+  assert.equal(isRealBuyer("CITY OF CHICAGO"), false);
+});
+
+test("buyerConfidence scales with purchase volume", () => {
+  assert.equal(buyerConfidence(118), "high");
+  assert.equal(buyerConfidence(12), "medium");
+  assert.equal(buyerConfidence(5), "low");
 });
 
 test("buyer discovery source families are data, not hardcoded buyer count", () => {
