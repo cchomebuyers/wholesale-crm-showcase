@@ -14,3 +14,7 @@ data/leads_1000_with_phone.jsonl
 data/leads_accumulating.jsonl
 data/.harvest_state.json
 data/leads_workflow_1000.jsonl
+# pro queue: snapshot is a regenerable derived artifact (churns every build); keep the small summary committed
+data/pro_queue_snapshot.jsonl
+data/properties_accumulating.jsonl
+data/.property_harvest_state.json
