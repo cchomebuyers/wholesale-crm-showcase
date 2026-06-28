@@ -218,6 +218,16 @@ export function evaluateWholesaleSpread(record = {}, options = {}) {
   };
 }
 
+// Max Allowable Offer: the wholesaler's offer ceiling to the seller given an ARV.
+// MAO = ARV*buyerPct - repairs - target fee. repairs falls back to sqft*rehabPerSqft, else 0.
+export function maoFromArv(arv, repairs = null, { buyerPct = 70, minFee = 10000, rehabPerSqft = 25, sqft = null } = {}) {
+  const a = num(arv);
+  if (!a) return null;
+  const rep = repairs != null ? (num(repairs) ?? 0) : (num(sqft) ? Math.round(num(sqft) * rehabPerSqft) : 0);
+  const mao = Math.round(a * (buyerPct / 100) - rep - (num(minFee) ?? 10000));
+  return mao > 0 ? mao : 0;
+}
+
 export function summarizeSpreadAudits(audits = []) {
   const counts = { total: audits.length, works: 0, thin: 0, fails: 0, unproven: 0 };
   for (const a of audits) counts[a.status] = (counts[a.status] || 0) + 1;

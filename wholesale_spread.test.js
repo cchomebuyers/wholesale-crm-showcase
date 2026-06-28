@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { evaluateWholesaleSpread, summarizeSpreadAudits } from "./wholesale_spread.js";
+import { evaluateWholesaleSpread, summarizeSpreadAudits, maoFromArv } from "./wholesale_spread.js";
+
+test("maoFromArv = ARV*70% - repairs - fee, with sqft fallback for repairs", () => {
+  assert.equal(maoFromArv(200000, 30000, { minFee: 10000 }), 100000); // 140k-30k-10k
+  assert.equal(maoFromArv(200000, null, { sqft: 1000, rehabPerSqft: 25, minFee: 10000 }), 105000); // repairs 25k
+  assert.equal(maoFromArv(50000, 60000, { minFee: 10000 }), 0); // never negative
+  assert.equal(maoFromArv(null), null);
+});
 
 test("profitable wholesale spread requires buyer price above seller acceptable price", () => {
   const r = evaluateWholesaleSpread({

@@ -25,7 +25,8 @@ const sig = (j, k) => { try { return JSON.parse(j)[k]; } catch { return null; } 
 
 const rows = db.prepare(`
   SELECT q.priority_score, q.tier, q.next_action, q.signals_json, q.spend_allowed,
-         p.address, p.formatted_address, p.city, p.state, p.county, p.source, p.owner_name, p.owner_mailing
+         p.address, p.formatted_address, p.city, p.state, p.county, p.source, p.owner_name, p.owner_mailing,
+         p.arv, p.mao
   FROM pro_queue q JOIN properties p ON p.id = q.property_id
   WHERE q.tier IN ('call_now','pay_to_unlock') AND p.owner_name IS NOT NULL AND p.owner_name<>''
   ORDER BY CASE q.tier WHEN 'call_now' THEN 0 ELSE 1 END, q.priority_score DESC
@@ -52,12 +53,13 @@ lines.push("every row below is owner-known + distressed + has investor demand = 
 lines.push("");
 lines.push(`## Top ${rows.length} skip-trace targets`);
 lines.push("");
-lines.push("| # | priority | address | owner | absentee | entity | buyer demand | next action |");
-lines.push("|---|---|---|---|---|---|---|---|");
+const money = (v) => (Number(v) > 0 ? "$" + Math.round(Number(v)).toLocaleString() : "—");
+lines.push("| # | priority | address | owner | absentee | entity | ARV | max offer (MAO) | buyer demand | next action |");
+lines.push("|---|---|---|---|---|---|---|---|---|---|");
 rows.forEach((r, i) => {
   const addr = (r.address || r.formatted_address || "?") + (r.city && r.city !== "1" ? `, ${r.city}` : "") + (r.state ? ` ${r.state}` : "");
   const bm = sig(r.signals_json, "buyer_demand");
-  lines.push(`| ${i + 1} | ${r.priority_score} | ${addr} | ${r.owner_name} | ${flag(sig(r.signals_json, "absentee_owner"))} | ${flag(sig(r.signals_json, "entity_owner"))} | ${bm ? "yes" : "no"} | ${r.next_action} |`);
+  lines.push(`| ${i + 1} | ${r.priority_score} | ${addr} | ${r.owner_name} | ${flag(sig(r.signals_json, "absentee_owner"))} | ${flag(sig(r.signals_json, "entity_owner"))} | ${money(r.arv)} | ${money(r.mao)} | ${bm ? "yes" : "no"} | ${r.next_action} |`);
 });
 lines.push("");
 
