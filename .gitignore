@@ -30,3 +30,7 @@ data/.listing_poll_state.json
 data/.property_photo_state.json
 data/pro_queue_report.md
 pursuableLeads/
+# CLAUDE-B regenerable report outputs (keep tools tracked, not their output)
+data/property_grade_report.md
+data/owner_portfolios.md
+data/enrichment_priority.md
