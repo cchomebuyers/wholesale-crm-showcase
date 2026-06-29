@@ -24,7 +24,7 @@ import { resolveContactRoute } from "./contact_route_engine.js";
 import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
 import { complianceCheck } from "./compliance_gate.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
-import { buildProofStack } from "./proof_stack.js";
+import { buildProofStack, buyerSafeProofStack } from "./proof_stack.js";
 import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
 import { buildPropertyKgEvidenceView } from "./kg_evidence_view.js";
 import { buildInvestorMarketplace } from "./investor_marketplace.js";
@@ -2090,30 +2090,47 @@ app.get("/api/pro-queue", (req, res) => {
 // Proof stack — one property's full evidence ledger (signal, owner, valuation,
 // buyer demand, seller price, spread+buyer-acceptance, queue decision) assembled
 // read-only via proof_stack.buildProofStack. NORTH_STAR_VISION.md #5.
+// Build the full (internal) proof stack for a property id, or null if not found.
+function proofStackForProperty(id) {
+  const p = db.prepare("SELECT * FROM properties WHERE id=?").get(id);
+  if (!p) return null;
+  const cfg = acqConfig();
+  const buyers = db.prepare("SELECT * FROM buyers ORDER BY created_at DESC").all();
+  const buyerCandidates = buyerCandidateRows();
+  const demand = rankBuyerDemand({ property: p, crmBuyers: buyers, discoveredCandidates: buyerCandidates, limit: 5 });
+  const bestSeller = bestStoredSellerPrice("property", id);
+  const spread = evaluateWholesaleSpread({
+    ...p,
+    seller_acceptable_price: bestSeller?.price,
+    seller_price_source: bestSeller?.source,
+    seller_price_evidence: bestSeller,
+    buyer_matches: demand.all,
+  }, cfg);
+  return buildProofStack(p, { spread, buyerMatches: demand.all, sellerEvidence: bestSeller, spreadOptions: cfg });
+}
+
 app.get("/api/proof-stack/:id", (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "id must be a number" });
-    const p = db.prepare("SELECT * FROM properties WHERE id=?").get(id);
-    if (!p) return res.status(404).json({ error: "property not found", id });
-    const cfg = acqConfig();
-    const buyers = db.prepare("SELECT * FROM buyers ORDER BY created_at DESC").all();
-    const buyerCandidates = buyerCandidateRows();
-    const demand = rankBuyerDemand({ property: p, crmBuyers: buyers, discoveredCandidates: buyerCandidates, limit: 5 });
-    const bestSeller = bestStoredSellerPrice("property", id);
-    const spread = evaluateWholesaleSpread({
-      ...p,
-      seller_acceptable_price: bestSeller?.price,
-      seller_price_source: bestSeller?.source,
-      seller_price_evidence: bestSeller,
-      buyer_matches: demand.all,
-    }, cfg);
-    res.json(buildProofStack(p, {
-      spread,
-      buyerMatches: demand.all,
-      sellerEvidence: bestSeller,
-      spreadOptions: cfg,
-    }));
+    const proof = proofStackForProperty(id);
+    if (!proof) return res.status(404).json({ error: "property not found", id });
+    res.json(proof);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// Buyer-safe view — what an external investor on the marketplace may see. Redacts
+// seller identity/contact, exact address, our acquisition cost/margin, and
+// competing buyer names (proof_stack.buyerSafeProofStack). NORTH_STAR_VISION.md #3.
+app.get("/api/proof-stack/:id/buyer", (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "id must be a number" });
+    const proof = proofStackForProperty(id);
+    if (!proof) return res.status(404).json({ error: "property not found", id });
+    res.json(buyerSafeProofStack(proof));
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }

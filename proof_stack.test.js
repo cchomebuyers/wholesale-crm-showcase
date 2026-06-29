@@ -1,7 +1,7 @@
 // proof_stack.test.js -- the per-property evidence ledger (NORTH_STAR_VISION #5).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildProofStack } from "./proof_stack.js";
+import { buildProofStack, buyerSafeProofStack } from "./proof_stack.js";
 
 // A fully-proven distressed deal: real signal, absentee entity owner, ARV, a
 // matching buyer, a seller anchor, and a spread that holds.
@@ -92,4 +92,59 @@ test("precomputed spread/queue are honored (no recompute) and engine failure deg
   assert.equal(ps.evidence.spread.projected_spread, 12000);
   assert.equal(ps.decision.tier, "call_now");
   assert.equal(ps.decision.priority_score, 99);
+});
+
+// ---- buyer-safe marketplace view: the internal-only seller boundary ----
+
+const internalProof = buildProofStack({
+  id: 39,
+  formatted_address: "11306 S DRAKE AVE",
+  city: "Chicago", state: "IL", zip: "60655", county: "Cook County",
+  source: "cook-il-violations",
+  lead_score: 80, distress_score: 82,
+  owner_name: "TERRENCE SHANKLIN", owner_mailing: "3501 OLYMPUS BLVD #500",
+  owner_source: "cook-il-parcel-addresses",
+  arv: 314812, repair_estimate: 45000, contract_price: 90000,
+}, {
+  buyerMatches: [{ name: "ACCEL CAPITAL LLC", max_price: 170000 }, { name: "119TH STREET GROUP LLC", max_price: 225000 }],
+  sellerEvidence: { price: 90000, source: "contract_price", confidence: "high" },
+});
+
+test("buyer-safe view exposes deal economics, not seller identity/cost", () => {
+  const v = buyerSafeProofStack(internalProof);
+  assert.equal(v.opportunity_id, "OPP-39");
+  assert.equal(v.location.city, "Chicago");
+  assert.equal(v.location.zip, "60655");
+  assert.equal(v.opportunity_type, "Code violation");
+  assert.equal(v.valuation.arv, 314812);
+  assert.ok("buyer_assignment_price" in v.economics);
+  assert.ok("buyer_acceptance_rating" in v.economics);
+  assert.equal(v.demand.interested_investors, 2); // count, not names
+  assert.ok(Array.isArray(v.disclosures) && v.disclosures.length >= 2);
+});
+
+test("buyer-safe view NEVER leaks seller identity, exact address, our cost, or competing buyer names", () => {
+  const v = buyerSafeProofStack(internalProof);
+  const blob = JSON.stringify(v);
+  // seller / owner identity + contact
+  assert.ok(!blob.includes("TERRENCE SHANKLIN"), "owner name leaked");
+  assert.ok(!blob.includes("OLYMPUS"), "owner mailing leaked");
+  assert.ok(!/owner_name|owner_mailing|owner_source/.test(blob), "owner field leaked");
+  // exact street address
+  assert.ok(!blob.includes("11306"), "street address leaked");
+  assert.ok(!blob.includes("S DRAKE"), "street address leaked");
+  // our cost basis / fee / margin
+  assert.ok(!/seller_anchor_price|acquisition_offer_price|projected_spread|anchor_spread/.test(blob), "internal price field leaked");
+  assert.ok(!blob.includes("90000"), "seller/contract price (our cost) leaked");
+  // competing buyer identities
+  assert.ok(!blob.includes("ACCEL CAPITAL"), "competing buyer name leaked");
+  assert.ok(!blob.includes("119TH STREET"), "competing buyer name leaked");
+});
+
+test("buyer-safe view degrades cleanly on an empty/sparse proof", () => {
+  const v = buyerSafeProofStack(buildProofStack({ id: 7, source: "sandiego-ca-parcels", lead_score: 40 }));
+  assert.equal(v.opportunity_id, "OPP-7");
+  assert.equal(v.demand.interested_investors, 0);
+  assert.equal(v.confidence.deal_ready, false);
+  assert.equal(v.economics.buyer_acceptance_rating, "unknown");
 });

@@ -194,3 +194,90 @@ function scoreCompleteness(evidence) {
 function safe(fn) {
   try { return fn(); } catch { return null; }
 }
+
+// ---------------------------------------------------------------------------
+// Buyer-safe view: what an EXTERNAL investor on the marketplace may see.
+//
+// NORTH_STAR_VISION.md #3 (investor marketplace — "buyers see deals matched to
+// their buy-box") + CLAUDE.md ground rule 2 / LOOP_PROMPT hard rules: seller
+// identity and contact are internal-only; our acquisition cost and fee are our
+// negotiating position. A buyer is sold on the DEAL (value + their profit), never
+// on the seller's name, exact address, or how little we're paying. This is the
+// deal-safe boundary the marketplace UI/API must call before exposing a property.
+
+// Public opportunity label — keeps the buyer informed of the distress *type*
+// without leaking the internal source id (which reveals the locale/dataset).
+const OPP_TYPES = [
+  [/violation|code[_-]?enforce|nuisance|unsafe/i, "Code violation"],
+  [/vacant|abandon/i, "Vacant / abandoned"],
+  [/condemn|demol|blight/i, "Condemned / blighted"],
+  [/delinquen|tax/i, "Tax-delinquent"],
+  [/forecl/i, "Pre-foreclosure"],
+  [/probate/i, "Probate"],
+  [/lien/i, "Lien"],
+];
+function opportunityType(label) {
+  const s = str(label);
+  for (const [rx, name] of OPP_TYPES) if (rx.test(s)) return name;
+  return "Distressed opportunity";
+}
+
+// Fields a buyer must never see, asserted by tests so a future refactor can't
+// silently leak them back in.
+export const INTERNAL_ONLY_FIELDS = [
+  "owner_name", "owner_mailing", "owner_source",
+  "address", "seller_anchor_price", "acquisition_offer_price",
+  "projected_spread", "anchor_spread", "best", "reasons",
+];
+
+/**
+ * Redact a full proof stack into the marketplace-safe view.
+ * @param {object} proof - result of buildProofStack()
+ * @returns {object} deal-safe object (no seller identity/contact, no exact
+ *                   address, no acquisition cost/margin, no competing buyer names)
+ */
+export function buyerSafeProofStack(proof = {}) {
+  const e = proof.evidence || {};
+  const acc = e.spread?.buyer_acceptance || {};
+  return {
+    opportunity_id: proof.property_id != null ? `OPP-${proof.property_id}` : null,
+    location: {
+      // city/state/zip/county only — never the street address (protects the
+      // lead from being poached and the seller from being identified).
+      city: proof.identity?.city ?? null,
+      state: proof.identity?.state ?? null,
+      zip: proof.identity?.zip ?? null,
+      county: proof.identity?.county ?? null,
+      property_type: proof.identity?.property_type ?? null,
+    },
+    opportunity_type: opportunityType(e.signal?.label),
+    valuation: {
+      arv: e.valuation?.arv ?? null,
+      mao: e.valuation?.mao ?? null,
+      estimated_repairs: e.valuation?.repairs ?? null,
+    },
+    // The buyer-facing economics: THEIR price and THEIR upside — never our cost
+    // basis (seller anchor / acquisition offer) or our fee (projected_spread).
+    economics: {
+      buyer_assignment_price: e.spread?.buyer_assignment_price ?? null,
+      projected_buyer_profit: acc.profit ?? null,
+      buyer_acceptance_score: acc.score ?? null,
+      buyer_acceptance_rating: acc.rating ?? "unknown",
+    },
+    demand: {
+      // count only — never the names of competing buyers.
+      interested_investors: e.buyer_demand?.count ?? 0,
+    },
+    confidence: {
+      completeness_score: proof.completeness?.score ?? null,
+      deal_ready: proof.completeness?.deal_ready ?? false,
+    },
+    disclosures: [
+      "Assignment of contract: the buyer pays the assignment price shown.",
+      "Seller identity and contact are withheld until a contract is in place.",
+      "Figures are estimates from public-record evidence; verify before closing.",
+    ],
+    redacted: ["seller identity", "seller contact", "exact street address", "acquisition cost & margin", "competing buyer identities"],
+    built_at: proof.built_at || new Date().toISOString(),
+  };
+}
