@@ -41,7 +41,7 @@ test("full-evidence property assembles all seven pillars with high completeness"
   // completeness + citations + decision
   assert.equal(ps.completeness.score, 1);
   assert.deepEqual(ps.completeness.missing, []);
-  assert.equal(ps.citations.length, 7);
+  assert.equal(ps.citations.length, 8); // 8th citation = field_edges candidate identity edges
   assert.ok(ps.decision && ps.decision.tier);
 });
 
@@ -147,4 +147,38 @@ test("buyer-safe view degrades cleanly on an empty/sparse proof", () => {
   assert.equal(v.demand.interested_investors, 0);
   assert.equal(v.confidence.deal_ready, false);
   assert.equal(v.economics.buyer_acceptance_rating, "unknown");
+});
+
+// ---- identity-graph context: fields propose edges (NORTH_STAR_VISION #2) ----
+
+test("proof stack exposes candidate identity edges from the property's fields", () => {
+  const ps = buildProofStack({
+    id: 39, formatted_address: "11306 S DRAKE AVE", city: "Chicago", state: "IL",
+    source: "cook-il-violations", owner_name: "TERRENCE SHANKLIN",
+    owner_mailing: "3501 OLYMPUS BLVD #500", owner_source: "cook-assessor",
+    arv: 314812, repair_estimate: 45000,
+  });
+  assert.ok(ps.graph.edge_count >= 1, "edges proposed from owner/address fields");
+  assert.ok(ps.graph.reachable_kinds.includes("person") || ps.graph.reachable_kinds.includes("business"));
+  // candidate, never auto-confirmed
+  assert.ok(ps.graph.candidate_edges.every((e) => e.status === "candidate"));
+  // graph is a cited pillar
+  assert.ok(ps.citations.some((c) => c.module.includes("field_edges")));
+});
+
+test("a parcel-only record with no joinable fields yields an empty graph (no false edges)", () => {
+  const ps = buildProofStack({ id: 7, source: "sandiego-ca-parcels" });
+  assert.equal(ps.graph.edge_count, 0);
+  assert.deepEqual(ps.graph.reachable_kinds, []);
+});
+
+test("buyer-safe graph summary leaks no edge values (owner name/mailing stay internal)", () => {
+  const ps = buildProofStack({
+    id: 39, formatted_address: "11306 S DRAKE AVE", source: "cook-il-violations",
+    owner_name: "TERRENCE SHANKLIN", owner_mailing: "3501 OLYMPUS BLVD #500", owner_source: "cook-assessor",
+  });
+  const v = buyerSafeProofStack(ps);
+  assert.equal(v.graph_summary.candidate_links, ps.graph.edge_count);
+  const blob = JSON.stringify(v.graph_summary);
+  assert.ok(!/SHANKLIN|OLYMPUS|owner_name|match_key|value/.test(blob), "graph summary leaked a value");
 });
