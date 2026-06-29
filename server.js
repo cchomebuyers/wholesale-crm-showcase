@@ -27,6 +27,7 @@ import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller
 import { buildProofStack } from "./proof_stack.js";
 import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
 import { buildPropertyKgEvidenceView } from "./kg_evidence_view.js";
+import { buildInvestorMarketplace } from "./investor_marketplace.js";
 import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
 import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSettings } from "./lead_engine_scheduler.js";
 import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
@@ -2081,6 +2082,42 @@ app.get("/api/kg/properties/:id/evidence", async (req, res) => {
     });
   } finally {
     await pool.end();
+  }
+});
+
+// Investor marketplace -- buyer-facing deal read model. This uses buyer buy-box
+// matching plus proof/economics, but deliberately redacts seller contact and keeps
+// outreach behind the compliance-gated route/proof stack.
+app.get("/api/investor-marketplace/deals", (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 25));
+    const scanLimit = Math.max(limit, Math.min(5000, Number(req.query.scan_limit) || 1000));
+    const minBuyerScore = Math.max(0, Math.min(100, Number(req.query.min_buyer_score) || 45));
+    const properties = db.prepare(`SELECT id, formatted_address, address, city, state, zip, county, property_type,
+        source, source_id, lead_score, motivation_score, distress_score, wholesale_score,
+        arv, repair_estimate, mao, spread, price, owner_name, owner_mailing, owner_source,
+        latitude, longitude, updated_at
+      FROM properties
+      ORDER BY COALESCE(wholesale_score, lead_score, distress_score, 0) DESC, updated_at DESC
+      LIMIT ?`).all(scanLimit);
+    const sellerEvidenceByPropertyId = {};
+    for (const p of properties) {
+      const ev = bestStoredSellerPrice("property", p.id);
+      if (ev) sellerEvidenceByPropertyId[p.id] = ev;
+    }
+    const out = buildInvestorMarketplace({
+      properties,
+      crmBuyers: db.prepare("SELECT * FROM buyers ORDER BY created_at DESC").all(),
+      discoveredCandidates: buyerCandidateRows(),
+      sellerEvidenceByPropertyId,
+      spreadOptions: acqConfig(),
+      limit,
+      minBuyerScore,
+      includeUnmatched: req.query.include_unmatched === "1",
+    });
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
   }
 });
 
