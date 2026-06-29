@@ -47,16 +47,16 @@ export function scoreRoute(route, src, { knownSet }) {
  *   sourcePolicy - override policy (defaults to source_policy_registry.json)
  * @returns { goal, best_path, fallback_paths, all, reachable_fields }
  */
-export function planRoutes({ goal, known = [], maxCost = null, hasKeys = {}, sourcePolicy = policy } = {}) {
+export function planRoutes({ goal, known = [], maxCost = null, hasKeys = {}, sourcePolicy = policy, routeFamilies = ROUTE_FAMILIES } = {}) {
   const sources = sourcePolicy.sources || {};
   const knownSet = new Set(known);
 
   // Reachable fields: known ∪ everything a GREEN/YELLOW route (whose requires are met) can produce.
   // One expansion pass enables 2-hop chains (address -> owner -> [owner+address] -> skiptrace).
   const reachable = new Set(knownSet);
-  for (let pass = 0; pass < ROUTE_FAMILIES.length; pass++) {
+  for (let pass = 0; pass < routeFamilies.length; pass++) {
     let grew = false;
-    for (const r of ROUTE_FAMILIES) {
+    for (const r of routeFamilies) {
       const src = sources[r.source];
       if (!src || src.class === "RED") continue;
       if (r.requires.every((f) => reachable.has(f))) {
@@ -66,7 +66,7 @@ export function planRoutes({ goal, known = [], maxCost = null, hasKeys = {}, sou
     if (!grew) break;
   }
 
-  const candidates = ROUTE_FAMILIES.filter((r) => r.produces.includes(goal));
+  const candidates = routeFamilies.filter((r) => r.produces.includes(goal));
   const planned = candidates.map((r) => {
     const src = sources[r.source];
     const blocked = [];

@@ -1,8 +1,25 @@
 // parser_registry.test.js -- the engine is config #1, not real-estate-only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerKind, getKind, listKinds, fieldJoinsFor } from "./parser_registry.js";
+import { registerKind, getKind, listKinds, fieldJoinsFor, routeFamiliesFor } from "./parser_registry.js";
 import { proposeEdges, extractFields } from "./field_edges.js";
+import { planRoutes } from "./route_planner.js";
+
+test("route planning works for a NON-real-estate domain via its registered route families", () => {
+  const fams = routeFamiliesFor("smb");
+  assert.ok(Array.isArray(fams) && fams.length >= 1);
+  // an smb with a known business address can plan a legal route to a phone (business-license route)
+  const plan = planRoutes({ goal: "phone", known: ["address"], routeFamilies: fams });
+  assert.ok(plan.best_path, "smb finds a route to phone");
+  assert.equal(plan.best_path.route, "smb_address_license_phone");
+  assert.notEqual(plan.best_path.class, "RED");
+  assert.equal(plan.best_path.outreach_allowed, false); // planning never authorizes outreach
+});
+
+test("default planRoutes (no routeFamilies arg) still uses the real-estate families", () => {
+  const plan = planRoutes({ goal: "owner_name", known: ["address"] });
+  assert.equal(plan.best_path.route, "address_to_parcel_to_owner"); // backward compatible
+});
 
 test("real estate is registered as config #1", () => {
   assert.ok(listKinds().includes("realEstate"));

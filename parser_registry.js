@@ -7,15 +7,17 @@ import { FIELD_JOIN_REGISTRY } from "./field_edges.js";
 
 const REGISTRY = new Map();
 
-/** Register a kind. fieldJoins is the schema's field -> [{to,confidence,reversible}] map. */
-export function registerKind(kind, { fieldJoins, schema } = {}) {
+/** Register a kind. fieldJoins is the schema's field -> [{to,confidence,reversible}] map.
+ *  routeFamilies (optional) lets a domain plan contact routes over its own kinds. */
+export function registerKind(kind, { fieldJoins, schema, routeFamilies = null } = {}) {
   if (!kind || !fieldJoins) throw new Error("registerKind needs a kind and fieldJoins");
-  REGISTRY.set(kind, { kind, schema: schema || `${kind}.v1`, fieldJoins });
+  REGISTRY.set(kind, { kind, schema: schema || `${kind}.v1`, fieldJoins, routeFamilies });
   return REGISTRY.get(kind);
 }
 export function getKind(kind) { return REGISTRY.get(kind) || null; }
 export function listKinds() { return [...REGISTRY.keys()]; }
 export function fieldJoinsFor(kind) { const k = REGISTRY.get(kind); return k ? k.fieldJoins : null; }
+export function routeFamiliesFor(kind) { const k = REGISTRY.get(kind); return k ? k.routeFamilies : null; }
 
 // ---- config #1: real estate (reuse the built-in field-join registry) ----
 registerKind("realEstate", { schema: "realEstate.v1", fieldJoins: FIELD_JOIN_REGISTRY });
@@ -33,4 +35,9 @@ registerKind("smb", {
     owner_name:    [{ to: "person", confidence: 0.6, reversible: false }],
     license_id:    [{ to: "license", confidence: 0.95, reversible: true }],
   },
+  // smb route families: reuse the same GREEN sources via route_planner.planRoutes({ routeFamilies }).
+  routeFamilies: [
+    { id: "smb_address_license_phone", produces: ["phone"], requires: ["address"], source: "business_license", steps: ["match_license_by_address"], base_confidence: 0.72 },
+    { id: "smb_name_sos_agent", produces: ["registered_agent"], requires: ["business_name"], source: "secretary_of_state", steps: ["lookup_entity", "resolve_registered_agent"], base_confidence: 0.7 },
+  ],
 });
