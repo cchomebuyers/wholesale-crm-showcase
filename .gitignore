@@ -3,6 +3,7 @@ node_modules/
 crm.db
 backups/
 server.log
+logs/
 crm.db-journal
 crm.db-wal
 crm.db-shm
