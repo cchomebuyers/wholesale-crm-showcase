@@ -553,6 +553,52 @@ table.sched td:first-child, table.sched th:first-child, table.sched td:nth-child
 .msg-meta { color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px; line-height: 1.5; }
 .msg-body { font-size: 14px; line-height: 1.6; max-height: 38vh; overflow-y: auto; white-space: normal; }
 .col-head label.cfg-check { margin-left: auto; }
+
+/* Seller intake */
+.seller-intake-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.si-stat {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.si-stat b { display: block; font-size: 20px; line-height: 1.1; }
+.si-stat span { color: var(--muted); font-size: 12px; }
+.si-stat.wide { grid-column: span 2; }
+.seller-intake-list { display: flex; flex-direction: column; gap: 8px; }
+.seller-intake-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.seller-intake-card.priority-hot { border-left-color: var(--green); }
+.seller-intake-card.priority-warm { border-left-color: var(--amber); }
+.si-main { flex: 1; min-width: 0; }
+.si-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.si-address { margin-top: 3px; font-weight: 600; }
+.si-action { margin-top: 7px; color: #cdd3dd; font-size: 13px; }
+.si-side {
+  min-width: 130px;
+  text-align: right;
+  font-size: 12px;
+}
+.si-side b { display: block; font-size: 24px; line-height: 1; }
+.si-side span { color: var(--muted); }
+@media (max-width: 760px) {
+  .seller-intake-card { flex-direction: column; }
+  .si-side { text-align: left; min-width: 0; }
+  .si-stat.wide { grid-column: auto; }
+}
 .autopull { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #14233a; border: 1px solid #2b3b52; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
 .autopull label { margin-left: auto; white-space: nowrap; }
 .autopull input { width: 60px; }

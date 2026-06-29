@@ -28,6 +28,7 @@ $$(".tab").forEach((b) =>
     if (b.dataset.tab === "dealcalc") { fillAttachLeads(); applyOfferType(); runDealCalc(); }
     if (b.dataset.tab === "outreach") openOutreach();
     if (b.dataset.tab === "inbox") openInbox();
+    if (b.dataset.tab === "seller-intake") loadSellerIntake();
     if (b.dataset.tab === "offers") loadOffers();
     if (b.dataset.tab === "acquisitions") openAcquisitions();
     if (b.dataset.tab === "sources") { loadSearchPlans(); loadEcosystemMeta(); loadSources(); loadSpreadAudit(); loadEngineHistory(); loadLeadEngineSettings(); loadCouncilJobs(); }
@@ -2471,6 +2472,70 @@ document.addEventListener("click", (e) => {
   if (p && p.style.display === "block" && !e.target.closest("#notifPanel") && !e.target.closest("#bellBtn")) p.style.display = "none";
 });
 setInterval(loadNotifications, 90000);
+
+// ---------- Seller intake (first-party consent queue) ----------
+let sellerIntake = null;
+function channelLabel(ch) {
+  return ch === "sms" ? "text" : ch;
+}
+function renderSellerIntake(data) {
+  const list = $("#sellerIntakeList");
+  const summary = $("#sellerIntakeSummary");
+  const meta = $("#sellerIntakeMeta");
+  if (!list || !summary) return;
+  const s = data.summary || {};
+  const priorities = s.priority_counts || {};
+  const channels = s.allowed_channel_counts || {};
+  const channelText = Object.entries(channels).map(([k, v]) => `${esc(channelLabel(k))} ${v}`).join(" · ") || "no allowed channels";
+  meta.textContent = data.built_at ? `Built ${new Date(data.built_at).toLocaleString()}` : "";
+  summary.innerHTML = `
+    <div class="si-stat"><b>${s.consent_records || 0}</b><span>consent records</span></div>
+    <div class="si-stat"><b>${s.first_party_contactable || 0}</b><span>contactable by consent</span></div>
+    <div class="si-stat"><b>${priorities.hot || 0}</b><span>hot</span></div>
+    <div class="si-stat"><b>${priorities.warm || 0}</b><span>warm</span></div>
+    <div class="si-stat wide"><b>${esc(channelText)}</b><span>allowed channels</span></div>`;
+  const items = data.items || [];
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">No first-party seller submissions yet.</div>`;
+    return;
+  }
+  list.innerHTML = items.map((item) => {
+    const seller = item.seller || {};
+    const req = item.request || {};
+    const compliance = item.compliance || {};
+    const allowed = compliance.allowed_channels || [];
+    const badges = allowed.map((ch) => `<span class="pill ok">${esc(channelLabel(ch))}</span>`).join(" ");
+    const contact = [seller.phone, seller.email].filter(Boolean).map(esc).join(" · ");
+    return `<div class="seller-intake-card priority-${esc(item.priority)}">
+      <div class="si-main">
+        <div class="si-head">
+          <b>${esc(seller.name || "Unknown seller")}</b>
+          <span class="pill ${item.priority === "hot" ? "ok" : ""}">${esc(item.priority)}</span>
+          <span class="muted">${item.created_at ? new Date(item.created_at).toLocaleString() : ""}</span>
+        </div>
+        <div class="si-address">${esc(seller.address || "Address not provided")}</div>
+        <div class="muted">${esc(contact || "No visible contact field")}${badges ? " · " + badges : ""}</div>
+        <div class="si-action">${esc(item.next_action || "review consent record")}</div>
+      </div>
+      <div class="si-side">
+        <div><b>${item.priority_score || 0}</b><span>score</span></div>
+        <div class="muted">${esc(req.source || "first_party_landing")}</div>
+        <div class="${compliance.outreach_allowed ? "ok" : "err"}">${compliance.outreach_allowed ? "outreach allowed" : "review only"}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+async function loadSellerIntake() {
+  const list = $("#sellerIntakeList");
+  if (list) list.innerHTML = `<div class="ai-loading">Loading...</div>`;
+  try {
+    sellerIntake = await api("/api/seller-intake/leads?limit=100");
+    renderSellerIntake(sellerIntake);
+  } catch (e) {
+    if (list) list.innerHTML = `<div class="err-line" style="padding:16px">${esc(e.message)}</div>`;
+  }
+}
+$("#sellerIntakeRefresh")?.addEventListener("click", loadSellerIntake);
 
 // ---------- Init ----------
 (async function init() {

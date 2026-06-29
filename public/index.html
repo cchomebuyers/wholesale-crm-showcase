@@ -18,6 +18,7 @@
       <button class="tab" data-tab="dealcalc">Deal Calc</button>
       <button class="tab" data-tab="outreach">Outreach</button>
       <button class="tab" data-tab="inbox">Inbox</button>
+      <button class="tab" data-tab="seller-intake">Seller Intake</button>
       <button class="tab" data-tab="acquisitions">Acquisitions</button>
       <button class="tab" data-tab="sources">Sources</button>
       <button class="tab" data-tab="map">Map</button>
@@ -317,6 +318,19 @@
         <button class="btn" id="inboxRefresh">↻ Sync new mail</button>
       </div>
       <div id="inboxList" class="inbox-list"></div>
+    </section>
+
+    <!-- Seller Intake -->
+    <section id="seller-intake" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <b>First-party seller intake</b>
+          <span class="muted" id="sellerIntakeMeta" style="margin-left:8px"></span>
+          <button class="btn xs" id="sellerIntakeRefresh" style="margin-left:auto">Refresh</button>
+        </div>
+        <div class="seller-intake-summary" id="sellerIntakeSummary"></div>
+        <div id="sellerIntakeList" class="seller-intake-list"></div>
+      </div>
     </section>
 
     <!-- Acquisitions -->
