@@ -25,6 +25,8 @@ import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
 import { complianceCheck } from "./compliance_gate.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
 import { buildProofStack } from "./proof_stack.js";
+import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
+import { buildPropertyKgEvidenceView } from "./kg_evidence_view.js";
 import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
 import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSettings } from "./lead_engine_scheduler.js";
 import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
@@ -2054,6 +2056,31 @@ app.get("/api/proof-stack/:id", (req, res) => {
     }));
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// KG evidence view -- route-safe read model over wholesale_kg. This exposes the
+// property -> route_pack -> candidate identity -> citation graph persisted by
+// tools/persist_route_pack_kg.mjs without allowing writes or arbitrary SQL.
+app.get("/api/kg/properties/:id/evidence", async (req, res) => {
+  const pool = createKgPool(kgConnectionString());
+  try {
+    const view = await buildPropertyKgEvidenceView(pool, req.params.id, {
+      routePackLimit: req.query.route_pack_limit,
+      candidateLimit: req.query.candidate_limit,
+      citationLimit: req.query.citation_limit,
+    });
+    if (view?.error) return res.status(400).json({ error: view.error });
+    if (!view) return res.status(404).json({ error: "property not found in KG", id: req.params.id });
+    res.json(view);
+  } catch (e) {
+    res.status(503).json({
+      error: "KG evidence view unavailable",
+      detail: String(e.message || e),
+      hint: "Run: node tools/persist_route_pack_kg.mjs --report-out=data/property_route_kg_report.json",
+    });
+  } finally {
+    await pool.end();
   }
 });
 
