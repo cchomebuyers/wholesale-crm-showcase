@@ -2525,14 +2525,63 @@ function renderSellerIntake(data) {
     </div>`;
   }).join("");
 }
+function renderSellerPromotions(data) {
+  const list = $("#sellerPromotionList");
+  const summary = $("#sellerPromotionSummary");
+  if (!list || !summary) return;
+  const s = data.summary || {};
+  const counts = s.status_counts || {};
+  summary.innerHTML = `
+    <div class="si-stat"><b>${s.matched_properties || 0}</b><span>matched properties</span></div>
+    <div class="si-stat"><b>${s.ready_for_proof || 0}</b><span>proof-ready</span></div>
+    <div class="si-stat"><b>${counts.create_workflow_record || 0}</b><span>needs record</span></div>
+    <div class="si-stat"><b>${s.needs_address || 0}</b><span>needs address</span></div>`;
+  const items = data.items || [];
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">No promotion candidates yet.</div>`;
+    return;
+  }
+  list.innerHTML = items.map((item) => {
+    const seller = item.seller || {};
+    const prop = item.property || {};
+    const workflow = item.workflow || {};
+    const channels = (seller.allowed_channels || []).map((ch) => `<span class="pill ok">${esc(channelLabel(ch))}</span>`).join(" ");
+    const proofLink = workflow.proof_url
+      ? `<a class="btn xs" href="${esc(workflow.proof_url)}" target="_blank" rel="noreferrer">Proof</a>`
+      : `<span class="muted">No proof link yet</span>`;
+    return `<div class="seller-intake-card priority-${item.status === "matched_property" ? "hot" : "warm"}">
+      <div class="si-main">
+        <div class="si-head">
+          <b>${esc(seller.name || "Unknown seller")}</b>
+          <span class="pill">${esc(item.status || "review")}</span>
+          ${channels}
+        </div>
+        <div class="si-address">${esc(prop.address || seller.address || "Address not provided")}</div>
+        <div class="si-action">${esc(workflow.next_action || "review promotion candidate")}</div>
+      </div>
+      <div class="si-side">
+        <div><b>${prop.matched ? "Yes" : "No"}</b><span>property match</span></div>
+        ${proofLink}
+      </div>
+    </div>`;
+  }).join("");
+}
 async function loadSellerIntake() {
   const list = $("#sellerIntakeList");
+  const promotionList = $("#sellerPromotionList");
   if (list) list.innerHTML = `<div class="ai-loading">Loading...</div>`;
+  if (promotionList) promotionList.innerHTML = `<div class="ai-loading">Loading...</div>`;
   try {
-    sellerIntake = await api("/api/seller-intake/leads?limit=100");
+    const [intake, promotions] = await Promise.all([
+      api("/api/seller-intake/leads?limit=100"),
+      api("/api/seller-intake/promotions?limit=100"),
+    ]);
+    sellerIntake = intake;
     renderSellerIntake(sellerIntake);
+    renderSellerPromotions(promotions);
   } catch (e) {
     if (list) list.innerHTML = `<div class="err-line" style="padding:16px">${esc(e.message)}</div>`;
+    if (promotionList) promotionList.innerHTML = `<div class="err-line" style="padding:16px">${esc(e.message)}</div>`;
   }
 }
 $("#sellerIntakeRefresh")?.addEventListener("click", loadSellerIntake);
