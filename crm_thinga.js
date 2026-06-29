@@ -6,6 +6,8 @@
 // is enforced here as `schema: ankhor.v1.lead` so the rule lives in ONE place, substrate-wide.
 
 import { createThingaStore } from "./thinga.js";
+import { proposeEdges } from "./field_edges.js";
+import { buildProofStack } from "./proof_stack.js";
 
 const SOLD = new Set(["sold", "closed"]);
 const isSold = (row) =>
@@ -155,10 +157,20 @@ export function propertyToThinga(row) {
   const links = [];
   if (row.campaign_id) links.push({ kind: "found_by", to: `thinga:campaign-${row.campaign_id}` });
   if (row.imported_lead_id) links.push({ kind: "imported_to", to: `thinga:lead-${row.imported_lead_id}` });
+  const facts = propertyAcquisitionFacts(row);
+  const fieldEdges = proposeEdges({
+    id: `thinga:property-${row.id}`,
+    kind: "property",
+    fields: facts.joinable_fields,
+    source: row.source || row.source_id || null,
+    observed_at: row.updated_at || row.created_at || row.owner_enriched_at || null,
+  });
+  const proof = compactProofStack(buildProofStack(row, { skipSpread: true }));
   return {
     id: `thinga:property-${row.id}`,
     kind: "property",
     name: row.formatted_address || row.address || `property ${row.id}`,
+    schema: "ankhor.v1.realEstateAcquisition",
     category_path: `Acquisitions/${row.review_status || "New"}`,
     links,
     content: {
@@ -171,7 +183,65 @@ export function propertyToThinga(row) {
       equity: row.equity, rent_estimate: row.rent_estimate, crime_shootings_30d: row.crime_shootings_30d,
       listing_agent_name: row.listing_agent_name, listing_agent_phone: row.listing_agent_phone,
       source: row.source, source_id: row.source_id,
+      substrate: {
+        parser_family: "realEstate.acquisition.v1",
+        facts,
+        field_edges: fieldEdges,
+        proof_stack: proof,
+      },
     },
+    tags: ["realEstate", "property", facts.lifecycle, proof.decision?.tier].filter(Boolean),
+  };
+}
+
+export function propertyAcquisitionFacts(row = {}) {
+  const address = row.formatted_address || row.address || null;
+  const lifecycle = /sold|closed/i.test(String(row.status || row.review_status || "")) ? "sold_comps" : "active_acquisition";
+  return {
+    lifecycle,
+    identity: {
+      address,
+      city: row.city || null,
+      state: row.state || null,
+      zip: row.zip || null,
+      county: row.county || null,
+      parcel_id: row.parcel_id || row.apn || row.source_id || null,
+      source: row.source || null,
+      source_id: row.source_id || null,
+    },
+    economics: {
+      arv: row.arv ?? null,
+      mao: row.mao ?? null,
+      spread: row.spread ?? null,
+      repair_estimate: row.repair_estimate ?? null,
+      rent_estimate: row.rent_estimate ?? null,
+    },
+    owner: {
+      owner_name: row.owner_name || null,
+      owner_mailing: row.owner_mailing || null,
+      owner_source: row.owner_source || null,
+      owner_enriched_at: row.owner_enriched_at || null,
+    },
+    joinable_fields: {
+      address,
+      parcel_id: row.parcel_id || row.apn || row.source_id || null,
+      owner_name: row.owner_name || null,
+      mailing_address: row.owner_mailing || null,
+      phone: row.seller_phone || row.phone || row.listing_agent_phone || null,
+      email: row.seller_email || row.email || row.listing_agent_email || null,
+    },
+  };
+}
+
+function compactProofStack(proof) {
+  return {
+    property_id: proof.property_id,
+    decision: proof.decision,
+    completeness: proof.completeness,
+    evidence_present: Object.fromEntries(Object.entries(proof.evidence || {})
+      .map(([key, value]) => [key, Boolean(value?.present)])),
+    citations: proof.citations,
+    built_at: proof.built_at,
   };
 }
 
@@ -236,6 +306,13 @@ export function mountCrmSubstrate(db, { handlers = {} } = {}) {
   });
   store.registerSchema("ankhor.v1.plan", (content) => {
     if (!content.id) return "plan requires an id";
+    return true;
+  });
+  store.registerSchema("ankhor.v1.realEstateAcquisition", (content) => {
+    const substrate = content?.substrate;
+    if (!substrate?.facts?.identity) return "real-estate acquisition requires substrate facts";
+    if (!Array.isArray(substrate.field_edges)) return "real-estate acquisition requires candidate field_edges";
+    if (!Array.isArray(substrate.proof_stack?.citations)) return "real-estate acquisition requires proof-stack citations";
     return true;
   });
 

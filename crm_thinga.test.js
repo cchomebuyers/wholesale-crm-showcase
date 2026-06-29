@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mountCrmSubstrate, mirrorLead, mirrorActivity, mirrorEmail, childrenOfLead,
   mirrorTask, mirrorNote, mirrorNotification, mirrorBuyer, mirrorTemplate, mirrorSetting,
   mirrorProperty, mirrorCampaign, mirrorPlan, isSensitiveSetting,
-  leadToThinga, leadCategoryPath, leadThingaId, planThingaId } from "./crm_thinga.js";
+  leadToThinga, leadCategoryPath, leadThingaId, planThingaId, propertyAcquisitionFacts } from "./crm_thinga.js";
 
 const leadRow = (over = {}) => ({
   id: 1, stage: "New", status: null,
@@ -201,13 +201,61 @@ test("isSensitiveSetting flags passwords/keys/tokens/secrets", () => {
 
 test("a property mirrors to kind:property with scores, linked to campaign + imported lead", () => {
   const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
-  const t = store.get(mirrorProperty(store, { id: 9, formatted_address: "5 ELM", city: "Detroit", lead_score: 72, arv: 90000, mao: 45000, campaign_id: 3, imported_lead_id: 2, review_status: "New" }));
+  const t = store.get(mirrorProperty(store, {
+    id: 9,
+    formatted_address: "5 ELM",
+    city: "Detroit",
+    state: "MI",
+    lead_score: 72,
+    arv: 90000,
+    mao: 45000,
+    owner_name: "Jane Seller",
+    owner_mailing: "9 OAK",
+    owner_source: "county-assessor",
+    source: "detroit-code-violations",
+    campaign_id: 3,
+    imported_lead_id: 2,
+    review_status: "New",
+  }));
   assert.equal(t.kind, "property");
+  assert.equal(t.schema, "ankhor.v1.realEstateAcquisition");
   assert.equal(t.category_path, "Acquisitions/New");
   assert.equal(t.content.lead_score, 72);
   const linkKinds = t.links.map((l) => l.kind).sort();
   assert.deepEqual(linkKinds, ["found_by", "imported_to"]);
   assert.equal(store.incomingLinks("thinga:lead-2", "imported_to")[0].from_id, t.id);
+  assert.equal(t.content.substrate.parser_family, "realEstate.acquisition.v1");
+  assert.equal(t.content.substrate.facts.owner.owner_name, "Jane Seller");
+  assert.ok(t.content.substrate.field_edges.some((e) => e.via_field === "owner_name" && e.status === "candidate"));
+  assert.ok(t.content.substrate.proof_stack.citations.some((c) => c.claim === "owner identity"));
+});
+
+test("propertyAcquisitionFacts exposes joinable fields without treating them as confirmed edges", () => {
+  const facts = propertyAcquisitionFacts({
+    id: 10,
+    address: "10 MAIN",
+    source_id: "parcel-1",
+    owner_name: "Main Street LLC",
+    owner_mailing: "PO BOX 1",
+    listing_agent_phone: "313-555-0000",
+  });
+  assert.equal(facts.identity.parcel_id, "parcel-1");
+  assert.deepEqual(facts.joinable_fields, {
+    address: "10 MAIN",
+    parcel_id: "parcel-1",
+    owner_name: "Main Street LLC",
+    mailing_address: "PO BOX 1",
+    phone: "313-555-0000",
+    email: null,
+  });
+});
+
+test("realEstateAcquisition schema requires facts, candidate edges, and proof citations", () => {
+  const store = mountCrmSubstrate(new DatabaseSync(":memory:"));
+  assert.throws(
+    () => store.put({ kind: "property", schema: "ankhor.v1.realEstateAcquisition", content: { substrate: { facts: { identity: {} }, field_edges: [] } } }),
+    /proof-stack citations/,
+  );
 });
 
 test("a campaign mirrors to a CODE Thinga with a run handler and recurrence when active", () => {
