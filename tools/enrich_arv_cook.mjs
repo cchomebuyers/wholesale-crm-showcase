@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { maoFromArv } from "../wholesale_spread.js";
+import { houseStreetKey } from "../connectors/owner_source.js";
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repo = join(dir, "..");
@@ -58,10 +59,19 @@ for (const r of rows) {
   attempted++;
   const addr = (r.address || r.formatted_address || "").replace(/'/g, "''");
   if (!addr) continue;
-  let u = new URL(`${A}/3723-97qp.json`);
-  u.searchParams.set("$select", "pin"); u.searchParams.set("$where", `upper(prop_address_full)=upper('${addr}')`);
-  u.searchParams.set("$order", "year DESC"); u.searchParams.set("$limit", "1");
-  const pin = (await getJson(u))[0]?.pin;
+  const pinQuery = async (where) => {
+    const u = new URL(`${A}/3723-97qp.json`);
+    u.searchParams.set("$select", "pin"); u.searchParams.set("$where", where);
+    u.searchParams.set("$order", "year DESC"); u.searchParams.set("$limit", "1");
+    return (await getJson(u))[0]?.pin;
+  };
+  // exact address -> PIN, then the same house#+street LIKE fallback owner-join uses (recovers
+  // unit/suffix/direction misses), so ARV reaches more properties.
+  let pin = await pinQuery(`upper(prop_address_full)=upper('${addr}')`);
+  if (!pin) {
+    const key = houseStreetKey(r.address || r.formatted_address);
+    if (key) { const [house, street] = key.split(" "); pin = await pinQuery(`upper(prop_address_full) like upper('${house} %${street}%')`); }
+  }
   if (!pin) continue;
   u = new URL(`${A}/uzyt-m557.json`);
   u.searchParams.set("$select", "nbhd"); u.searchParams.set("$where", `pin='${pin}'`);

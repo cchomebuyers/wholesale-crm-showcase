@@ -1,0 +1,196 @@
+{
+  "built_at": "2026-06-29T10:32:49.489Z",
+  "readiness_built_at": "2026-06-29T10:23:07.838Z",
+  "summary": {
+    "total": 5,
+    "ready_to_pull": 0,
+    "credentials_blocked": 1,
+    "public_records_blocked": 3,
+    "verification_blocked": 1
+  },
+  "activation_queue": [
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-reso-2026-06-27.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / New-Listing Feed (RESO Web API via MLS)",
+      "readiness_score": 85,
+      "source_status": "verified",
+      "activation_stage": "blocked_credentials",
+      "pull_allowed_now": false,
+      "lawful_path": "licensed RESO/MLS agreement",
+      "next_action": "Confirm MLS membership / sponsor-broker DUA scope for the pilot market; obtain OAuth2 client credentials.",
+      "blockers": [
+        "Confirm MLS membership / sponsor-broker DUA scope for the pilot market; obtain OAuth2 client credentials."
+      ],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "status_change_ts",
+        "list_date",
+        "days_on_market",
+        "(aux) modification_ts",
+        "(aux) listing_member",
+        "(aux) listing_office",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `ModificationTimestamp` (RESO standard) — record-level last-modified.",
+        "Secondary: `StatusChangeTimestamp` (status transitions) + `ListingContractDate` (new-listing origination).",
+        "Per-pull: `source_pull_ts`, recorded per MLS market in the connector manifest.",
+        "Cadence: incremental pulls keyed off `ModificationTimestamp` (delta sync); recommended daily for DOM-fresh lead scoring in pilot markets."
+      ]
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-fdic-reo-2026-06-28.md",
+      "title": "Pilot Manifest — Official On-Market Feed: FDIC Real Estate for Sale (REO)",
+      "readiness_score": 65,
+      "source_status": "draft",
+      "activation_stage": "blocked_verification",
+      "pull_allowed_now": false,
+      "lawful_path": "official government/public-record feed",
+      "next_action": "Confirm live FDIC \"Real Estate for Sale\" listing-search subpath under `fdic.gov` (consumer-resources reorg check).",
+      "blockers": [
+        "Confirm live FDIC \"Real Estate for Sale\" listing-search subpath under `fdic.gov` (consumer-resources reorg check)."
+      ],
+      "required_fields": [
+        "situs_address",
+        "list_price",
+        "property_type",
+        "units",
+        "status",
+        "asset_number",
+        "listing_agent",
+        "apn"
+      ],
+      "freshness_anchors": [
+        "**Authoritative anchor:** `list_date` (date the property was posted for sale).",
+        "**Secondary:** `status_change` (e.g., price change / under-contract / sold date) + `source_pull_ts` (per-retrieval timestamp recorded by the connector).",
+        "**Re-poll cadence:** daily (FDIC listings refresh on a rolling basis; status changes time-sensitive for wholesale lead scoring)."
+      ]
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-hud-homestore-2026-06-27.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (HUD HomeStore)",
+      "readiness_score": 50,
+      "source_status": "draft",
+      "activation_stage": "blocked_public_records",
+      "pull_allowed_now": false,
+      "lawful_path": "official government/public-record feed",
+      "next_action": "File HUD FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, list_date, status, bid_deadline); confirm receipt cadence. (FOIA = lawful bulk path.)",
+      "blockers": [
+        "pending VERIFIED until HUD FOIA bulk path + nightly-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + FOIA bulk); field map §3 (situs / list_price / list_date / status / case#; APN via assessor join); freshness §4 (`list_date` + `status_change` + `bid_deadline` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (federal REO, not MLS active listings) — broadens the on-market lane.",
+        "File HUD FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, list_date, status, bid_deadline); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "Confirm nightly-refresh cadence (HUD/contractor inventory refresh); record a market row in `data/source-registry`: `{source: hud_homestore, bulk_path: foia, cadence: nightly, last_fetched, status}`.",
+        "Stamp VERIFIED once FOIA bulk path + nightly cadence confirmed; until then DRAFT PILOT."
+      ],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "status_change_ts",
+        "list_date",
+        "bid_deadline",
+        "apn",
+        "(aux) fha_insurability",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `list_date` (new-listing origination).",
+        "Secondary: `status_change` (status transitions) + `bid_deadline` (actionability window).",
+        "Per-pull: `source_pull_ts`, recorded per retrieval.",
+        "Cadence: nightly (HUD/contractor refreshes inventory nightly) — confirm at build time before VERIFIED."
+      ]
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-usda-rd-2026-06-27.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (USDA Rural Development REO Resales)",
+      "readiness_score": 50,
+      "source_status": "draft",
+      "activation_stage": "blocked_public_records",
+      "pull_allowed_now": false,
+      "lawful_path": "official government/public-record feed",
+      "next_action": "File USDA agency public-records / FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, listing_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+      "blockers": [
+        "pending VERIFIED until USDA-RD bulk/public-record path + listing-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + agency public-record/FOIA bulk); field map §3 (situs / list_price / list_date / status / case#; APN via assessor join); freshness §4 (`listing_date` + `status` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (MLS active listings) and the HUD HomeStore pilot (FHA-insured REO) — this is rural-development REO, broadening the federal-REO on-market lane.",
+        "File USDA agency public-records / FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, listing_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "Confirm listing-refresh cadence; record a market row in `data/source-registry`: `{source: usda_rd_reo, bulk_path: foia, cadence, last_fetched, status}`.",
+        "Stamp VERIFIED once bulk path + refresh cadence confirmed; until then DRAFT PILOT."
+      ],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "list_date",
+        "property_type",
+        "apn",
+        "owner_of_record",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `listing_date` (new-listing origination).",
+        "Secondary: `status` (lifecycle transitions).",
+        "Per-pull: `source_pull_ts`, recorded per retrieval.",
+        "Cadence: confirm at build time before VERIFIED (USDA-RD postings refresh on a recurring sale cycle; record actual cadence in the market row)."
+      ]
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-gsa-auctions-2026-06-28.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / Federal Surplus Real-Property Feed (GSA Auctions)",
+      "readiness_score": 50,
+      "source_status": "draft",
+      "activation_stage": "blocked_public_records",
+      "pull_allowed_now": false,
+      "lawful_path": "official government/public-record feed",
+      "next_action": "File GSA agency public-records / FOIA request for bulk real-property auction inventory (lot-level table: lot#, situs, opening_bid, sale_open_date, sale_close_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+      "blockers": [
+        "pending VERIFIED until GSA bulk/public-record path + auction-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + agency public-record/FOIA bulk); field map §3 (situs / opening_bid / sale_open_date / sale_close_date / lot# / property_type; APN via assessor join); freshness §4 (`sale_open_date` + `sale_close_date` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (MLS active listings), the HUD HomeStore pilot (FHA-insured REO), and the USDA-RD pilot (rural-development REO) — this is federal **surplus** real-property auctions, broadening the federal-REO/surplus on-market lane to its third connector.",
+        "File GSA agency public-records / FOIA request for bulk real-property auction inventory (lot-level table: lot#, situs, opening_bid, sale_open_date, sale_close_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "Confirm auction-refresh cadence; record a market row in `data/source-registry`: `{source: gsa_auctions_real_property, bulk_path: foia, cadence, last_fetched, status}`.",
+        "Stamp VERIFIED once bulk path + refresh cadence confirmed; until then DRAFT PILOT."
+      ],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "sale_open_date",
+        "sale_close_date",
+        "property_type",
+        "apn",
+        "owner_of_record",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `sale_open_date` (new-listing origination) + `sale_close_date` (bid deadline / lifecycle close).",
+        "Secondary: `status` (auction lifecycle transitions).",
+        "Per-pull: `source_pull_ts`, recorded per retrieval.",
+        "Cadence: confirm at build time before VERIFIED (GSA auctions are per-auction-cycle; record actual refresh cadence in the market row)."
+      ]
+    }
+  ],
+  "citations": [
+    {
+      "claim": "on-market activation gate for Connector-Ready Pilot Manifest — Official On-Market / New-Listing Feed (RESO Web API via MLS)",
+      "file": "data/source-registry/pilot-manifest-onmarket-reso-2026-06-27.md"
+    },
+    {
+      "claim": "on-market activation gate for Pilot Manifest — Official On-Market Feed: FDIC Real Estate for Sale (REO)",
+      "file": "data/source-registry/pilot-manifest-onmarket-fdic-reo-2026-06-28.md"
+    },
+    {
+      "claim": "on-market activation gate for Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (HUD HomeStore)",
+      "file": "data/source-registry/pilot-manifest-onmarket-hud-homestore-2026-06-27.md"
+    },
+    {
+      "claim": "on-market activation gate for Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (USDA Rural Development REO Resales)",
+      "file": "data/source-registry/pilot-manifest-onmarket-usda-rd-2026-06-27.md"
+    },
+    {
+      "claim": "on-market activation gate for Connector-Ready Pilot Manifest — Official On-Market / Federal Surplus Real-Property Feed (GSA Auctions)",
+      "file": "data/source-registry/pilot-manifest-onmarket-gsa-auctions-2026-06-28.md"
+    }
+  ]
+}
