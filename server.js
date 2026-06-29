@@ -2390,7 +2390,7 @@ function makeBackup() {
     const file = join(BACKUP_DIR, `crm-${ts}.db`);
     db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`); // consistent snapshot
     const files = readdirSync(BACKUP_DIR).filter((f) => f.startsWith("crm-") && f.endsWith(".db")).sort();
-    while (files.length > 30) unlinkSync(join(BACKUP_DIR, files.shift())); // keep newest 30
+    while (files.length > 8) unlinkSync(join(BACKUP_DIR, files.shift())); // keep newest 8 (disk-bounded)
     lastBackup = new Date().toISOString();
     return file;
   } catch (e) { console.error("Backup failed:", e.message); return null; }
@@ -2962,8 +2962,12 @@ app.post("/api/map/geocode", async (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  makeBackup(); // snapshot on every startup
-  setInterval(makeBackup, 6 * 60 * 60 * 1000); // and every 6 hours
+  // NO_BACKUP=1 skips startup/interval snapshots — guarded boot tests must set it so they don't
+  // each copy the (large) crm.db into backups/ and fill the disk (the overnight loop's drain).
+  if (!process.env.NO_BACKUP) {
+    makeBackup(); // snapshot on every startup
+    setInterval(makeBackup, 6 * 60 * 60 * 1000); // and every 6 hours
+  }
   console.log(`\n  🏠  Wholesale CRM running →  http://localhost:${PORT}\n`);
   console.log(`  Email: ${emailConfigured() ? "✅ Gmail connected (" + emailCfg().user + ")" : "⚠️  not configured — connect in the Outreach tab"}`);
   console.log(`  Backups: auto every 6h → ${BACKUP_DIR}\n`);
