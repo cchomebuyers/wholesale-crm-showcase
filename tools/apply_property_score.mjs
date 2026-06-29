@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { gradeProperty, summarizeGrades } from "../property_score.js";
+import { detectPortfolios, normalizeOwner } from "../owner_portfolio.js";
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repo = join(dir, "..");
@@ -40,11 +41,18 @@ console.log("lead_score distribution (the flat per-source problem):", JSON.strin
 const rows = db.prepare(`SELECT * FROM properties ${max ? `LIMIT ${max}` : ""}`).all();
 const upd = dry ? null : db.prepare("UPDATE properties SET property_grade=?, property_grade_factors=? WHERE id=?");
 
+// Build owner -> portfolio-size map once (private portfolios only; institutional excluded),
+// so the grade can reward bulk-seller holdings. Keyed by normalized owner name.
+const portfolioCount = new Map();
+for (const p of detectPortfolios(rows, { minSize: 2 })) portfolioCount.set(p.normalized, p.count);
+console.log(`private portfolios feeding the grade: ${portfolioCount.size}`);
+
 const grades = [];
 let written = 0;
 if (!dry) db.exec("BEGIN");
 for (const r of rows) {
-  const g = gradeProperty(r);
+  const pc = r.owner_name ? (portfolioCount.get(normalizeOwner(r.owner_name)) || 1) : 1;
+  const g = gradeProperty(r, { portfolioCount: pc });
   grades.push(g.grade);
   if (!dry) { upd.run(g.grade, JSON.stringify(g.factors), r.id); written++; }
 }

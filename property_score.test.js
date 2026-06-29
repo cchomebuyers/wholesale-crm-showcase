@@ -30,7 +30,16 @@ test("grade stays within 0..100 and exposes transparent factors", () => {
   const g = gradeProperty({ source: "x", distress_score: 100, owner_name: "MAPLE COURT LLC", owner_mailing: "32 N DEAN ST", address: "1120 E 47TH ST", arv: 300000, mao: 150000, year_built: 1920, square_footage: 2000, city: "Chicago" });
   assert.ok(g.grade >= 0 && g.grade <= 100);
   const names = g.factors.map((f) => f.factor);
-  assert.deepEqual(names, ["distress_base", "owner_signal", "value_equity", "data_completeness"]);
+  assert.deepEqual(names, ["distress_base", "owner_signal", "value_equity", "data_completeness", "portfolio"]);
+});
+
+test("portfolio membership raises the grade (bulk seller = stronger lead)", () => {
+  const p = { source: "cook-il-violations", distress_score: 68, owner_name: "LORBER ENTERPRISES LLC", owner_mailing: "1 OTHER ST", address: "100 MAIN ST", arv: 200000, mao: 100000 };
+  const single = gradeProperty(p, { portfolioCount: 1 });
+  const bulk = gradeProperty(p, { portfolioCount: 5 });
+  assert.ok(bulk.grade > single.grade, `bulk (${bulk.grade}) should outrank single (${single.grade})`);
+  assert.ok(bulk.reasons.some((r) => /portfolio/i.test(r)));
+  assert.equal(single.factors.find((f) => f.factor === "portfolio").points, 0);
 });
 
 test("a parcel-only row with no owner/value grades low (research/hold), not flat-26", () => {

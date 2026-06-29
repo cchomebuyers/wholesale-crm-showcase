@@ -15,6 +15,7 @@
 // coordinated step (announced in councilRoom before any shared-file edit).
 
 import { deriveSignals } from "./property_signals.js";
+import { portfolioSignal } from "./owner_portfolio.js";
 
 const num = (v) => {
   if (v === null || v === undefined || v === "") return null;
@@ -37,9 +38,11 @@ function equityHeadroom(p) {
   return Math.max(0, Math.min(1, (arv - mao) / arv));
 }
 
-// gradeProperty(property) -> { grade, tier_hint, factors[], reasons[] }
+// gradeProperty(property, opts) -> { grade, tier_hint, factors[], reasons[] }
 // grade is 0-100 and MEANT to differ between two same-source rows.
-export function gradeProperty(property = {}) {
+// opts.portfolioCount: how many distressed properties this owner holds (from owner_portfolio.js).
+// A property owned by a private bulk seller is a stronger lead (one call, many deals).
+export function gradeProperty(property = {}, opts = {}) {
   const factors = [];
   const reasons = [];
 
@@ -72,7 +75,18 @@ export function gradeProperty(property = {}) {
   if (property.city && String(property.city).trim() && String(property.city).trim() !== "1") dataPts += 1;
   factors.push({ factor: "data_completeness", value: dataPts, points: dataPts });
 
-  const raw = basePts + sig.signal_score + valuePts + dataPts;
+  // 5. Portfolio membership -- a private bulk seller's holding (institutional already filtered
+  //    out by owner_portfolio's detector, so only real private portfolios reach a count > 1).
+  let portfolioPts = 0;
+  const pc = Number(opts.portfolioCount) || 0;
+  if (pc > 1 && !sig.institutional_owner) {
+    const ps = portfolioSignal(pc);
+    portfolioPts = ps.points;
+    if (portfolioPts > 0) reasons.push(ps.label);
+  }
+  factors.push({ factor: "portfolio", value: pc, points: portfolioPts });
+
+  const raw = basePts + sig.signal_score + valuePts + dataPts + portfolioPts;
   const grade = Math.max(0, Math.min(100, Math.round(raw)));
 
   // Informational tier hint (the canonical tiering still lives in pro_wholesaler_queue.js;
