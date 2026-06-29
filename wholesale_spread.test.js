@@ -13,6 +13,18 @@ test("buyerAcceptance = buyer profit / our fee, rated against the 3x rule", () =
   assert.equal(buyerAcceptance(null, null, null, null).rating, "unknown");
 });
 
+test("spread audit exposes buyer_acceptance_score for queue/report contracts", () => {
+  const r = evaluateWholesaleSpread({
+    arv: 200000,
+    repair_estimate: 30000,
+    buyer_offer_price: 100000,
+    offer_amount: 86000,
+  });
+  assert.equal(r.buyer_acceptance_score, r.buyerAcceptance.score);
+  assert.equal(r.buyer_acceptance_rating, "excellent");
+  assert.equal(r.buyer_projected_profit, 70000);
+});
+
 test("maoFromArv = ARV*70% - repairs - fee, with sqft fallback for repairs", () => {
   assert.equal(maoFromArv(200000, 30000, { minFee: 10000 }), 100000); // 140k-30k-10k
   assert.equal(maoFromArv(200000, null, { sqft: 1000, rehabPerSqft: 25, minFee: 10000 }), 105000); // repairs 25k

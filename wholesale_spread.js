@@ -210,6 +210,9 @@ export function evaluateWholesaleSpread(record = {}, options = {}) {
     negotiation,
     bestNegotiationPath,
     buyerAcceptance: acceptance,
+    buyer_acceptance_score: acceptance.score,
+    buyer_acceptance_rating: acceptance.rating,
+    buyer_projected_profit: acceptance.profit,
     inputs: i,
     reasons,
     nextNeeded: blockers.map((b) => {

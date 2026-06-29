@@ -76,12 +76,15 @@ lines.push("");
 lines.push(`## Top ${rows.length} skip-trace targets`);
 lines.push("");
 const money = (v) => (Number(v) > 0 ? "$" + Math.round(Number(v)).toLocaleString() : "—");
-lines.push("| # | priority | address | owner | absentee | entity | ARV | max offer (MAO) | buyer demand | next action |");
-lines.push("|---|---|---|---|---|---|---|---|---|---|");
+lines.push("| # | priority | address | owner | absentee | entity | ARV | max offer (MAO) | buyer demand | buyer acceptance | next action |");
+lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
 rows.forEach((r, i) => {
   const addr = (r.address || r.formatted_address || "?") + (r.city && r.city !== "1" ? `, ${r.city}` : "") + (r.state ? ` ${r.state}` : "");
   const bm = sig(r.signals_json, "buyer_demand");
-  lines.push(`| ${i + 1} | ${r.priority_score} | ${addr} | ${r.owner_name} | ${flag(sig(r.signals_json, "absentee_owner"))} | ${flag(sig(r.signals_json, "entity_owner"))} | ${money(r.arv)} | ${money(r.mao)} | ${bm ? "yes" : "no"} | ${r.next_action} |`);
+  const acceptanceScore = sig(r.signals_json, "buyer_acceptance_score");
+  const acceptanceRating = sig(r.signals_json, "buyer_acceptance_rating");
+  const acceptance = acceptanceScore ? `${acceptanceScore}x ${acceptanceRating || ""}`.trim() : "unknown";
+  lines.push(`| ${i + 1} | ${r.priority_score} | ${addr} | ${r.owner_name} | ${flag(sig(r.signals_json, "absentee_owner"))} | ${flag(sig(r.signals_json, "entity_owner"))} | ${money(r.arv)} | ${money(r.mao)} | ${bm ? "yes" : "no"} | ${acceptance} | ${r.next_action} |`);
 });
 lines.push("");
 

@@ -65,12 +65,22 @@ export function valueState(record = {}, spread) {
   const buyerMatches = Array.isArray(record.buyer_matches) ? record.buyer_matches.length : 0;
   const spreadStatus = spread?.status || null; // works | thin | fails | unproven
   const spreadCanWork = spreadStatus === "works" || spreadStatus === "thin";
+  const acceptance = spread?.buyerAcceptance || spread?.buyer_acceptance || null;
+  const acceptanceScore = num(acceptance?.score ?? spread?.buyer_acceptance_score);
+  const acceptanceRating = str(acceptance?.rating ?? spread?.buyer_acceptance_rating) || null;
+  const acceptanceDead = acceptanceRating === "dead" || (acceptanceScore != null && acceptanceScore < 1);
+  const acceptanceTargetMet = acceptanceScore != null && acceptanceScore >= 3;
   return {
     arv: arv != null && arv > 0,
     mao: mao != null && mao > 0,
     buyerDemand: buyerMatches > 0,
     spreadStatus,
     spreadCanWork,
+    acceptance,
+    acceptanceScore,
+    acceptanceRating,
+    acceptanceDead,
+    acceptanceTargetMet,
     valueKnown: (arv != null && arv > 0) || buyerMatches > 0 || spreadCanWork,
   };
 }
@@ -90,6 +100,8 @@ function priorityScore(record, dist, contact, value, sig) {
   if (value.buyerDemand) s += 6;
   if (value.spreadStatus === "works") s += 8;
   else if (value.spreadStatus === "thin") s += 4;
+  if (value.acceptanceTargetMet) s += 5;
+  else if (value.acceptanceDead) s -= 10;
   if (sig) s += sig.signal_score; // absentee/entity boost; institutional penalty
   return Math.max(0, Math.min(100, Math.round(s)));
 }
@@ -126,12 +138,15 @@ export function classifyProQueue(record = {}, opts = {}) {
     tier = "hold";
     next_action = "hold (institutional/govt/lender owner — not a seller)";
     reasons.push(...sig.reasons);
-  } else if (leadScore >= hotScore && contact.callable && value.valueKnown && value.spreadStatus !== "fails") {
+  } else if (leadScore >= hotScore && contact.callable && value.valueKnown && value.spreadStatus !== "fails" && !value.acceptanceDead) {
     // Everything a wholesaler needs to dial: reach, value, and a spread that isn't dead.
     tier = "call_now";
     next_action = "call seller / make offer";
     reasons.push(`score ${leadScore} >= ${hotScore}, contact + value present`);
     if (value.spreadStatus) reasons.push(`spread path: ${value.spreadStatus}`);
+    if (value.acceptanceScore != null) {
+      reasons.push(`buyer acceptance ${value.acceptanceScore}x (${value.acceptanceRating})`);
+    }
   } else if (leadScore >= hotScore && dist.present && (!contact.callable || !contact.ownerName)) {
     // High-intent distress but we can't reach them yet -> this is what skip-trace is for.
     tier = "pay_to_unlock";
@@ -152,6 +167,10 @@ export function classifyProQueue(record = {}, opts = {}) {
   }
 
   if (!sig.institutional_owner) for (const r of sig.reasons) if (!reasons.includes(r)) reasons.push(r);
+  if (value.acceptanceDead) reasons.push("buyer acceptance is dead: fee consumes buyer upside");
+  else if (value.acceptanceScore != null && value.acceptanceScore < 3) {
+    reasons.push(`buyer acceptance below 3x target: ${value.acceptanceScore}x (${value.acceptanceRating})`);
+  }
 
   return {
     tier,
@@ -170,6 +189,9 @@ export function classifyProQueue(record = {}, opts = {}) {
       arv: value.arv,
       buyer_demand: value.buyerDemand,
       spread_status: value.spreadStatus,
+      buyer_acceptance_score: value.acceptanceScore,
+      buyer_acceptance_rating: value.acceptanceRating,
+      buyer_projected_profit: value.acceptance?.profit ?? spread?.buyer_projected_profit ?? null,
       absentee_owner: sig.absentee_owner,
       entity_owner: sig.entity_owner,
       institutional_owner: sig.institutional_owner,

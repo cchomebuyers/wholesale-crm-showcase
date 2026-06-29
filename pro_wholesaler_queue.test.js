@@ -24,11 +24,26 @@ test("owner + phone + ARV + buyer demand + working spread -> call_now", () => {
   const d = classifyProQueue({
     source: "cook-il-violations", lead_score: 78,
     owner_name: "Jane Absentee", listing_agent_phone: "3125550100",
-    arv: 210000, repair_estimate: 40000, price: 90000, asking_price: 90000,
+    arv: 210000, repair_estimate: 40000, price: 90000, asking_price: 90000, offer_amount: 97000,
     buyer_matches: [{ max_price: 150000 }],
   });
   assert.equal(d.tier, "call_now");
   assert.equal(d.next_action, "call seller / make offer");
+  assert.ok(d.signals.buyer_acceptance_score >= 3);
+  assert.ok(d.reasons.some((r) => /buyer acceptance/i.test(r)));
+});
+
+test("dead buyer acceptance blocks call_now even when spread is positive", () => {
+  const d = classifyProQueue({
+    source: "cook-il-violations", lead_score: 82,
+    owner_name: "Greedy Fee", listing_agent_phone: "3125550199",
+    arv: 120000, repair_estimate: 10000, buyer_offer_price: 95000, asking_price: 76000, offer_amount: 75000,
+    buyer_matches: [{ max_price: 95000 }],
+  });
+  assert.notEqual(d.tier, "call_now");
+  assert.equal(d.signals.spread_status, "works");
+  assert.equal(d.signals.buyer_acceptance_rating, "dead");
+  assert.ok(d.reasons.some((r) => /buyer acceptance is dead/i.test(r)));
 });
 
 test("score 60-69 missing enrichment -> research (free first, no spend)", () => {
