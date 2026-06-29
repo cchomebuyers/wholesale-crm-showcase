@@ -1,0 +1,282 @@
+{
+  "built_at": "2026-06-29T10:23:07.838Z",
+  "summary": {
+    "total": 5,
+    "verified": 1,
+    "draft": 4,
+    "blocked": 5,
+    "top_source": "Connector-Ready Pilot Manifest — Official On-Market / New-Listing Feed (RESO Web API via MLS)"
+  },
+  "sources": [
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-reso-2026-06-27.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / New-Listing Feed (RESO Web API via MLS)",
+      "status": "verified",
+      "status_line": "VERIFIED CONNECTOR-READY (GLM iter 44) — all CODEX-required fields confirmed present: official source §1 (RESO Web API/OData via MLS; per-MLS base URL is broker/DUA-gated, confirm at build time); access path §2 (`GET /Property` + `/Member`/`/Office`, OAuth2 client-credentials, delta sync via `$filter=ModificationTimestamp gt …`); field map §3 (listing_id / situs / list_price / status / status_change_ts / list_date / days_on_market + authoritative `ModificationTimestamp`); freshness §4 (`ModificationTimestamp` authoritative + `StatusChangeTimestamp` + `ListingContractDate` + `source_pull_ts`); ToS §5 (MLS DUA/IDX-VOW — attribution required, no co-mingling, rate-limit, owner/agent contacts gated); rejection criteria §6 (6 conditions incl. no-RESO/RETS, DUA prohibits CRM use, no freshness field, missing situs/ListPrice/Status, provenance traces to Zillow/Redfin/Realtor.com/CoStar or people-search). On-market pilot now matches the LOCKED+verified Maricopa taxroll pilot's bar (iter 22/37). Remaining on-market work is build-time (per-MLS RESO base URL + OAuth2 + DUA scope), not source discovery. Candidate B (RentCast) is a documented public API held as secondary gap-fill only; NOT the pilot feed of record. (Previously DRAFT PILOT, iter 38.) Build-time blocker resolution path recorded §10 (GLM iter 108, reconciled vs `data/source-registry/property-intelligence-status.md`).",
+      "lawful_basis": "RESO Web API is the industry-standard, MLS-sanctioned data-access protocol. Active listings are accessed lawfully via MLS membership / IDX-VOW data-use agreements — never by scraping portal UIs. Official/sanctioned source only; no hostile scraping; no Zillow/Redfin/Realtor.com/CoStar; no people-search sites. Owner/agent contact fields gated.",
+      "official_urls": [],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "status_change_ts",
+        "list_date",
+        "days_on_market",
+        "(aux) modification_ts",
+        "(aux) listing_member",
+        "(aux) listing_office",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `ModificationTimestamp` (RESO standard) — record-level last-modified.",
+        "Secondary: `StatusChangeTimestamp` (status transitions) + `ListingContractDate` (new-listing origination).",
+        "Per-pull: `source_pull_ts`, recorded per MLS market in the connector manifest.",
+        "Cadence: incremental pulls keyed off `ModificationTimestamp` (delta sync); recommended daily for DOM-fresh lead scoring in pilot markets."
+      ],
+      "blockers": [
+        "Confirm MLS membership / sponsor-broker DUA scope for the pilot market; obtain OAuth2 client credentials."
+      ],
+      "next_steps": [
+        "Confirm MLS membership / sponsor-broker DUA scope for the pilot market; obtain OAuth2 client credentials.",
+        "Verify the MLS's RESO Web API base URL + that `/Property` returns `ModificationTimestamp`, `Status`, `ListPrice`, situs fields (manual/inspection, no scraping).",
+        "Run one delta pull (`$filter=ModificationTimestamp gt <last>`); validate field map against §3; if any required field missing → §6 reject.",
+        "Record DUA terms + per-MLS rate-limit/quota in `data/source-registry` (a market row: `{mls, reso_base_url, dua_status, cadence, last_fetched, status}`).",
+        "Join to the tax-roll pilot on `situs`/`APN` to flag on-market-but-tax-distressed owners (high-signal wholesale overlap).",
+        "Agent/owner contacts stay gated; `situs` + `list_price` + `status` + `days_on_market` + `list_date` available to lead scoring."
+      ],
+      "rejection_criteria": [
+        "No RESO Web API offered AND no other machine-readable feed (RETS also absent) → reject.",
+        "DUA prohibits CRM / internal-brokerage use of active-listing data → reject (cannot gate around a contract prohibition).",
+        "Feed exposes no `ModificationTimestamp` / equivalent freshness field → reject.",
+        "Feed lacks `situs` OR `ListPrice` OR `Status` → reject (field map unmet).",
+        "Rate-limit / quota too low to keep DOM-fresh for pilot markets → reject (or scope the pilot market down).",
+        "Source provenance traces to Zillow/Redfin/Realtor.com/CoStar or a people-search site → reject."
+      ],
+      "readiness_score": 85
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-fdic-reo-2026-06-28.md",
+      "title": "Pilot Manifest — Official On-Market Feed: FDIC Real Estate for Sale (REO)",
+      "status": "draft",
+      "status_line": "DRAFT connector-ready pilot manifest (GLM iter 189, 2026-06-28). Live listing-search URL flagged \"confirm at build time\" (official domain verified; FDIC periodically reorganizes the consumer-resources path).",
+      "lawful_basis": "FDIC is a federal agency disposing of real property acquired through receivership of failed banks (12 U.S.C. § 1821 et seq.). Listings are official government publications / public records. Owner-of-record is the FDIC as receiver (motivated-seller-equivalent), not a private individual — no third-party contact-list purchase, no gated PII. Bulk inventory obtainable via FOIA request (5 U.S.C. § 552). Official `.gov` domain only.",
+      "official_urls": [
+        "https://www.fdic.gov",
+        "https://www.fdic.gov/resources/consumers/consumer-resources/real-estate/"
+      ],
+      "required_fields": [
+        "situs_address",
+        "list_price",
+        "property_type",
+        "units",
+        "status",
+        "asset_number",
+        "listing_agent",
+        "apn"
+      ],
+      "freshness_anchors": [
+        "**Authoritative anchor:** `list_date` (date the property was posted for sale).",
+        "**Secondary:** `status_change` (e.g., price change / under-contract / sold date) + `source_pull_ts` (per-retrieval timestamp recorded by the connector).",
+        "**Re-poll cadence:** daily (FDIC listings refresh on a rolling basis; status changes time-sensitive for wholesale lead scoring)."
+      ],
+      "blockers": [
+        "Confirm live FDIC \"Real Estate for Sale\" listing-search subpath under `fdic.gov` (consumer-resources reorg check)."
+      ],
+      "next_steps": [
+        "Confirm live FDIC \"Real Estate for Sale\" listing-search subpath under `fdic.gov` (consumer-resources reorg check).",
+        "Stand up a periodic manual-retrieval / FOIA-bulk ingestion job; record `source_pull_ts` per run.",
+        "Parse §3 field map; normalize situs; gate broker/agent contact fields.",
+        "Emit rows to the property-intelligence store keyed by `asset_number` (FDIC) + situs hash; stamp `list_date` + `status_change` freshness anchors.",
+        "Join situs → county assessor APN (Maricopa AZ / Miami-Dade FL / Clark NV / Harris TX / Los Angeles CA / Santa Clara CA / Cook IL / Hillsborough FL owner/tax-roll pilots) for owner + assessed-value + delinquent-tax cross-reference → distress + equity score.",
+        "Re-poll daily; surface status changes (under-contract / sold) to the lead queue."
+      ],
+      "rejection_criteria": [
+        "Source is an aggregator / people-search / reseller site → reject.",
+        "Requires hostile scraping or CAPTCHA evasion → reject.",
+        "Lacks any freshness field (`list_date` / status timestamp / sale date) → reject.",
+        "Gates listings behind a paid / non-public API (FOIA is acceptable; paid API is not) → reject.",
+        "Re-hosts Zillow/Redfin/Realtor.com/CoStar data → reject.",
+        "Missing situs address (no APN join path to tax-roll) → reject."
+      ],
+      "readiness_score": 65
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-hud-homestore-2026-06-27.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (HUD HomeStore)",
+      "status": "draft",
+      "status_line": "DRAFT PILOT — connector-ready field map + access path documented; pending VERIFIED until HUD FOIA bulk path + nightly-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + FOIA bulk); field map §3 (situs / list_price / list_date / status / case#; APN via assessor join); freshness §4 (`list_date` + `status_change` + `bid_deadline` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (federal REO, not MLS active listings) — broadens the on-market lane.",
+      "lawful_basis": "HUD HomeStore is HUD's official REO disposition portal (contractor-operated on HUD's behalf) on an official government-linked domain. Federal agency disposing of real property publishes on-market listings to the public; owner-of-record is HUD — no third-party contact-list purchase, no gated private-owner PII, no MLS-portal scraping, no Zillow/Redfin/Realtor.com/CoStar, no people-search sites.",
+      "official_urls": [
+        "https://www.hudhomestore.com"
+      ],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "status_change_ts",
+        "list_date",
+        "bid_deadline",
+        "apn",
+        "(aux) fha_insurability",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `list_date` (new-listing origination).",
+        "Secondary: `status_change` (status transitions) + `bid_deadline` (actionability window).",
+        "Per-pull: `source_pull_ts`, recorded per retrieval.",
+        "Cadence: nightly (HUD/contractor refreshes inventory nightly) — confirm at build time before VERIFIED."
+      ],
+      "blockers": [
+        "pending VERIFIED until HUD FOIA bulk path + nightly-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + FOIA bulk); field map §3 (situs / list_price / list_date / status / case#; APN via assessor join); freshness §4 (`list_date` + `status_change` + `bid_deadline` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (federal REO, not MLS active listings) — broadens the on-market lane.",
+        "File HUD FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, list_date, status, bid_deadline); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "Confirm nightly-refresh cadence (HUD/contractor inventory refresh); record a market row in `data/source-registry`: `{source: hud_homestore, bulk_path: foia, cadence: nightly, last_fetched, status}`.",
+        "Stamp VERIFIED once FOIA bulk path + nightly cadence confirmed; until then DRAFT PILOT."
+      ],
+      "next_steps": [
+        "File HUD FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, list_date, status, bid_deadline); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "If FOIA bulk is delayed, fall back to periodic manual retrieval of the public browse results (honor robots/ToS, rate-limit, no CAPTCHA evasion) — interim only.",
+        "Validate field map against §3 on the first batch; if any required field missing → §6 reject.",
+        "Confirm nightly-refresh cadence (HUD/contractor inventory refresh); record a market row in `data/source-registry`: `{source: hud_homestore, bulk_path: foia, cadence: nightly, last_fetched, status}`.",
+        "Join to the 6 county owner/tax-roll pilots on situs → APN for equity/motivation scoring (list_price vs. assessed value).",
+        "Stamp VERIFIED once FOIA bulk path + nightly cadence confirmed; until then DRAFT PILOT.",
+        "Contacts gated; `situs` + `list_price` + `status` + `list_date` + `bid_deadline` available to lead scoring."
+      ],
+      "rejection_criteria": [
+        "FOIA bulk path confirmed unavailable AND no other machine-readable export → reject (cannot rely on hostile crawl).",
+        "No freshness field (`list_date` / status timestamp / `bid_deadline`) → reject.",
+        "Missing situs address (no APN join path) → reject.",
+        "ToS prohibits CRM / internal reuse of listing data → reject (cannot gate around a contract prohibition).",
+        "Source provenance traces to Zillow/Redfin/Realtor.com/CoStar or a people-search/aggregator site → reject.",
+        "Requires hostile scraping or CAPTCHA evasion → reject."
+      ],
+      "readiness_score": 50
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-usda-rd-2026-06-27.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (USDA Rural Development REO Resales)",
+      "status": "draft",
+      "status_line": "DRAFT PILOT — connector-ready field map + access path documented; pending VERIFIED until USDA-RD bulk/public-record path + listing-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + agency public-record/FOIA bulk); field map §3 (situs / list_price / list_date / status / case#; APN via assessor join); freshness §4 (`listing_date` + `status` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (MLS active listings) and the HUD HomeStore pilot (FHA-insured REO) — this is rural-development REO, broadening the federal-REO on-market lane.",
+      "lawful_basis": "USDA-RD REO resales are published on USDA's official disposition portal (`resales.usda.gov`, official `.usda.gov` domain). Federal agency disposing of real property publishes on-market listings to the public; owner-of-record is USDA-RD — no third-party contact-list purchase, no gated private-owner PII, no MLS-portal scraping, no Zillow/Redfin/Realtor.com/CoStar, no people-search sites.",
+      "official_urls": [
+        "https://www.resales.usda.gov"
+      ],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "list_date",
+        "property_type",
+        "apn",
+        "owner_of_record",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `listing_date` (new-listing origination).",
+        "Secondary: `status` (lifecycle transitions).",
+        "Per-pull: `source_pull_ts`, recorded per retrieval.",
+        "Cadence: confirm at build time before VERIFIED (USDA-RD postings refresh on a recurring sale cycle; record actual cadence in the market row)."
+      ],
+      "blockers": [
+        "pending VERIFIED until USDA-RD bulk/public-record path + listing-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + agency public-record/FOIA bulk); field map §3 (situs / list_price / list_date / status / case#; APN via assessor join); freshness §4 (`listing_date` + `status` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (MLS active listings) and the HUD HomeStore pilot (FHA-insured REO) — this is rural-development REO, broadening the federal-REO on-market lane.",
+        "File USDA agency public-records / FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, listing_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "Confirm listing-refresh cadence; record a market row in `data/source-registry`: `{source: usda_rd_reo, bulk_path: foia, cadence, last_fetched, status}`.",
+        "Stamp VERIFIED once bulk path + refresh cadence confirmed; until then DRAFT PILOT."
+      ],
+      "next_steps": [
+        "File USDA agency public-records / FOIA request for bulk REO inventory (case-level table: case#, situs, list_price, listing_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "If bulk is delayed, fall back to periodic manual retrieval of the public browse results (honor robots/ToS, rate-limit, no CAPTCHA evasion) — interim only.",
+        "Validate field map against §3 on the first batch; if any required field missing → §6 reject.",
+        "Confirm listing-refresh cadence; record a market row in `data/source-registry`: `{source: usda_rd_reo, bulk_path: foia, cadence, last_fetched, status}`.",
+        "Join to the 6 county owner/tax-roll pilots on situs → APN for equity/motivation scoring (list_price vs. assessed value).",
+        "Stamp VERIFIED once bulk path + refresh cadence confirmed; until then DRAFT PILOT.",
+        "Contacts gated; `situs` + `list_price` + `status` + `list_date` + `property_type` available to lead scoring."
+      ],
+      "rejection_criteria": [
+        "Agency public-record/FOIA bulk path confirmed unavailable AND no other machine-readable export → reject (cannot rely on hostile crawl).",
+        "No freshness field (`listing_date` / status timestamp) → reject.",
+        "Missing situs address (no APN join path) → reject.",
+        "ToS prohibits CRM / internal reuse of listing data → reject (cannot gate around a contract prohibition).",
+        "Source provenance traces to Zillow/Redfin/Realtor.com/CoStar or a people-search/aggregator site → reject.",
+        "Requires hostile scraping or CAPTCHA evasion → reject."
+      ],
+      "readiness_score": 50
+    },
+    {
+      "file": "data/source-registry/pilot-manifest-onmarket-gsa-auctions-2026-06-28.md",
+      "title": "Connector-Ready Pilot Manifest — Official On-Market / Federal Surplus Real-Property Feed (GSA Auctions)",
+      "status": "draft",
+      "status_line": "DRAFT PILOT — connector-ready field map + access path documented; pending VERIFIED until GSA bulk/public-record path + auction-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + agency public-record/FOIA bulk); field map §3 (situs / opening_bid / sale_open_date / sale_close_date / lot# / property_type; APN via assessor join); freshness §4 (`sale_open_date` + `sale_close_date` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (MLS active listings), the HUD HomeStore pilot (FHA-insured REO), and the USDA-RD pilot (rural-development REO) — this is federal **surplus** real-property auctions, broadening the federal-REO/surplus on-market lane to its third connector.",
+      "lawful_basis": "GSA Auctions listings are published on GSA's official auction portal (`gsaauctions.gov`, official `.gov` domain). Federal agency disposing of surplus real property publishes on-market auction listings to the public; owner-of-record is GSA (the disposing agency) — no third-party contact-list purchase, no gated private-owner PII, no MLS-portal scraping, no Zillow/Redfin/Realtor.com/CoStar, no people-search sites.",
+      "official_urls": [
+        "https://www.gsaauctions.gov"
+      ],
+      "required_fields": [
+        "listing_id",
+        "situs",
+        "list_price",
+        "status",
+        "sale_open_date",
+        "sale_close_date",
+        "property_type",
+        "apn",
+        "owner_of_record",
+        "(aux) source_pull_ts"
+      ],
+      "freshness_anchors": [
+        "Authoritative anchor: `sale_open_date` (new-listing origination) + `sale_close_date` (bid deadline / lifecycle close).",
+        "Secondary: `status` (auction lifecycle transitions).",
+        "Per-pull: `source_pull_ts`, recorded per retrieval.",
+        "Cadence: confirm at build time before VERIFIED (GSA auctions are per-auction-cycle; record actual refresh cadence in the market row)."
+      ],
+      "blockers": [
+        "pending VERIFIED until GSA bulk/public-record path + auction-refresh cadence confirmed (§7). All CODEX-required fields present: official source §1; access path §2 (public browse + agency public-record/FOIA bulk); field map §3 (situs / opening_bid / sale_open_date / sale_close_date / lot# / property_type; APN via assessor join); freshness §4 (`sale_open_date` + `sale_close_date` + `source_pull_ts`); robots/ToS §5; rejection criteria §6. Distinct source class from the RESO/MLS pilot (MLS active listings), the HUD HomeStore pilot (FHA-insured REO), and the USDA-RD pilot (rural-development REO) — this is federal **surplus** real-property auctions, broadening the federal-REO/surplus on-market lane to its third connector.",
+        "File GSA agency public-records / FOIA request for bulk real-property auction inventory (lot-level table: lot#, situs, opening_bid, sale_open_date, sale_close_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "Confirm auction-refresh cadence; record a market row in `data/source-registry`: `{source: gsa_auctions_real_property, bulk_path: foia, cadence, last_fetched, status}`.",
+        "Stamp VERIFIED once bulk path + refresh cadence confirmed; until then DRAFT PILOT."
+      ],
+      "next_steps": [
+        "File GSA agency public-records / FOIA request for bulk real-property auction inventory (lot-level table: lot#, situs, opening_bid, sale_open_date, sale_close_date, status, property_type); confirm receipt cadence. (FOIA = lawful bulk path.)",
+        "If bulk is delayed, fall back to periodic manual retrieval of the public auction browse results for the Real Property category (honor robots/ToS, rate-limit, no CAPTCHA evasion) — interim only.",
+        "Validate field map against §3 on the first batch; if any required field missing → §6 reject.",
+        "Confirm auction-refresh cadence; record a market row in `data/source-registry`: `{source: gsa_auctions_real_property, bulk_path: foia, cadence, last_fetched, status}`.",
+        "Join to the 8 county owner/tax-roll pilots on situs → APN for equity/motivation scoring (opening_bid vs. assessed value).",
+        "Stamp VERIFIED once bulk path + refresh cadence confirmed; until then DRAFT PILOT.",
+        "Contacts gated; `situs` + `opening_bid` + `status` + `sale_open_date` + `sale_close_date` + `property_type` available to lead scoring."
+      ],
+      "rejection_criteria": [
+        "Agency public-record/FOIA bulk path confirmed unavailable AND no other machine-readable export → reject (cannot rely on hostile crawl).",
+        "No freshness field (`sale_open_date` / `sale_close_date` / status timestamp) → reject.",
+        "Missing situs address (no APN join path) → reject.",
+        "ToS prohibits CRM / internal reuse of listing data → reject (cannot gate around a contract prohibition).",
+        "Source provenance traces to Zillow/Redfin/Realtor.com/CoStar or a people-search/aggregator site → reject.",
+        "Requires hostile scraping or CAPTCHA evasion → reject."
+      ],
+      "readiness_score": 50
+    }
+  ],
+  "citations": [
+    {
+      "claim": "on-market readiness for Connector-Ready Pilot Manifest — Official On-Market / New-Listing Feed (RESO Web API via MLS)",
+      "file": "data/source-registry/pilot-manifest-onmarket-reso-2026-06-27.md"
+    },
+    {
+      "claim": "on-market readiness for Pilot Manifest — Official On-Market Feed: FDIC Real Estate for Sale (REO)",
+      "file": "data/source-registry/pilot-manifest-onmarket-fdic-reo-2026-06-28.md"
+    },
+    {
+      "claim": "on-market readiness for Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (HUD HomeStore)",
+      "file": "data/source-registry/pilot-manifest-onmarket-hud-homestore-2026-06-27.md"
+    },
+    {
+      "claim": "on-market readiness for Connector-Ready Pilot Manifest — Official On-Market / Federal REO Feed (USDA Rural Development REO Resales)",
+      "file": "data/source-registry/pilot-manifest-onmarket-usda-rd-2026-06-27.md"
+    },
+    {
+      "claim": "on-market readiness for Connector-Ready Pilot Manifest — Official On-Market / Federal Surplus Real-Property Feed (GSA Auctions)",
+      "file": "data/source-registry/pilot-manifest-onmarket-gsa-auctions-2026-06-28.md"
+    }
+  ]
+}
