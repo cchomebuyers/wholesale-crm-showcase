@@ -31,6 +31,7 @@ console.log(`owner sources: ${sources.length} [${[...byState.keys()].join(", ") 
 
 const stateFilter = (opt("state", "") || "").toUpperCase();
 const db = new DatabaseSync(DB);
+db.exec("PRAGMA busy_timeout = 8000"); // wait on locks instead of crashing under concurrent agent writes
 // tier=all -> every property (no pro_queue join); otherwise scope to one queue tier.
 const where = ["(p.owner_name IS NULL OR p.owner_name = '')"];
 const params = [];

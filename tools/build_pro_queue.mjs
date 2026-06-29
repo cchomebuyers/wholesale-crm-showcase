@@ -30,6 +30,7 @@ if (existsSync(join(repo, "docs", "HALT"))) { console.log("HALT present - stoppi
 mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new DatabaseSync(DB);
+db.exec("PRAGMA busy_timeout = 8000"); // wait on locks instead of crashing when agents write crm.db concurrently
 const rows = db.prepare(
   `SELECT * FROM properties ${limit ? `LIMIT ${limit}` : ""}`
 ).all();

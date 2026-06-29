@@ -42,6 +42,7 @@ const nbhdAvg = new Map();
 console.log(`nbhd comp table: ${nbhdAvg.size} neighborhoods`);
 
 const db = new DatabaseSync(DB);
+db.exec("PRAGMA busy_timeout = 8000"); // wait on locks instead of crashing under concurrent agent writes
 const rows = db.prepare(`
   SELECT p.id, p.address, p.formatted_address, p.square_footage
   FROM properties p JOIN pro_queue q ON q.property_id = p.id
