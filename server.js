@@ -28,6 +28,7 @@ import { buildProofStack } from "./proof_stack.js";
 import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
 import { buildPropertyKgEvidenceView } from "./kg_evidence_view.js";
 import { buildInvestorMarketplace } from "./investor_marketplace.js";
+import { buildSellerIntakeQueue } from "./seller_intake.js";
 import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
 import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSettings } from "./lead_engine_scheduler.js";
 import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
@@ -1985,6 +1986,23 @@ app.post("/api/seller-lead", (req, res) => {
       allowed_channels: compliance.allowed_channels,
     });
   } catch (e) { res.status(500).json({ ok: false, error: String(e.message || e) }); }
+});
+
+// Seller intake queue -- read-only view over first-party consent records. This is
+// internal/operator-facing and may include the seller-provided contact fields, unlike
+// the investor marketplace which keeps seller contact redacted.
+app.get("/api/seller-intake/leads", (req, res) => {
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS consent_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, name TEXT, phone TEXT,
+      email TEXT, address TEXT, channels TEXT, source TEXT, offer TEXT, legal_basis TEXT)`);
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 50));
+    const rows = db.prepare(`SELECT id, created_at, name, phone, email, address, channels, source, offer, legal_basis
+      FROM consent_records ORDER BY created_at DESC LIMIT ?`).all(limit);
+    res.json(buildSellerIntakeQueue({ consentRecords: rows, limit }));
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
 });
 
 app.post("/api/resolve/contact-route", (req, res) => {
