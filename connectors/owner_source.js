@@ -54,28 +54,50 @@ export function normalizeOwnerHit(cfg, row) {
   };
 }
 
+// House number + first street-name word (directionals dropped) — the anchor for a safe
+// second-pass lookup when an exact address match misses (unit/suffix/direction differences).
+export function houseStreetKey(addr) {
+  const s = String(addr || "").toUpperCase().replace(/[.,#]/g, " ").replace(/\s+/g, " ").trim();
+  const m = s.match(/^(\d+)\s+(.*)$/);
+  if (!m) return null;
+  const words = m[2].split(" ").filter((w) => w && !/^(N|S|E|W|NE|NW|SE|SW)$/.test(w));
+  if (!words[0]) return null;
+  return `${m[1]} ${words[0]}`;
+}
+
 export function ownerSourceConnector(cfg, { fetchImpl = fetch } = {}) {
   const BASE = `https://${cfg.domain}/resource/${cfg.datasetId}.json`;
   return {
     id: cfg.id, region: cfg.region || null, state: cfg.state || null,
     type: "owner-source", dialect: "socrata", free: true, legal_status: "public_official_api",
-    // lookup(situs) -> owner record or null
+    // lookup(situs) -> owner record or null. Pass 1: exact normalized match. Pass 2 (fallback,
+    // unless cfg.fuzzyFallback === false): anchored house# + first street word via LIKE, which
+    // recovers misses from unit/suffix/direction differences between our address and the roll's.
     async lookup(situs) {
       const norm = normalizeSitus(situs, cfg.addrStyle || "full");
       if (!norm || norm.length < 4) return null;
-      const u = new URL(BASE);
       const cols = [cfg.addrCol, cfg.ownerCol, cfg.mailingCol, cfg.apnCol].filter(Boolean);
-      u.searchParams.set("$select", cols.join(","));
-      u.searchParams.set("$where", `upper(${cfg.addrCol})=upper('${norm.replace(/'/g, "''")}')`);
-      if (cfg.latestBy) u.searchParams.set("$order", `${cfg.latestBy} DESC`); // rolls with one row/year -> take latest
-      u.searchParams.set("$limit", "1");
-      try {
-        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 15000);
-        const r = await fetchImpl(u, { signal: ctl.signal }); clearTimeout(t);
-        if (!r.ok) return null;
-        const rows = await r.json();
-        return normalizeOwnerHit(cfg, Array.isArray(rows) ? rows[0] : null);
-      } catch { return null; }
+      const esc = (s) => String(s).replace(/'/g, "''");
+      const run = async (whereClause) => {
+        const u = new URL(BASE);
+        u.searchParams.set("$select", cols.join(","));
+        u.searchParams.set("$where", whereClause);
+        if (cfg.latestBy) u.searchParams.set("$order", `${cfg.latestBy} DESC`);
+        u.searchParams.set("$limit", "1");
+        try {
+          const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 15000);
+          const r = await fetchImpl(u, { signal: ctl.signal }); clearTimeout(t);
+          if (!r.ok) return null;
+          const rows = await r.json();
+          return normalizeOwnerHit(cfg, Array.isArray(rows) ? rows[0] : null);
+        } catch { return null; }
+      };
+      const exact = await run(`upper(${cfg.addrCol})=upper('${esc(norm)}')`);
+      if (exact || cfg.fuzzyFallback === false) return exact;
+      const key = houseStreetKey(norm);
+      if (!key) return null;
+      const [house, street] = key.split(" ");
+      return run(`upper(${cfg.addrCol}) like upper('${esc(house)} %${esc(street)}%')`);
     },
   };
 }

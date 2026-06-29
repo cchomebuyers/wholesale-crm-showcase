@@ -1,7 +1,37 @@
 // connectors/owner_source.test.js — generic owner-join.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeSitus, isPlaceholderOwner, normalizeOwnerHit, ownerSourceConnector, buildOwnerSources } from "./owner_source.js";
+import { normalizeSitus, isPlaceholderOwner, normalizeOwnerHit, ownerSourceConnector, buildOwnerSources, houseStreetKey } from "./owner_source.js";
+
+test("houseStreetKey = house# + first street word, directionals dropped", () => {
+  assert.equal(houseStreetKey("11306 S DRAKE AVE"), "11306 DRAKE");
+  assert.equal(houseStreetKey("1120 E 47TH ST"), "1120 47TH");
+  assert.equal(houseStreetKey("no number here"), null);
+});
+
+test("lookup falls back to anchored LIKE when exact match misses", async () => {
+  const seen = [];
+  const stub = async (u) => {
+    const where = u.searchParams.get("$where"); seen.push(where);
+    // exact '=' query misses; the LIKE fallback finds the row
+    if (/like/i.test(where)) return { ok: true, json: async () => ([{ owner_address_name: "TERRENCE SHANKLIN", prop_address_full: "11306 S DRAKE AVE" }]) };
+    return { ok: true, json: async () => ([]) };
+  };
+  const c = ownerSourceConnector({ id: "cook", domain: "d", datasetId: "i", addrCol: "prop_address_full", ownerCol: "owner_address_name", addrStyle: "raw" }, { fetchImpl: stub });
+  const r = await c.lookup("11306 DRAKE"); // property stored without direction/suffix
+  assert.equal(r.owner_name, "TERRENCE SHANKLIN");
+  assert.equal(seen.length, 2);                 // tried exact, then fallback
+  assert.match(seen[1], /like/i);
+  assert.match(seen[1], /11306 %DRAKE%/);
+});
+
+test("fuzzyFallback:false disables the second pass", async () => {
+  let calls = 0;
+  const stub = async () => { calls++; return { ok: true, json: async () => ([]) }; };
+  const c = ownerSourceConnector({ id: "x", domain: "d", datasetId: "i", addrCol: "a", ownerCol: "o", fuzzyFallback: false }, { fetchImpl: stub });
+  assert.equal(await c.lookup("11306 S DRAKE AVE"), null);
+  assert.equal(calls, 1);                        // only the exact pass
+});
 
 test("normalizeSitus expands suffix to full (PLUTO style)", () => {
   assert.equal(normalizeSitus("99 WALL ST", "full"), "99 WALL STREET");
