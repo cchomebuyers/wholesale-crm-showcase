@@ -21,6 +21,8 @@ import { normalizeBuyerCandidate, rankBuyerDemand, BUYER_DISCOVERY_SOURCE_FAMILI
 import { runAutonomousLeadCycle } from "./autonomous_lead_engine.js";
 import { evaluateWholesaleSpread, summarizeSpreadAudits } from "./wholesale_spread.js";
 import { resolveContactRoute } from "./contact_route_engine.js";
+import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
+import { complianceCheck } from "./compliance_gate.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
 import { buildProofStack } from "./proof_stack.js";
 import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
@@ -1959,6 +1961,29 @@ app.post("/api/seller-price/extract", (req, res) => {
 // ContactRouteEngine: plan the shortest LEGAL path to a contact for a property, and gate any
 // supplied candidate. Read-only planning — it does NOT call any paid API. Body: { property_id }
 // or { node }, optional { goal, channels, candidate }.
+// First-party seller lead: a seller submits their own info + explicit opt-in (landing page).
+// This is the cleanest contact route — express consent records a lawful basis and can flip
+// outreach_allowed:true on the consented channels WITHOUT paid skip-trace.
+app.post("/api/seller-lead", (req, res) => {
+  try {
+    const consent = makeConsentRecord(req.body || {});
+    if (!consent.valid) return res.status(400).json({ ok: false, error: consent.reason });
+    db.exec(`CREATE TABLE IF NOT EXISTS consent_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, name TEXT, phone TEXT,
+      email TEXT, address TEXT, channels TEXT, source TEXT, offer TEXT, legal_basis TEXT)`);
+    db.prepare(`INSERT INTO consent_records (created_at,name,phone,email,address,channels,source,offer,legal_basis)
+      VALUES (?,?,?,?,?,?,?,?,?)`).run(consent.timestamp, consent.name, consent.phone, consent.email,
+      consent.address, JSON.stringify(consent.channels), consent.source, consent.offer, consent.legal_basis);
+    const compliance = complianceCheck(consentToContactCandidate(consent), { channels: consent.channels });
+    res.json({
+      ok: true,
+      consent: { name: consent.name, channels: consent.channels, legal_basis: consent.legal_basis },
+      outreach_allowed: compliance.outreach_allowed,
+      allowed_channels: compliance.allowed_channels,
+    });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e.message || e) }); }
+});
+
 app.post("/api/resolve/contact-route", (req, res) => {
   try {
     const b = req.body || {};
