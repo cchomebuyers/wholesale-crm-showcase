@@ -23,6 +23,7 @@ import { evaluateWholesaleSpread, summarizeSpreadAudits } from "./wholesale_spre
 import { resolveContactRoute } from "./contact_route_engine.js";
 import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
 import { complianceCheck } from "./compliance_gate.js";
+import { skiptraceDecision } from "./skiptrace_gate.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
 import { buildProofStack, buyerSafeProofStack } from "./proof_stack.js";
 import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
@@ -2044,6 +2045,43 @@ app.get("/api/seller-intake/promotions", (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
+});
+
+// Skip-trace a pro-queue PROPERTY (the 321 ready leads live here, not in `leads`). Runs the spend
+// gate first; only spends when approved AND a BatchData key is set. Any number found is stored as
+// the property's contact but stays outreach_allowed:false until DNC/consent clears (compliance gate).
+app.post("/api/pro-queue/:propertyId/skiptrace", async (req, res) => {
+  try {
+    const id = Number(req.params.propertyId);
+    const p = db.prepare("SELECT * FROM properties WHERE id = ?").get(id);
+    if (!p) return res.status(404).json({ error: "property not found" });
+    const q = db.prepare("SELECT tier, signals_json FROM pro_queue WHERE property_id = ?").get(id);
+    let signals = {}; try { signals = JSON.parse(q?.signals_json || "{}"); } catch { signals = {}; }
+    const decision = skiptraceDecision(
+      { owner_name: p.owner_name, owner_mailing: p.owner_mailing, address: p.address || p.formatted_address },
+      { tier: q?.tier, signals },
+    );
+    if (!decision.allowed) return res.json({ ok: true, allowed: false, spent: false, reason: decision.reason });
+
+    const st = await skipTraceOne(p.address || p.formatted_address);
+    if (st.error === "no_key") {
+      return res.json({ ok: true, allowed: true, spent: false, reason: "approved for skip-trace — add a BatchData key (Settings → Acquisitions) to spend", skiptrace_input: decision.skiptrace_input });
+    }
+    if (!st.ok) return res.json({ ok: true, allowed: true, spent: false, reason: st.error || "skip-trace failed", skiptrace_input: decision.skiptrace_input });
+
+    const phone = st.phones[0] || null, email = st.emails[0] || null;
+    if (phone || email) {
+      db.prepare("UPDATE properties SET listing_agent_phone = COALESCE(?, listing_agent_phone), listing_agent_email = COALESCE(?, listing_agent_email), updated_at = ? WHERE id = ?")
+        .run(phone, email, now(), id);
+    }
+    const compliance = complianceCheck({ phone, email, dnc_status: "" }, { channels: ["call", "sms"] });
+    res.json({
+      ok: true, allowed: true, spent: true, max_cost: decision.max_cost,
+      phones: st.phones, emails: st.emails,
+      outreach_allowed: compliance.outreach_allowed, // false: DNC/consent not yet checked
+      compliance_note: "number found but outreach_allowed stays false until DNC/consent is verified",
+    });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 app.post("/api/resolve/contact-route", (req, res) => {
