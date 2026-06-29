@@ -86,6 +86,9 @@ Read LOOP_PROMPT.md and execute exactly one autonomous build-loop tick.
 COMMUNICATION IS KEY: use /COMMS first. Read councilRoom/agents/CODEX/STATUS.md,
 councilRoom/ledger/messages.jsonl, and your inbox under councilRoom/agents/CODEX/inbox.
 Post a short comms note before choosing work and another when done.
+Before editing, run git status and treat dirty/untracked files as other-agent work unless
+your own comms claim names them. Never use git add -A, git add ., or commit -a; stage only
+specific files you intentionally changed in this tick.
 
 Follow the top directive in LOOP_PROMPT.md: analyze dev/architecture/NORTH_STAR_VISION.md,
 diff it against the current project state, update LOOP_PROMPT.md if it is incomplete, then
