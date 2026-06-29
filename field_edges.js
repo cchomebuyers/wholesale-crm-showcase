@@ -26,10 +26,10 @@ export const FIELD_JOIN_REGISTRY = {
 const PLACEHOLDER = /^(n\/?a|none|unknown|null|unavailable|test|tbd|\.|0+)$/i;
 
 // Normalize a node's fields into [{ field, value, normalized }], dropping empties/placeholders.
-export function extractFields(node = {}) {
+export function extractFields(node = {}, registry = FIELD_JOIN_REGISTRY) {
   const src = node.fields || node.content || node;
   const out = [];
-  for (const field of Object.keys(FIELD_JOIN_REGISTRY)) {
+  for (const field of Object.keys(registry)) {
     const raw = src[field];
     if (raw == null) continue;
     const value = String(raw).trim();
@@ -45,14 +45,14 @@ export function extractFields(node = {}) {
  * @param {object} node - { id, kind, fields|content, source?, observed_at? }
  * @returns {Array} candidate edges
  */
-export function proposeEdges(node = {}) {
+export function proposeEdges(node = {}, registry = FIELD_JOIN_REGISTRY) {
   const fromId = node.id || null;
   const fromKind = node.kind || null;
   const source = node.source || node.owner_source || null;
   const observedAt = node.observed_at || null;
   const edges = [];
-  for (const { field, value, normalized } of extractFields(node)) {
-    for (const join of FIELD_JOIN_REGISTRY[field]) {
+  for (const { field, value, normalized } of extractFields(node, registry)) {
+    for (const join of registry[field]) {
       if (join.to === fromKind) continue; // don't propose an edge to our own kind via our own field
       edges.push({
         from_id: fromId,
