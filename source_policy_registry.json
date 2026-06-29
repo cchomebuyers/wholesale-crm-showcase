@@ -1,0 +1,14 @@
+{
+  "_doc": "Source legality + cost policy for the ContactRouteEngine route planner. class: GREEN (official/public/consented/permitted-vendor), YELLOW (manual/unclear-terms/rate-limited), RED (never: scraping vs terms, CAPTCHA/Cloudflare bypass, leaked data, guessed-as-verified, consumer-report w/o FCRA purpose). cost in $/lookup; legal_risk 0..1; latency arbitrary units; freshness = how current the data is.",
+  "sources": {
+    "county_assessor": { "class": "GREEN", "cost": 0, "legal_risk": 0.05, "latency": 2, "manual_effort": 0, "freshness": "annual_roll", "channels": [], "terms": "public record under state PRA; mailing PII gated" },
+    "county_recorder_deed": { "class": "GREEN", "cost": 0, "legal_risk": 0.05, "latency": 3, "manual_effort": 1, "freshness": "per_transaction", "channels": [], "terms": "public record" },
+    "business_license": { "class": "GREEN", "cost": 0, "legal_risk": 0.1, "latency": 2, "manual_effort": 0, "freshness": "annual", "channels": ["call"], "terms": "official open dataset; business contact" },
+    "permits": { "class": "GREEN", "cost": 0, "legal_risk": 0.1, "latency": 2, "manual_effort": 0, "freshness": "per_permit", "channels": ["call"], "terms": "official open dataset" },
+    "secretary_of_state": { "class": "GREEN", "cost": 0, "legal_risk": 0.1, "latency": 3, "manual_effort": 1, "freshness": "per_filing", "channels": [], "terms": "official business registry; registered agent" },
+    "paid_skiptrace": { "class": "GREEN", "cost": 0.15, "legal_risk": 0.3, "latency": 1, "manual_effort": 0, "freshness": "vendor", "channels": ["call", "sms", "mail"], "terms": "permitted-use vendor; output stays DNC/consent-gated", "requires_key": "batchdata_api_key" },
+    "first_party": { "class": "GREEN", "cost": 0, "legal_risk": 0.0, "latency": 0, "manual_effort": 0, "freshness": "live", "channels": ["call", "sms", "email"], "terms": "explicit consent edge — cleanest" },
+    "manual_official_lookup": { "class": "YELLOW", "cost": 0, "legal_risk": 0.3, "latency": 5, "manual_effort": 5, "freshness": "current", "channels": [], "terms": "official page, manual, unclear bulk reuse" },
+    "people_search_scrape": { "class": "RED", "cost": 0, "legal_risk": 1.0, "latency": 1, "manual_effort": 0, "freshness": "stale", "channels": [], "terms": "FORBIDDEN: scraping vs terms / consumer-report misuse" }
+  }
+}
