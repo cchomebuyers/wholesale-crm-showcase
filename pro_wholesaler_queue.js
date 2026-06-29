@@ -89,10 +89,15 @@ export function valueState(record = {}, spread) {
 // lead_score with bumps for the things a wholesaler actually values: real contact,
 // known value, and a spread that can work.
 function priorityScore(record, dist, contact, value, sig) {
-  const base = num(record.lead_score) ?? num(record.wholesale_score) ?? num(record.distress_score) ?? 0;
-  // weight the source/distress base at 0.5 so enrichment + owner signals have headroom to
-  // differentiate (otherwise a flat per-source lead_score saturates everyone at 100).
-  let s = base * 0.5;
+  // Prefer the per-property grade (property_score.js, stored as property_grade) when present:
+  // it already differentiates owner signals + value/equity + portfolio, replacing the FLAT
+  // per-source lead_score base. Guarded — when property_grade is absent, behavior is identical
+  // to before (lead_score*0.5 base + sig.signal_score). When present, we do NOT re-add
+  // sig.signal_score to avoid double-counting owner signals already inside the grade.
+  const grade = num(record.property_grade);
+  let s = grade !== null
+    ? grade
+    : (num(record.lead_score) ?? num(record.wholesale_score) ?? num(record.distress_score) ?? 0) * 0.5;
   if (dist.fromSource) s += 4;
   if (contact.ownerName) s += 6;
   if (contact.callable) s += 8;
@@ -102,7 +107,7 @@ function priorityScore(record, dist, contact, value, sig) {
   else if (value.spreadStatus === "thin") s += 4;
   if (value.acceptanceTargetMet) s += 5;
   else if (value.acceptanceDead) s -= 10;
-  if (sig) s += sig.signal_score; // absentee/entity boost; institutional penalty
+  if (sig && grade === null) s += sig.signal_score; // grade already includes owner signals
   return Math.max(0, Math.min(100, Math.round(s)));
 }
 

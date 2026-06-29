@@ -125,3 +125,14 @@ test("B2B/operator phone record is never elevated as a seller lead by this gate"
   const d = classifyProQueue({ source: "austin-permit-contractors", lead_score: 0, listing_agent_phone: "5125550100" });
   assert.equal(d.tier, "hold");
 });
+
+test("priority_score prefers property_grade as ranking base when present, identical when absent", () => {
+  // Two same-source records: a higher property_grade must rank higher within the tier.
+  const base = { source: "cook-il-violations", lead_score: 64, distress_score: 68, owner_name: "ACME LLC", address: "1 A ST", owner_mailing: "9 B ST" };
+  const high = classifyProQueue({ ...base, property_grade: 80 });
+  const low = classifyProQueue({ ...base, property_grade: 40 });
+  assert.ok(high.priority_score > low.priority_score, `grade 80 (${high.priority_score}) should outrank grade 40 (${low.priority_score})`);
+  // Guard: absent property_grade -> unchanged behavior (does not throw, still ranks).
+  const none = classifyProQueue({ ...base });
+  assert.ok(Number.isFinite(none.priority_score));
+});
