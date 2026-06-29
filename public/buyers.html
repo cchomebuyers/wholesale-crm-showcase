@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Investor Marketplace — matched deals</title>
+<style>
+  :root { --ink:#1a1f2b; --muted:#6b7280; --accent:#2563eb; --ok:#0a7d33; --warn:#b45309; --line:#e5e7eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#f7f8fa; }
+  header { background:#fff; border-bottom:1px solid var(--line); padding:18px 20px; }
+  header h1 { margin:0; font-size:20px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  .wrap { max-width:980px; margin:0 auto; padding:20px; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+  .bar input, .bar select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; }
+  .bar button { padding:8px 14px; background:var(--accent); color:#fff; border:0; border-radius:8px; font-weight:600; cursor:pointer; }
+  .summary { color:var(--muted); font-size:13px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card h3 { margin:0 0 2px; font-size:15px; }
+  .card .market { color:var(--muted); font-size:13px; margin-bottom:10px; }
+  .nums { display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; font-size:13px; margin:8px 0; }
+  .nums b { font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; }
+  .pill.ready { background:#eafaf0; color:var(--ok); }
+  .pill.work { background:#fff4e5; color:var(--warn); }
+  .pill.score { background:#eef2ff; color:var(--accent); }
+  .demand { font-size:12px; color:var(--muted); margin-top:6px; }
+  .links a { font-size:12px; color:var(--accent); text-decoration:none; margin-right:12px; }
+  .empty,.err { padding:30px; text-align:center; color:var(--muted); }
+  .err { color:#b42318; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Investor Marketplace</h1>
+  <p>Off-market deals matched to your buy-box — with assignment economics and a proof stack. Seller contact is never shown here.</p>
+</header>
+<div class="wrap">
+  <div class="bar">
+    <input id="limit" type="number" min="1" max="200" value="24" title="how many deals" style="width:80px" />
+    <label style="font-size:13px;color:var(--muted)">min buyer score <input id="minscore" type="number" min="0" max="100" value="45" style="width:64px" /></label>
+    <label style="font-size:13px;color:var(--muted)"><input id="ready" type="checkbox" /> deal-ready only</label>
+    <button id="load">Load deals</button>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="grid" id="grid"><div class="empty">Loading…</div></div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const money = (v) => (Number(v) > 0 ? "$" + Math.round(Number(v)).toLocaleString() : "—");
+  function dealCard(d) {
+    const e = d.economics || {}, p = d.proof || {}, bd = d.buyer_demand || {};
+    const acc = e.buyer_acceptance || {};
+    const ready = p.deal_ready;
+    const statusPill = ready ? '<span class="pill ready">deal-ready</span>' : '<span class="pill work">' + (e.status || "research") + '</span>';
+    const scorePill = d.score != null ? '<span class="pill score">score ' + d.score + '</span>' : '';
+    const buyers = (bd.matches || []).length;
+    return `<div class="card">
+      <h3>${esc(d.title || "Property")}</h3>
+      <div class="market">${esc(d.market || d.county || "")}${d.property_type ? " · " + esc(d.property_type) : ""}</div>
+      ${statusPill} ${scorePill}
+      <div class="nums">
+        <span>ARV</span><b>${money(e.arv)}</b>
+        <span>Repairs</span><b>${money(e.repairs)}</b>
+        <span>Buyer price</span><b>${money(e.buyer_assignment_price)}</b>
+        <span>Our offer</span><b>${money(e.acquisition_offer_price)}</b>
+        <span>Spread</span><b>${money(e.projected_spread)}</b>
+        <span>Buyer accept</span><b>${acc.score ? acc.score + "x " + (acc.rating || "") : "—"}</b>
+      </div>
+      <div class="demand">${buyers} matching buyer${buyers === 1 ? "" : "s"}${bd.top_buyer && bd.top_buyer.name ? " · top: " + esc(bd.top_buyer.name) : ""}</div>
+      <div class="links" style="margin-top:8px">
+        ${p.proof_url ? `<a href="${p.proof_url}" target="_blank">proof stack →</a>` : ""}
+        ${p.kg_evidence_url ? `<a href="${p.kg_evidence_url}" target="_blank">evidence →</a>` : ""}
+      </div>
+    </div>`;
+  }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, (c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+  async function load() {
+    const grid = $("grid"), sum = $("summary");
+    grid.innerHTML = '<div class="empty">Loading…</div>';
+    const q = new URLSearchParams({ limit: $("limit").value || 24, min_buyer_score: $("minscore").value || 45 });
+    try {
+      const r = await fetch("/api/investor-marketplace/deals?" + q.toString());
+      const d = await r.json();
+      let deals = d.deals || [];
+      if ($("ready").checked) deals = deals.filter((x) => x.proof && x.proof.deal_ready);
+      const s = d.summary || {};
+      sum.textContent = `${deals.length} shown · ${s.matched_deals ?? deals.length} matched of ${s.scanned_properties ?? "?"} scanned · ${s.crm_buyers ?? 0} buyers, ${s.discovered_candidates ?? 0} discovered`;
+      grid.innerHTML = deals.length ? deals.map(dealCard).join("") : '<div class="empty">No deals match yet — lower min buyer score or add buyers.</div>';
+    } catch (e) { grid.innerHTML = '<div class="err">Could not load deals: ' + esc(e.message) + '</div>'; }
+  }
+  $("load").addEventListener("click", load);
+  load();
+</script>
+</body>
+</html>
