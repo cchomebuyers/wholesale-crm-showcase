@@ -28,6 +28,7 @@ import { buildProofStack } from "./proof_stack.js";
 import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
 import { buildPropertyKgEvidenceView } from "./kg_evidence_view.js";
 import { buildInvestorMarketplace } from "./investor_marketplace.js";
+import { buildBuyerInterestQueue, buildBuyerInterestRequest } from "./buyer_interest.js";
 import { buildSellerIntakeQueue } from "./seller_intake.js";
 import { buildSellerPromotionWorkflow } from "./seller_promotion.js";
 import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
@@ -226,6 +227,22 @@ db.exec(`CREATE TABLE IF NOT EXISTS seller_price_evidence (
   UNIQUE(record_type, record_id, price, source, source_record_id, context)
 );`);
 db.exec("CREATE INDEX IF NOT EXISTS idx_seller_price_record ON seller_price_evidence(record_type, record_id, confidence)");
+db.exec(`CREATE TABLE IF NOT EXISTS marketplace_interest (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  property_id INTEGER NOT NULL,
+  buyer_name TEXT,
+  buyer_email TEXT,
+  buyer_phone TEXT,
+  buyer_buy_box TEXT,
+  message TEXT,
+  deal_title TEXT,
+  market TEXT,
+  proof_url TEXT,
+  kg_evidence_url TEXT,
+  status TEXT NOT NULL DEFAULT 'new_interest'
+);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_marketplace_interest_property ON marketplace_interest(property_id, created_at)");
 // Unified email log — both inbound (synced from IMAP) and outbound (sent from the CRM).
 db.exec(`CREATE TABLE IF NOT EXISTS emails (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2158,6 +2175,46 @@ app.get("/api/investor-marketplace/deals", (req, res) => {
       includeUnmatched: req.query.include_unmatched === "1",
     });
     res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// Buyer interest workflow -- lets a buyer request follow-up on a marketplace deal
+// while preserving the redaction boundary: seller contact is never returned here.
+app.post("/api/investor-marketplace/deals/:id/interest", (req, res) => {
+  try {
+    const propertyId = Number(req.params.id);
+    if (!Number.isFinite(propertyId)) return res.status(400).json({ ok: false, error: "id must be a number" });
+    const p = db.prepare(`SELECT id, formatted_address, address, city, state, zip
+      FROM properties WHERE id=?`).get(propertyId);
+    if (!p) return res.status(404).json({ ok: false, error: "property not found", id: propertyId });
+    const built = buildBuyerInterestRequest({
+      property: p,
+      buyer: req.body?.buyer || req.body || {},
+      message: req.body?.message,
+      createdAt: now(),
+    });
+    if (!built.ok) return res.status(400).json(built);
+    const r = built.request;
+    const info = db.prepare(`INSERT INTO marketplace_interest
+      (created_at, property_id, buyer_name, buyer_email, buyer_phone, buyer_buy_box, message,
+       deal_title, market, proof_url, kg_evidence_url, status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      r.created_at, r.property_id, r.buyer.name, r.buyer.email, r.buyer.phone, r.buyer.buy_box,
+      r.message, r.deal.title, r.deal.market, r.deal.proof_url, r.deal.kg_evidence_url, r.workflow.status,
+    );
+    res.json({ ok: true, id: info.lastInsertRowid, request: r });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.get("/api/investor-marketplace/interest", (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 100));
+    const rows = db.prepare("SELECT * FROM marketplace_interest ORDER BY created_at DESC LIMIT ?").all(limit);
+    res.json(buildBuyerInterestQueue({ requests: rows, limit }));
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
