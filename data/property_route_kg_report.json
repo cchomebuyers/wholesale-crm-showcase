@@ -1,0 +1,66 @@
+{
+  "counts": {
+    "entities": 32447,
+    "edges": 22566,
+    "citations": 70008,
+    "property_entities": 10000,
+    "route_pack_entities": 10000
+  },
+  "sample": [
+    {
+      "property_id": "thinga:property-1",
+      "property_name": "1619 W 87TH ST",
+      "route_pack_id": "routepack:thinga-property-1:contact-route",
+      "best_path": "address_business_license_phone",
+      "candidate_id": "kg:business-address-1619-w-87th-st",
+      "candidate_kind": "business",
+      "candidate_name": "1619 W 87TH ST",
+      "citation_source": "pro_wholesaler_queue.js#distressSignal",
+      "citation_claim": "distress signal"
+    },
+    {
+      "property_id": "thinga:property-1",
+      "property_name": "1619 W 87TH ST",
+      "route_pack_id": "routepack:thinga-property-1:contact-route",
+      "best_path": "address_business_license_phone",
+      "candidate_id": "kg:business-address-1619-w-87th-st",
+      "candidate_kind": "business",
+      "candidate_name": "1619 W 87TH ST",
+      "citation_source": "property_signals.js#deriveSignals",
+      "citation_claim": "owner identity"
+    },
+    {
+      "property_id": "thinga:property-1",
+      "property_name": "1619 W 87TH ST",
+      "route_pack_id": "routepack:thinga-property-1:contact-route",
+      "best_path": "address_business_license_phone",
+      "candidate_id": "kg:business-address-1619-w-87th-st",
+      "candidate_kind": "business",
+      "candidate_name": "1619 W 87TH ST",
+      "citation_source": "wholesale_spread.js#maoFromArv",
+      "citation_claim": "valuation (ARV/MAO)"
+    },
+    {
+      "property_id": "thinga:property-1",
+      "property_name": "1619 W 87TH ST",
+      "route_pack_id": "routepack:thinga-property-1:contact-route",
+      "best_path": "address_business_license_phone",
+      "candidate_id": "kg:business-address-1619-w-87th-st",
+      "candidate_kind": "business",
+      "candidate_name": "1619 W 87TH ST",
+      "citation_source": "buyer_discovery.js#rankBuyerDemand",
+      "citation_claim": "buyer demand"
+    },
+    {
+      "property_id": "thinga:property-1",
+      "property_name": "1619 W 87TH ST",
+      "route_pack_id": "routepack:thinga-property-1:contact-route",
+      "best_path": "address_business_license_phone",
+      "candidate_id": "kg:business-address-1619-w-87th-st",
+      "candidate_kind": "business",
+      "candidate_name": "1619 W 87TH ST",
+      "citation_source": "seller_price_evidence.js",
+      "citation_claim": "seller price"
+    }
+  ]
+}

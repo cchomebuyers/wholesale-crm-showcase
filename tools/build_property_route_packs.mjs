@@ -70,7 +70,7 @@ console.log(JSON.stringify({
     edges: kgEdges,
     citations: kgCitations,
     persisted_to_postgres: false,
-    note: "projection is stored inside route_pack Thingas; wholesale_kg persistence is a later connector step",
+    note: "this tool stores projections inside route_pack Thingas; run tools/persist_route_pack_kg.mjs to persist them into wholesale_kg",
   },
   samples,
 }, null, 2));
