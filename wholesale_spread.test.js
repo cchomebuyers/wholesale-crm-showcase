@@ -1,6 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { evaluateWholesaleSpread, summarizeSpreadAudits, maoFromArv } from "./wholesale_spread.js";
+import { evaluateWholesaleSpread, summarizeSpreadAudits, maoFromArv, buyerAcceptance } from "./wholesale_spread.js";
+
+test("buyerAcceptance = buyer profit / our fee, rated against the 3x rule", () => {
+  // ARV 200k, repairs 30k, buyer pays us 100k -> buyer profit 70k; our fee 14k -> 5x excellent
+  assert.deepEqual(buyerAcceptance(200000, 30000, 100000, 14000), { profit: 70000, score: 5, rating: "excellent", reason: "buyer profit 70000 is 5x our fee 14000" });
+  // same profit, greedy 40k fee -> 1.75x annoyed
+  assert.equal(buyerAcceptance(200000, 30000, 100000, 40000).rating, "annoyed");
+  // fee eats all upside -> profit<=0 dead
+  assert.equal(buyerAcceptance(120000, 30000, 95000, 10000).rating, "dead");
+  // missing inputs -> unknown
+  assert.equal(buyerAcceptance(null, null, null, null).rating, "unknown");
+});
 
 test("maoFromArv = ARV*70% - repairs - fee, with sqft fallback for repairs", () => {
   assert.equal(maoFromArv(200000, 30000, { minFee: 10000 }), 100000); // 140k-30k-10k

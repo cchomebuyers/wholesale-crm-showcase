@@ -197,6 +197,9 @@ export function evaluateWholesaleSpread(record = {}, options = {}) {
     }
   }
 
+  // Will the end buyer accept our fee? Uses the realized fee (projectedSpread) when known.
+  const acceptance = buyerAcceptance(i.arv, i.repairs, i.buyerAssignmentPrice, projectedSpread);
+
   return {
     status,
     projectedSpread,
@@ -206,6 +209,7 @@ export function evaluateWholesaleSpread(record = {}, options = {}) {
     marginal,
     negotiation,
     bestNegotiationPath,
+    buyerAcceptance: acceptance,
     inputs: i,
     reasons,
     nextNeeded: blockers.map((b) => {
@@ -216,6 +220,22 @@ export function evaluateWholesaleSpread(record = {}, options = {}) {
       return b;
     }),
   };
+}
+
+// Buyer-acceptance: will the END BUYER say yes to our fee? A property signal is not a deal,
+// and neither is a fat spread if it eats the buyer's whole upside. The rule a pro lives by:
+//   buyer_acceptance_score = buyer_projected_profit / assignment_fee
+// >=5x excellent, 3-5x good, 2-3x possible, 1-2x buyer annoyed, <1x dead. Aim profit >= 3x fee.
+// buyer_projected_profit ~= ARV - repairs - what the buyer pays us (buyer assignment price).
+export function buyerAcceptance(arv, repairs, buyerAssignmentPrice, fee) {
+  const a = num(arv); const bp = num(buyerAssignmentPrice); const f = num(fee);
+  const r = num(repairs) ?? 0;
+  if (!a || !bp || !f) return { profit: null, score: null, rating: "unknown", reason: "need ARV, buyer assignment price, and fee" };
+  const profit = Math.round(a - r - bp);
+  if (profit <= 0) return { profit, score: 0, rating: "dead", reason: "no buyer profit after our price" };
+  const score = Math.round((profit / f) * 100) / 100;
+  const rating = score >= 5 ? "excellent" : score >= 3 ? "good" : score >= 2 ? "possible" : score >= 1 ? "annoyed" : "dead";
+  return { profit, score, rating, reason: `buyer profit ${profit} is ${score}x our fee ${f}` };
 }
 
 // Max Allowable Offer: the wholesaler's offer ceiling to the seller given an ARV.
