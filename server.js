@@ -20,6 +20,7 @@ import { rankBuyersForProperty } from "./buyer_matching.js";
 import { normalizeBuyerCandidate, rankBuyerDemand, BUYER_DISCOVERY_SOURCE_FAMILIES } from "./buyer_discovery.js";
 import { runAutonomousLeadCycle } from "./autonomous_lead_engine.js";
 import { evaluateWholesaleSpread, summarizeSpreadAudits } from "./wholesale_spread.js";
+import { resolveContactRoute } from "./contact_route_engine.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
 import { buildProofStack } from "./proof_stack.js";
 import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
@@ -1955,6 +1956,27 @@ app.post("/api/seller-price/extract", (req, res) => {
 
 // Pro wholesaler queue — read-only view of the tiered, enriched work list
 // (built by tools/build_pro_queue.mjs --persist). Optional ?tier= and ?limit=.
+// ContactRouteEngine: plan the shortest LEGAL path to a contact for a property, and gate any
+// supplied candidate. Read-only planning — it does NOT call any paid API. Body: { property_id }
+// or { node }, optional { goal, channels, candidate }.
+app.post("/api/resolve/contact-route", (req, res) => {
+  try {
+    const b = req.body || {};
+    let node = b.node;
+    if (!node && b.property_id) {
+      const p = db.prepare("SELECT id, address, formatted_address, owner_name, owner_mailing FROM properties WHERE id=?").get(b.property_id);
+      if (!p) return res.status(404).json({ error: "property not found" });
+      node = { id: `property:${p.id}`, kind: "property", source: "crm", fields: { address: p.address || p.formatted_address, owner_name: p.owner_name, mailing_address: p.owner_mailing } };
+    }
+    if (!node) return res.status(400).json({ error: "provide node or property_id" });
+    res.json(resolveContactRoute({
+      node, goal: b.goal || "phone",
+      hasKeys: { batchdata_api_key: Boolean(batchdataKey()) },
+      channels: b.channels, candidate: b.candidate || null,
+    }));
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
 app.get("/api/pro-queue", (req, res) => {
   try {
     const tier = req.query.tier || null;
