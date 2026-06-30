@@ -1,69 +1,119 @@
-# 🏠 Wholesale CRM
+# Wholesale CRM / Thinga Acquisition Engine
 
-A custom CRM for real estate wholesaling — track leads through your pipeline, log every
-call/note, build a cash-buyer list, and email sellers right from each lead. Runs locally
-on your Mac; your data lives in a single `crm.db` file you fully own.
+Local-first real-estate wholesaling CRM plus a broader Thinga graph substrate.
 
-## What it does
+The original app is a working CRM for leads, buyers, outreach, tasks, offers, and email. The current system is larger: it ingests public property signals, mirrors CRM objects into a universal Thinga graph, ranks a pro wholesaler queue, plans legal contact routes, preserves proof stacks, gates outreach through compliance, and exposes buyer/seller marketplace surfaces.
 
-- **Lead pipeline** — New → Contacted → Follow-Up → Offer Made → Under Contract → Assigned → Closed / Dead
-- **Deal numbers** with an automatic **MAO calculator** (70% / 75% of ARV − repairs − fee)
-- **Activity timeline** per lead — notes, calls, stage changes, and sent emails all logged
-- **Email sellers** through your Gmail, logged to the lead automatically
-- **Cash buyer list** — areas, property types, max price
-- **Dashboard** — active leads, pipeline value, and follow-ups due today / overdue
+## Current Status
 
-## First-time setup
+Verified June 30, 2026:
+
+- `npm test` passes: `394` tests, `394` pass, `0` fail.
+- `crm.db` contains `10,000` properties, `1,046` leads, `291` buyer-discovery candidates, and `10,000` pro-queue rows.
+- The Thinga substrate is live beside the CRM tables: `thingas`, `thinga_links`, and `thinga_meta`.
+- The graph contains `10,000` `property` Thingas, `10,000` `route_pack` Thingas, `1,046` `lead` Thingas, and `119` connector Thingas.
+- The pro queue currently has `401 pay_to_unlock`, `2,329 research`, `7,270 hold`, and `0 call_now`.
+
+The honest blocker: the system can rank where to spend next, but it is not yet an industrial call-ready machine. Seller phone acquisition, DNC clearance, and live paid skiptrace execution are still the gates.
+
+## Core Architecture
+
+The intended core is one datatype: the `Thinga`.
+
+```text
+Thinga / Node
+  id
+  kind
+  data/content
+  relationships
+```
+
+The direction is: build one graph, render many projections. The CRM, buyer portal, seller intake, map, proof stack, council/agent review, terminal/server/relay/storage views, and future world/IDE views should all be projections of the same underlying graph.
+
+Important files:
+
+- `thinga.js` - signed `PUT` / `GET` / `QUERY` / `INVOKE` runtime over SQLite.
+- `faceted_thinga.js` - content-addressed faceted Thinga format and parser registry.
+- `parser_registry.js` - `kind -> schema -> parser` registry; real estate is config #1.
+- `field_edges.js` - fields propose candidate graph edges.
+- `route_planner.js` - legal path planner for contact/identity routes.
+- `route_engine.js` - generic capability/route execution kernel.
+- `crm_thinga.js` - mirrors legacy CRM rows into Thingas.
+- `server.js` - Express app and API surface.
+
+## What It Does
+
+- Lead pipeline: stages, notes, calls, tasks, offers, emails, and follow-ups.
+- Buyer management and buyer-discovery candidate promotion.
+- Property ingestion from public/legal sources through connectors.
+- Property scoring, owner enrichment, ARV/MAO, and pro queue tiering.
+- Contact route planning: address, owner, business, permit, skiptrace, and consent routes.
+- Compliance gate: default deny; DNC/consent/opt-out rules control outreach.
+- Seller intake page for first-party consent.
+- Buyer signup and buyer-safe marketplace/proof-stack views.
+- Council/agent ledger for coordinated review and audit loops.
+
+## Run
 
 ```bash
-cd ~/wholesale-crm
 npm install
+npm test
 npm start
 ```
 
-Then open **http://localhost:4000** in your browser.
+Open:
 
-That's it — lead tracking, the pipeline, buyers, and the dashboard all work immediately.
+```text
+http://localhost:4000
+```
 
-## Turning on email (Gmail) — no terminal needed
+## Data
 
-1. Open the **Outreach** tab and click **Connect Gmail**.
-2. Enter your Gmail address and a **Google App Password**
-   (create one at https://myaccount.google.com/apppasswords — requires 2-Step Verification on).
-   Optionally add a "From name", and your name/phone for the `{{my_name}}` / `{{my_phone}}` merge fields.
-3. Click **Save connection**, then **Send test to myself** to confirm it works.
+Everything local lives in `crm.db`. The project uses regular CRM tables and mirrors many objects into the Thinga substrate. This is a migration state, not the final architecture.
 
-Now the **📧 Email** button on any lead — and the bulk **Outreach** sender — send through your Gmail
-and log every send to the lead's timeline.
+The final direction is not seven separate apps. It is one graph with projections:
 
-> Prefer the terminal? You can still put `GMAIL_USER` / `GMAIL_APP_PASSWORD` in a `.env` file
-> (see `.env.example`); in-app settings take priority if both are set.
+- CRM projection
+- Pro queue projection
+- Buyer marketplace projection
+- Seller intake projection
+- Map/proof projection
+- Agent/council projection
+- Future server/relay/storage/world/IDE projections
 
-## Outreach & templates
+## Rules
 
-The **Outreach** tab lets you:
-- Manage reusable **email templates** with merge fields: `{{first_name}}`, `{{address}}`, `{{city}}`,
-  `{{my_name}}`, `{{my_phone}}`, `{{arv}}`, `{{repair_estimate}}`, `{{contract_price}}`, and more.
-- **Send a template to many recipients at once** — pick Leads (filtered by stage) or your Buyers list,
-  check who to include, and each email is personalized per recipient and logged to that lead.
-- Three starter templates are included (cold seller, follow-up, buyer blast).
+- Go to the source, not the wall: official/public APIs and licensed feeds, not Zillow/CoStar/people-search scraping.
+- Sold records are comps/ARV fuel, not seller leads.
+- Found contact data is not automatically callable.
+- Compliance gates every outreach channel.
+- B2B/operator phone records belong on the buyer/enrichment side, not as seller inventory.
+- Secrets do not enter the substrate; store key presence only.
+- Keep `npm test` green.
 
-**Gmail sending limits:** a normal Gmail account allows roughly 500 emails/day. For real cold-email
-volume you'd eventually want a dedicated sending domain/service — ask when you get there.
+## Audit
 
-## Daily use
+The June 30 verification audit is in:
 
-- Click **+ New Lead** to add a property/seller.
-- Open a lead to edit numbers, log calls, set a **next follow-up** date, or email the seller.
-- Check the **Dashboard** each morning for what's due.
+```text
+audit/june30/00-index.md
+```
 
-## Your data
+It covers folder structure, live database state, docs-vs-code drift, agent history, tests, professional wholesaler fit, industrial readiness, one-datatype/Thinga truth, projection architecture, the open-web technology stack, and the CRM quality/visibility meta-audit.
 
-Everything is stored in `crm.db` in this folder. Back it up by copying that one file.
-`.env`, `crm.db`, and `node_modules/` are gitignored so nothing private gets committed.
+The follow-up development plan that turns the audit into executable future work is in:
 
-## Hosting it later (phone access)
+```text
+dev/plans/2026-06-30-cohesive-vision/00-README.md
+```
 
-This is a standard Node/Express app, so it deploys as-is to Render, Railway, or Fly.io
-when you're ready to use it from your phone. Just set the same env vars there. Ask and
-I'll walk you through it.
+## Next Real Milestone
+
+Move records from `pay_to_unlock` into `call_now` by wiring:
+
+1. Paid skiptrace result persistence.
+2. DNC/compliance status persistence.
+3. Queue rebuild that promotes cleared contacts.
+4. Call outcome tracking.
+
+Until that is done, this is a strong research, evidence, and prioritization engine. After that, it becomes a daily acquisitions execution system.

@@ -18,6 +18,7 @@
 import { deriveSignals } from "./property_signals.js";
 import { distressSignal, classifyProQueue } from "./pro_wholesaler_queue.js";
 import { evaluateWholesaleSpread, maoFromArv } from "./wholesale_spread.js";
+import { proposeEdges, groupByTarget } from "./field_edges.js";
 
 const num = (v) => {
   if (v === null || v === undefined || v === "") return null;
@@ -139,6 +140,7 @@ export function buildProofStack(record = {}, opts = {}) {
   };
 
   const completeness = scoreCompleteness(evidence);
+  const graph = graphContext(record);
 
   return {
     property_id: record.id ?? null,
@@ -162,6 +164,10 @@ export function buildProofStack(record = {}, opts = {}) {
       reasons: decision.reasons,
     } : null,
     completeness,
+    // Identity-graph context (NORTH_STAR_VISION #2 "fields propose edges"): the
+    // candidate links this property's fields propose to owner/parcel/business/
+    // contact nodes — candidates, never auto-confirmed. Via field_edges.proposeEdges.
+    graph,
     // Citation law: every pillar names the module/source that proved it.
     citations: [
       { claim: "distress signal", module: "pro_wholesaler_queue.js#distressSignal", source: evidence.signal.source },
@@ -171,8 +177,40 @@ export function buildProofStack(record = {}, opts = {}) {
       { claim: "seller price", module: "seller_price_evidence.js", source: evidence.seller_price.anchor_source },
       { claim: "assignment spread + buyer-acceptance", module: "wholesale_spread.js#evaluateWholesaleSpread", source: "projected_spread = buyer_assignment_price - acquisition_offer_price" },
       { claim: "queue decision", module: "pro_wholesaler_queue.js#classifyProQueue", source: "tier ladder" },
+      { claim: "candidate identity edges", module: "field_edges.js#proposeEdges", source: "fields propose edges (kind=schema→parser registry)" },
     ],
     built_at: new Date().toISOString(),
+  };
+}
+
+// Map a property record onto the field_edges node shape and propose its candidate
+// identity edges — the doorways from this property to owner/person/business/contact
+// nodes. Pure read-only consume of field_edges; candidates are never auto-confirmed.
+function graphContext(record = {}) {
+  const node = {
+    id: record.id ?? null,
+    kind: "property",
+    source: record.owner_source || record.source || null,
+    observed_at: record.owner_enriched_at || record.updated_at || null,
+    fields: {
+      address: record.formatted_address || record.address || null,
+      parcel_id: record.parcel_id || record.apn || record.pin || null,
+      owner_name: record.owner_name || null,
+      mailing_address: record.owner_mailing || null,
+      phone: record.listing_agent_phone || record.seller_phone || record.phone || null,
+      email: record.listing_agent_email || record.seller_email || record.email || null,
+    },
+  };
+  const edges = safe(() => proposeEdges(node)) || [];
+  const targets = safe(() => groupByTarget(edges)) || [];
+  const reachableKinds = [...new Set(edges.map((e) => e.to_kind))];
+  return {
+    candidate_edges: edges,
+    join_targets: targets,
+    reachable_kinds: reachableKinds,
+    edge_count: edges.length,
+    double_links: edges.filter((e) => e.reversible).length,
+    single_links: edges.filter((e) => !e.reversible).length,
   };
 }
 
@@ -271,6 +309,13 @@ export function buyerSafeProofStack(proof = {}) {
     confidence: {
       completeness_score: proof.completeness?.score ?? null,
       deal_ready: proof.completeness?.deal_ready ?? false,
+    },
+    // Graph reach as a count + target kinds only — never the candidate edge values
+    // (which carry owner name / mailing). Shows a buyer the identity graph is rich
+    // without exposing who the seller is.
+    graph_summary: {
+      candidate_links: proof.graph?.edge_count ?? 0,
+      reachable_kinds: proof.graph?.reachable_kinds ?? [],
     },
     disclosures: [
       "Assignment of contract: the buyer pays the assignment price shown.",
