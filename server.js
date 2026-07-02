@@ -39,6 +39,7 @@ import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_
 import { runPipeline, PIPELINE_STAGES, PIPELINE_PRESETS, resolveStageIds } from "./pipeline_run.js";
 import { createParseMemory } from "./parse_memory.js";
 import { normalizeCallOutcome, summarizeOutcomes } from "./call_outcome.js";
+import { createDncStore, normalizePhone } from "./dnc_records.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -225,6 +226,8 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_pipeline_runs_created ON pipeline_runs(c
 try { db.prepare("UPDATE pipeline_runs SET status='interrupted', finished_at=?, error='server restarted mid-run' WHERE status='running'").run(new Date().toISOString()); } catch { /* table just created */ }
 // The memory unit the generic parser consults before parsing (parse_memory.js).
 const parseMemory = createParseMemory(db);
+// Persisted DNC/consent verdicts (dnc_records.js — audit P1 #2).
+const dncStore = createDncStore(db);
 // Post-dial paper trail (call_outcome.js — audit P1 #4).
 db.exec(`CREATE TABLE IF NOT EXISTS call_outcomes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1657,6 +1660,22 @@ app.get("/api/parse/memory", (req, res) => {
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
+// ---------- DNC verdicts: store + query check results (audit P1 #2) ----------
+// A verdict comes from a real check (list lookup, provider, documented manual
+// check) and MUST name its source. A stored fresh "clear" is what flips the
+// queue's dnc_consent_missing blocker; stale clears degrade to unchecked.
+app.post("/api/dnc/record", (req, res) => {
+  const r = dncStore.record(req.body || {});
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+app.get("/api/dnc/status", (req, res) => {
+  const phone = req.query.phone;
+  if (!phone) return res.json({ stats: dncStore.stats() });
+  const hit = dncStore.lookup(phone);
+  res.json({ phone: normalizePhone(phone), record: hit, effective_status: hit ? hit.effective_status : null });
+});
+
 // ---------- Call outcomes: what happened after the dial (audit P1 #4) ----------
 app.post("/api/pro-queue/:propertyId/call-outcome", (req, res) => {
   const propertyId = Number(req.params.propertyId);
@@ -2300,8 +2319,13 @@ app.get("/api/pro-queue", (req, res) => {
     let suppressed = new Set();
     try { suppressed = new Set(db.prepare("SELECT DISTINCT property_id FROM call_outcomes WHERE outreach_suppressed = 1").all().map((x) => x.property_id)); }
     catch { /* table not created yet */ }
+    // Stored DNC verdicts hydrate each row: a FRESH clear flips the
+    // dnc_consent_missing blocker; listed/refused stays blocked. (dnc_records.js)
+    const dncMap = dncStore.statusMap();
     let items = rows.map((r) => {
       let signals = {}; try { signals = JSON.parse(r.signals_json || "{}"); } catch { signals = {}; }
+      const phoneKey = normalizePhone(r.listing_agent_phone);
+      if (phoneKey && dncMap.has(phoneKey) && r.dnc_status == null) r = { ...r, dnc_status: dncMap.get(phoneKey) };
       const why = whyNotCallNow(r, { signals });
       const { signals_json, listing_agent_phone, listing_agent_email, asking_price, contract_price, price, offer_amount, ...rest } = r;
       return applyOutreachSuppression({ ...rest, signals, why_not_call_now: why, call_now_ready: why.length === 0 }, suppressed);
