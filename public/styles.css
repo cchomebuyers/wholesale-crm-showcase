@@ -1,16 +1,22 @@
 :root {
-  --bg: #0f1115;
-  --panel: #181b22;
-  --panel2: #1f232c;
-  --border: #2a2f3a;
-  --text: #e7eaf0;
-  --muted: #8b93a3;
-  --primary: #3b82f6;
-  --primary2: #2563eb;
-  --green: #22c55e;
-  --amber: #f59e0b;
-  --red: #ef4444;
-  --radius: 12px;
+  /* Technical light theme — cool white surfaces, graphite-black hairline
+     outlines, a precise emerald accent, sharp corners, tabular numerics.
+     Instrument-panel feel: clean, exact, trustworthy — not soft, not neon. */
+  --bg: #ffffff;          /* pure white page */
+  --panel: #f7f8fa;       /* cool near-white panel */
+  --panel2: #eceef2;      /* cool light-gray track (inputs, segmented) */
+  --border: #14171a;      /* graphite-black hairline outline */
+  --line: #dde1e6;        /* soft cool divider */
+  --text: #0d0f12;        /* near-black */
+  --muted: #616872;       /* cool slate gray */
+  --primary: #0f9d6b;     /* precise emerald — technical + trustworthy */
+  --primary2: #0b8259;    /* deeper emerald (hover / accent text) */
+  --green: #12a074;
+  --amber: #a9781c;
+  --red: #c04a44;
+  --accent-soft: #e4f3ec; /* cool pale-green fill */
+  --accent-line: #bfe3d1; /* pale-green border */
+  --radius: 6px;          /* sharper, more technical */
 }
 * { box-sizing: border-box; }
 body {
@@ -712,3 +718,85 @@ table.fill-table th { color: var(--muted); font-weight: 600; }
 table.fill-table td.tier-call_now { font-weight: 700; color: var(--green); }
 table.fill-table td.tier-pay_to_unlock { font-weight: 700; color: var(--amber); }
 .fill-why { color: var(--muted); font-size: 12px; }
+
+/* ===================================================================
+   LIGHT THEME — surgical colour overrides (no layout changes).
+   Re-maps every dark-theme hardcoded spot onto the light palette so
+   nothing renders dark-on-light. Appended last so these rules win.
+   =================================================================== */
+
+/* Hover tints that were white-alpha (invisible on white) → soft ink tint */
+.tab:hover, .seg-btn:hover { background: #0000000a; color: var(--text); }
+.pr-main:hover { background: #00000008; }
+
+/* Active tab / segmented control — sage with white text */
+.tab.active, .seg-btn.active { background: var(--primary); color: #fff; }
+.tab.active:hover, .seg-btn.active:hover { background: var(--primary2); color: #fff; }
+
+/* Info / active highlights (were dark blue) → pastel green */
+.notif.unread { background: var(--accent-soft); border-left: 3px solid var(--primary); }
+.fill-stage.running { background: var(--accent-soft); border-color: var(--primary); }
+.dmsg.unread .dmsg-ico,
+.msg.unread .msg-ava { background: var(--accent-soft); border-color: var(--accent-line); color: var(--primary2); }
+.cal-cell.has { background: var(--accent-soft); border-color: var(--accent-line); }
+.cal-cell.today, .note-item.today .ni-date { color: var(--primary2); }
+#dashboard .cal-cell.sel { background: var(--primary); color: #fff; }
+.bubble.out { background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--text); }
+
+/* Status badges — soft pastel fills with legible ink, hue kept semantic */
+.badge.New          { background: #e7eef5; color: #3f6b8f; }
+.badge.Contacted    { background: #ece7f5; color: #63549a; }
+.badge.Follow-Up    { background: #f4ecd7; color: #8a6a2c; }
+.badge.Offer-Made   { background: #e2eff1; color: #3a7d86; }
+.badge.Backup-Offer { background: #f5e8db; color: #91602f; }
+.badge.Under-Contract, .badge.Assigned { background: var(--accent-soft); color: var(--primary2); }
+.badge.Closed       { background: var(--panel2); color: var(--primary2); }
+.badge.Dead         { background: #f4e2e0; color: #97463f; }
+
+/* Score badges + list tags */
+.score-badge.s-high, .ldr-tag.comps { background: var(--accent-soft); color: var(--primary2); border-color: var(--accent-line); }
+.score-badge.s-med,  .ldr-tag.est   { background: #f4ecd7; color: #8a6a2c; border-color: #e7dcc0; }
+.score-badge.s-low  { background: #f4e2e0; color: #97463f; border-color: #ecc9c5; }
+.lc-tag.green { color: var(--primary2); border-color: var(--accent-line); }
+.lc-tag.amber { color: #8a6a2c; border-color: #e7dcc0; }
+
+/* MAO callout — the money box — calm pastel green */
+.mao-box, .mao-line { background: var(--accent-soft); border-color: var(--accent-line); color: var(--primary2); }
+
+/* Hero / auto-pull feature panels (were dark gradients) → cream */
+.result-card.hero { background: linear-gradient(135deg, #faf8f2, #f2efe6); border-color: var(--border); }
+.autopull { background: var(--accent-soft); border: 1px solid var(--accent-line); }
+
+/* Inputs read crisply on white with a black outline */
+input, select, textarea { background: #ffffff; color: var(--text); border-color: var(--border); }
+input::placeholder, textarea::placeholder { color: #a7a496; }
+
+/* Fill-table tier colours stay semantic on light */
+table.fill-table td.tier-call_now { color: var(--primary2); }
+table.fill-table td.tier-pay_to_unlock { color: #a9701f; }
+
+/* Shadows softened for a light surface; primary button gets a valid sage glow */
+.panel { box-shadow: 0 1px 2px rgba(20,18,10,.03); }
+.card:hover { box-shadow: 0 4px 14px rgba(20,18,10,.08); }
+.btn:hover { box-shadow: 0 3px 10px rgba(20,18,10,.10); }
+.btn.primary { color: #fff; }
+.btn.primary:hover { background: var(--primary2); border-color: var(--primary2); box-shadow: 0 4px 14px rgba(95,152,115,.35); }
+.notif-panel { box-shadow: 0 14px 40px rgba(13,15,18,.14); }
+
+/* ---- Technical polish: precise numerics + monospace on data/metrics ---- */
+body { font-feature-settings: "tnum" 1, "ss01" 1; }
+.card .big, .score-badge, .badge, .lc-tag, .ldr-tag, .st-ms, #fillCounts,
+.mao-box, .mao-line, .cal-cell, table.fill-table td { font-variant-numeric: tabular-nums; }
+.card .big,
+.score-badge,
+.st-ms,
+table.fill-table td:nth-child(2),   /* score */
+table.fill-table td:nth-child(6),   /* ARV   */
+table.fill-table td:nth-child(7) {  /* MAO   */
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  letter-spacing: -.01em;
+}
+/* Crisp instrument-panel accents */
+.panel-head b { letter-spacing: .01em; }
+.fill-stage { border-radius: 5px; }
+table.fill-table th { text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
