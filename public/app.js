@@ -2715,6 +2715,7 @@ function fillQueryParams() {
   if ($("#fillDistress").checked) p.set("distress", "1");
   if ($("#fillReady")?.checked) p.set("ready", "1");
   const sp = $("#fillSpread")?.value; if (sp) p.set("spread", sp);
+  const sg = $("#fillSignal")?.value; if (sg) p.set("signal", sg);
   const mg = Number($("#fillMinGrade").value); if (mg > 0) p.set("min_grade", String(mg));
   p.set("limit", String(Number($("#fillLimit").value) || 100));
   return p.toString();
@@ -2810,7 +2811,7 @@ async function resolveParse() {
     const sel = e.target.closest(".fillOutcome");
     if (sel && sel.value) recordFillOutcome(Number(sel.dataset.pid), sel.value, sel);
   });
-  ["fillOwnerKnown", "fillDistress", "fillReady", "fillSpread", "fillMinGrade", "fillLimit"].forEach((id) => { const el = $("#" + id); if (el) el.addEventListener("change", reloadFillQueue); });
+  ["fillOwnerKnown", "fillDistress", "fillReady", "fillSpread", "fillSignal", "fillMinGrade", "fillLimit"].forEach((id) => { const el = $("#" + id); if (el) el.addEventListener("change", reloadFillQueue); });
 })();
 
 // ---------- Command shell: cube node → striker → overlay nav ----------

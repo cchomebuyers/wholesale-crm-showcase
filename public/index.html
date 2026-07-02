@@ -544,6 +544,7 @@
           <label><input type="checkbox" id="fillDistress"> distress</label>
           <label><input type="checkbox" id="fillReady"> ready ✓ only</label>
           <label>Spread <select id="fillSpread"><option value="">any</option><option value="works">works</option><option value="thin">thin</option><option value="fails">fails</option><option value="unproven">unproven</option></select></label>
+          <label>Owner type <select id="fillSignal"><option value="">any</option><option value="absentee">absentee</option><option value="entity">entity (LLC/trust)</option><option value="institutional">institutional</option></select></label>
           <label>Min grade <input id="fillMinGrade" type="number" value="0" style="width:64px"></label>
           <label>Limit <input id="fillLimit" type="number" value="100" style="width:72px"></label>
         </div>
@@ -880,7 +881,7 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=50"></script>
+  <script src="app.js?v=51"></script>
   <script src="hyper.js?v=2"></script>
 </body>
 </html>
