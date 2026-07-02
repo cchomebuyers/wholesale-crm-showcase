@@ -46,9 +46,15 @@ if (!Array.isArray(aggr)) { console.log("aggregate failed:", JSON.stringify(aggr
 const nbhdAvg = new Map(aggr.map((r) => [r.neighborhood, Math.round(Number(r.avg_price))]));
 console.log(`NYC nbhd comp table: ${nbhdAvg.size} neighborhoods (res sales >= 5 since ${since})`);
 
+// county -> DOF sales borough code (usep-8jbt `borough` field, "1".."5").
+// Requires tick-64's borough derivation; rows without a county match un-filtered
+// matching and are skipped to avoid the cross-borough trap ('53 SPRING STREET'
+// matched Staten Island's Spring St before this filter existed).
+const COUNTY_BORO = { "New York County": "1", "Bronx County": "2", "Kings County": "3", "Queens County": "4", "Richmond County": "5" };
+
 const db = new DatabaseSync(DB);
 db.exec("PRAGMA busy_timeout = 15000");
-const rows = db.prepare(`SELECT id, address, formatted_address, square_footage FROM properties
+const rows = db.prepare(`SELECT id, address, formatted_address, square_footage, county FROM properties
   WHERE state='NY' AND (arv IS NULL OR arv <= 0) AND address IS NOT NULL AND address <> ''
   ORDER BY lead_score DESC LIMIT ?`).all(max);
 const updStmt = db.prepare("UPDATE properties SET arv=?, repair_estimate=?, mao=?, updated_at=? WHERE id=?");
@@ -64,9 +70,11 @@ for (const r of rows) {
   // house+street while still absorbing suffix growth (PL -> PLACE, unit tails).
   const addr = String(r.address || r.formatted_address || "").toUpperCase().trim().replace(/'/g, "''");
   if (!/^\d+ /.test(addr)) continue;
+  const boro = COUNTY_BORO[r.county];
+  if (!boro) continue; // no verified borough -> no match (cross-borough trap)
   const su = new URL(BASE);
   su.searchParams.set("$select", "neighborhood, address");
-  su.searchParams.set("$where", `starts_with(upper(address),'${addr}')`);
+  su.searchParams.set("$where", `borough='${boro}' and starts_with(upper(address),'${addr}')`);
   su.searchParams.set("$limit", "1");
   let hit = null;
   try { hit = (await (await fetch(su)).json())[0] || null; } catch { hit = null; }
