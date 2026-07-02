@@ -69,6 +69,22 @@ export function buyerConfidence(purchases) {
   return n >= 20 ? "high" : n >= 10 ? "medium" : "low";
 }
 
+// Quality gate for BULK promotion into the active buyers list (audit P5:
+// "Promote qualified buyer candidates into active buyers"). Pure — the
+// endpoint loops candidates through this and skips anything that fails.
+export function qualifiesForPromotion(candidate = {}, opts = {}) {
+  const minConfidence = opts.minConfidence || "high"; // high | medium | low
+  const order = { low: 0, medium: 1, high: 2 };
+  if (!isRealBuyer(candidate.name)) return { ok: false, reason: "not a real buyer (trust/title/agency)" };
+  if (candidate.imported_buyer_id) return { ok: false, reason: "already promoted" };
+  if (opts.requireCash !== false && !candidate.cash) return { ok: false, reason: "not a cash buyer" };
+  if ((order[String(candidate.confidence || "low")] ?? 0) < (order[minConfidence] ?? 2)) {
+    return { ok: false, reason: `confidence ${candidate.confidence || "low"} < ${minConfidence}` };
+  }
+  if (!String(candidate.areas || "").trim()) return { ok: false, reason: "no buy-box area" };
+  return { ok: true, reason: "qualified" };
+}
+
 const tok = (v) => String(v || "").toLowerCase().split(/[,;|/]+/).map((s) => s.trim()).filter(Boolean);
 
 // Market demand = active cash investors whose stated buy-box AREA covers this property.

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BUYER_DISCOVERY_SOURCE_FAMILIES, normalizeBuyerCandidate, rankBuyerDemand, isRealBuyer, buyerConfidence, buyerMarketDemand } from "./buyer_discovery.js";
+import { BUYER_DISCOVERY_SOURCE_FAMILIES, normalizeBuyerCandidate, rankBuyerDemand, isRealBuyer, buyerConfidence, buyerMarketDemand, qualifiesForPromotion } from "./buyer_discovery.js";
 
 test("normalizes future buyer candidates into buyer-compatible buy boxes", () => {
   const c = normalizeBuyerCandidate({
@@ -64,4 +64,22 @@ test("buyerMarketDemand applies price filter only when property value is known",
 test("buyer discovery source families are data, not hardcoded buyer count", () => {
   assert.ok(BUYER_DISCOVERY_SOURCE_FAMILIES.length >= 5);
   assert.ok(BUYER_DISCOVERY_SOURCE_FAMILIES.every((x) => x.id && x.inputs.length && x.outputs.length));
+});
+
+// ---- bulk-promotion quality gate ----
+test("qualifiesForPromotion: high-confidence cash buyer with area passes", () => {
+  const q = qualifiesForPromotion({ name: "GRANDVIEW HOMES 1, LLC", cash: 1, confidence: "high", areas: "Cook County, IL" });
+  assert.equal(q.ok, true);
+});
+test("gate rejects: low confidence, no cash, no area, already promoted, non-buyers", () => {
+  const base = { name: "REAL BUYER LLC", cash: 1, confidence: "high", areas: "Cook" };
+  assert.equal(qualifiesForPromotion({ ...base, confidence: "low" }).ok, false);
+  assert.equal(qualifiesForPromotion({ ...base, cash: 0 }).ok, false);
+  assert.equal(qualifiesForPromotion({ ...base, areas: "" }).ok, false);
+  assert.equal(qualifiesForPromotion({ ...base, imported_buyer_id: 5 }).ok, false);
+  assert.equal(qualifiesForPromotion({ ...base, name: "CHICAGO TITLE LAND TRUST" }).ok, false);
+});
+test("gate loosens with minConfidence=medium / requireCash=false", () => {
+  assert.equal(qualifiesForPromotion({ name: "X LLC", cash: 1, confidence: "medium", areas: "Cook" }, { minConfidence: "medium" }).ok, true);
+  assert.equal(qualifiesForPromotion({ name: "X LLC", cash: 0, confidence: "high", areas: "Cook" }, { requireCash: false }).ok, true);
 });

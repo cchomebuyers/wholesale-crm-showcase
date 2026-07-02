@@ -17,7 +17,7 @@ import { buildRealEstateEngine } from "./packs/real_estate_acquisition.js";
 import { canonicalAddr, geocodeAddress } from "./connectors/census.js";
 import { buildPropertyImageryEvidence } from "./property_imagery.js";
 import { rankBuyersForProperty } from "./buyer_matching.js";
-import { normalizeBuyerCandidate, rankBuyerDemand, BUYER_DISCOVERY_SOURCE_FAMILIES } from "./buyer_discovery.js";
+import { normalizeBuyerCandidate, rankBuyerDemand, BUYER_DISCOVERY_SOURCE_FAMILIES, qualifiesForPromotion } from "./buyer_discovery.js";
 import { runAutonomousLeadCycle } from "./autonomous_lead_engine.js";
 import { evaluateWholesaleSpread, summarizeSpreadAudits } from "./wholesale_spread.js";
 import { resolveContactRoute } from "./contact_route_engine.js";
@@ -2044,6 +2044,41 @@ app.post("/api/buyer-discovery/candidates/:id/promote", (req, res) => {
   const updated = rowBuyerCandidate(db.prepare("SELECT * FROM buyer_discovery_candidates WHERE id=?").get(c.id));
   mirrorBuyerCandidateSafe(updated);
   res.json({ ok: true, buyerId: info.lastInsertRowid, candidate: updated });
+});
+
+// BULK promotion behind the quality gate (audit P5: 291 candidates, ~2 active
+// buyers — one-by-one promotion is why). Dry-run by default; pass apply:true
+// to write. Dedupes case-insensitively against existing buyers by name.
+app.post("/api/buyer-discovery/promote-qualified", (req, res) => {
+  const b = req.body || {};
+  const opts = { minConfidence: b.minConfidence || "high", requireCash: b.requireCash !== false };
+  const limit = Math.max(1, Math.min(1000, Number(b.limit) || 500));
+  const apply = b.apply === true;
+  const existing = new Set(db.prepare("SELECT LOWER(TRIM(name)) n FROM buyers").all().map((r) => r.n));
+  const candidates = db.prepare("SELECT * FROM buyer_discovery_candidates WHERE imported_buyer_id IS NULL ORDER BY id LIMIT ?").all(limit * 3);
+  const promoted = [], skipped = [];
+  for (const raw of candidates) {
+    if (promoted.length >= limit) break;
+    const c = rowBuyerCandidate(raw);
+    const q = qualifiesForPromotion(c, opts);
+    if (!q.ok) { skipped.push({ id: c.id, name: c.name, reason: q.reason }); continue; }
+    const nameKey = String(c.name || "").toLowerCase().trim();
+    if (existing.has(nameKey)) { skipped.push({ id: c.id, name: c.name, reason: "duplicate of existing buyer" }); continue; }
+    if (apply) {
+      const info = db.prepare(`INSERT INTO buyers (created_at, name, phone, email, areas, property_types, max_price, cash, notes)
+        VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(now(), c.name, c.phone, c.email, c.areas, c.property_types, c.max_price, c.cash ?? 1,
+          `Bulk-promoted (gate: confidence>=${opts.minConfidence}, cash=${opts.requireCash}) from ${c.source_id || "unknown"}.`);
+      db.prepare("UPDATE buyer_discovery_candidates SET imported_buyer_id=?, updated_at=? WHERE id=?").run(info.lastInsertRowid, now(), c.id);
+      mirrorBuyerSafe(info.lastInsertRowid);
+      promoted.push({ id: c.id, name: c.name, buyerId: Number(info.lastInsertRowid) });
+    } else {
+      promoted.push({ id: c.id, name: c.name, buyerId: null });
+    }
+    existing.add(nameKey);
+  }
+  res.json({ applied: apply, would_promote: !apply ? promoted.length : undefined, promoted: apply ? promoted.length : undefined,
+    skipped: skipped.length, promoted_list: promoted.slice(0, 50), skip_reasons: Object.entries(skipped.reduce((m, s) => (m[s.reason] = (m[s.reason] || 0) + 1, m), {})) });
 });
 
 app.get("/api/seller-price/evidence", (req, res) => {
