@@ -94,6 +94,25 @@ test("stats endpoint (dashboard) answers", async () => {
   assert.equal(r.status, 200);
 });
 
+test("every documented pro-queue filter param answers 200 with a sane subset", async () => {
+  // Filter parity contract (docs/fill_properties_pipeline.md): each param the
+  // doc promises must work against the real schema — none may 503 or widen
+  // the result set beyond the unfiltered total.
+  const base = await (await fetch(`${BASE}/api/pro-queue?limit=1`)).json();
+  const total = base.total ?? 0;
+  const params = [
+    "tier=call_now,pay_to_unlock", "min_score=50", "min_grade=50",
+    "owner_known=1", "distress=1", "spread=unproven", "signal=absentee", "ready=1",
+  ];
+  for (const p of params) {
+    const r = await fetch(`${BASE}/api/pro-queue?${p}&limit=1`);
+    assert.equal(r.status, 200, `${p} must not fail`);
+    const j = await r.json();
+    assert.ok((j.total ?? 0) <= total, `${p} must be a subset (${j.total} > ${total})`);
+    assert.ok(Array.isArray(j.items), `${p} returns items[]`);
+  }
+});
+
 test("spend gate end-to-end: hold-tier skiptrace is DENIED before any provider call", async () => {
   // A hold-tier property fails skiptraceDecision, so the route returns before
   // skipTraceOne ever runs — zero spend risk regardless of configured keys.
