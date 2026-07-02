@@ -6,7 +6,7 @@ The original app is a working CRM for leads, buyers, outreach, tasks, offers, an
 
 ## Current Status
 
-Test suite (re-run `NO_BACKUP=1 npm test` to refresh): `414` tests, `414` pass, `0` fail.
+Test suite (re-run `NO_BACKUP=1 npm test` to refresh): `475` tests, `475` pass, `0` fail — including a boot smoke suite (`server_smoke.test.js`) that starts the real server against the real db every run.
 
 Runtime counts below are the June 30, 2026 audit snapshot from `audit/june30/06-database-live-state.md`. The database changes, so treat them as historical and re-derive current counts from that audit file (or the audit command behind it) rather than trusting these numbers verbatim:
 
@@ -76,7 +76,7 @@ Open:
 http://localhost:4000
 ```
 
-Known boot caveat (June 30, 2026): a live `npm start` / `node server.js` currently fails before listening because `backups/` is a symlink to a missing external target (`/d/crm/backups` on a D: drive), so the startup `mkdirSync(BACKUP_DIR, …)` at `server.js:2548` throws `ENOENT`. This is an environment/symlink issue, not a code regression; `npm test` runs green with `NO_BACKUP=1`. Restore the backups target (or repoint the symlink) before booting. [verified: `councilRoom/comms/2026-06-30-audit-loop/DONE_CALLNOW.md`]
+Boot caveat RESOLVED (July 2, 2026): the missing-backups-symlink crash is fixed — startup degrades to backups-disabled with a logged "[backup] disabled" warning instead of throwing, and every test run boots the real server via `server_smoke.test.js` to prove it. If `backups/` points at a missing external drive, backups stay off until the target returns; everything else runs normally.
 
 ## Data
 
