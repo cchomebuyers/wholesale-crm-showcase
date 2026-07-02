@@ -2458,7 +2458,22 @@ app.get("/api/pipeline/coverage", (req, res) => {
     const p = join(__dirname, "data", "pro_queue_summary.json");
     if (!existsSync(p)) return res.status(404).json({ error: "no pro_queue_summary.json yet — run the pipeline" });
     const s = JSON.parse(readFileSync(p, "utf8"));
-    res.json({ built_at: s.built_at || null, total: s.total || null, tiers: s.tiers || {}, top_missing: s.top_missing || {}, dial_activity: s.dial_activity || null });
+    // Promotion yield: what one more enrichment buys. Computed live from
+    // pro_queue.missing_json so it tracks the current build.
+    let promotion_yield = null;
+    try {
+      const combos = {};
+      for (const r of db.prepare("SELECT missing_json FROM pro_queue WHERE tier = 'research'").all()) {
+        let m = []; try { m = JSON.parse(r.missing_json || "[]"); } catch { m = []; }
+        combos[m.slice().sort().join("+")] = (combos[m.slice().sort().join("+")] || 0) + 1;
+      }
+      promotion_yield = {
+        research_phone_only: combos["seller_phone"] || 0,           // skiptrace wave 2
+        research_arv_and_phone: combos["arv+seller_phone"] || 0,    // one comp source away
+        research_owner_arv_phone: combos["arv+owner+seller_phone"] || 0,
+      };
+    } catch { /* pro_queue absent */ }
+    res.json({ built_at: s.built_at || null, total: s.total || null, tiers: s.tiers || {}, top_missing: s.top_missing || {}, dial_activity: s.dial_activity || null, promotion_yield });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
