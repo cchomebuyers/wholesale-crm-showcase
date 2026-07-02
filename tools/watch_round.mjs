@@ -68,5 +68,13 @@ try {
 } catch { /* not fatal */ }
 
 console.log(failures === 0 ? "\nWATCH ROUND: ALL CLEAR" : `\nWATCH ROUND: ${failures} FAILURE(S)`);
-if (!existsSync(join(repo, "docs", "HALT")) || process.env.PIPELINE_RUN) { /* informational only */ }
+// --log: append one line per round to logs/watch.log so unattended rounds
+// leave a durable trace (logs/ is gitignored; grep it for FAIL to triage).
+if (process.argv.includes("--log")) {
+  try {
+    const { appendFileSync, mkdirSync } = await import("node:fs");
+    mkdirSync(join(repo, "logs"), { recursive: true });
+    appendFileSync(join(repo, "logs", "watch.log"), `${new Date().toISOString()} ${failures === 0 ? "CLEAR" : "FAIL:" + failures}\n`);
+  } catch { /* logging must never fail the round */ }
+}
 process.exit(failures === 0 ? 0 : 1);
