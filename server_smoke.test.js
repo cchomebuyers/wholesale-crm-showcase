@@ -94,6 +94,18 @@ test("stats endpoint (dashboard) answers", async () => {
   assert.equal(r.status, 200);
 });
 
+test("spend gate end-to-end: hold-tier skiptrace is DENIED before any provider call", async () => {
+  // A hold-tier property fails skiptraceDecision, so the route returns before
+  // skipTraceOne ever runs — zero spend risk regardless of configured keys.
+  const q = await (await fetch(`${BASE}/api/pro-queue?tier=hold&limit=1`)).json();
+  if (!q.items || !q.items.length) return; // empty db — nothing to assert
+  const id = q.items[0].property_id;
+  const r = await (await fetch(`${BASE}/api/pro-queue/${id}/skiptrace`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+  assert.equal(r.allowed, false, "hold tier must be denied by the spend gate");
+  assert.equal(r.spent, false, "no money may move on a denied decision");
+  assert.ok(r.reason && r.reason.length > 3, "denial carries a reason");
+});
+
 test("ankhor live bridge serves ThingaImportV2 with contacts redacted", async () => {
   const d = await (await fetch(`${BASE}/api/export/ankhor-import?kinds=lead&limit_per_kind=3`)).json();
   assert.equal(d.$schema, "ThingaImportV2");
