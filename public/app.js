@@ -2785,7 +2785,22 @@ async function recordFillOutcome(pid, outcome, selEl) {
   } catch (e) { toast(e.message, true); selEl.value = ""; }
 }
 
+// 🧠 Parse resolver: the memory-first parser choice, on a button.
+async function resolveParse() {
+  const out = $("#parseResult");
+  let record;
+  try { record = JSON.parse($("#parseInput").value || "{}"); }
+  catch { out.innerHTML = '<span style="color:var(--red)">not valid JSON</span>'; return; }
+  try {
+    const r = await api("/api/parse/resolve", { method: "POST", body: JSON.stringify(record) });
+    if (!r.kind) { out.innerHTML = `no registered kind matches this shape <span class="muted">(${esc(r.signature)})</span>`; return; }
+    const src = r.source === "memory" ? `🧠 memory hit (${r.hits ?? "?"}x)` : "🔍 detected + remembered";
+    out.innerHTML = `kind: <b>${esc(r.kind)}</b> · ${src} · <span class="muted">${esc(r.signature)}${r.matched ? " · matched: " + esc(r.matched.join(", ")) : ""}</span>`;
+  } catch (e) { out.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; }
+}
+
 (function wireFill() {
+  const pr = $("#parseResolveBtn"); if (pr) pr.addEventListener("click", resolveParse);
   const run = $("#fillRun"); if (run) run.addEventListener("click", runFill);
   const reload = $("#fillReload"); if (reload) reload.addEventListener("click", reloadFillQueue);
   $$(".fillTier").forEach((c) => c.addEventListener("change", reloadFillQueue));

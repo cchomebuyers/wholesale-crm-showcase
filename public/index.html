@@ -552,6 +552,16 @@
           <tbody id="fillBody"><tr><td colspan="9" class="muted">Run the pipeline, then reload.</td></tr></tbody>
         </table>
       </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <b>🧠 Parse resolver</b>
+          <span class="muted" style="margin-left:8px">memory-first: checks the parse-memory unit, detects on miss, remembers</span>
+          <button class="btn xs" id="parseResolveBtn" style="margin-left:auto">Resolve</button>
+        </div>
+        <textarea id="parseInput" rows="3" style="width:100%" placeholder='Paste a raw record as JSON, e.g. {"business_name":"Acme LLC","website":"acme.com","license_id":"L-9"}'></textarea>
+        <p class="hint" id="parseResult" style="margin:8px 0 0"></p>
+      </div>
     </section>
   </main>
 
@@ -870,7 +880,7 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=49"></script>
+  <script src="app.js?v=50"></script>
   <script src="hyper.js?v=2"></script>
 </body>
 </html>
