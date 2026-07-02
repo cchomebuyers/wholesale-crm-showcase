@@ -74,7 +74,9 @@ for (const r of rows) {
     if (key) { const [house, street] = key.split(" "); pin = await pinQuery(`upper(prop_address_full) like upper('${house} %${street}%')`); }
   }
   if (!pin) continue;
-  u = new URL(`${A}/uzyt-m557.json`);
+  // (was `u = ...` without declaration — strict-mode ReferenceError that broke
+  // the tool the moment any property resolved a PIN; caught by pipeline run 6)
+  const u = new URL(`${A}/uzyt-m557.json`);
   u.searchParams.set("$select", "nbhd"); u.searchParams.set("$where", `pin='${pin}'`);
   u.searchParams.set("$order", "year DESC"); u.searchParams.set("$limit", "1");
   const nbhd = (await getJson(u))[0]?.nbhd;
