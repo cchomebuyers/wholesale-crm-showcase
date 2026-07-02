@@ -1705,9 +1705,22 @@ app.post("/api/pro-queue/:propertyId/call-outcome", (req, res) => {
   const norm = normalizeCallOutcome(req.body || {});
   if (!norm.ok) return res.status(400).json({ error: norm.error });
   const r = norm.record;
-  db.prepare(`INSERT INTO call_outcomes (property_id, created_at, outcome, next_action, seller_price, offer_amount, follow_up_date, outreach_suppressed, notes)
+  const oInfo = db.prepare(`INSERT INTO call_outcomes (property_id, created_at, outcome, next_action, seller_price, offer_amount, follow_up_date, outreach_suppressed, notes)
     VALUES (?,?,?,?,?,?,?,?,?)`).run(propertyId, new Date().toISOString(), r.outcome, r.next_action,
     r.seller_price, r.offer_amount, r.follow_up_date, r.outreach_suppressed ? 1 : 0, r.notes);
+  // One graph: the outcome becomes a child Thinga of the property (same
+  // containment pattern as activities -> leads in crm_thinga.js).
+  try {
+    thinga.put({
+      id: `thinga:call_outcome-${Number(oInfo.lastInsertRowid)}`,
+      kind: "call_outcome",
+      name: r.outcome,
+      parents: [`thinga:property-${propertyId}`],
+      content: { crm_id: Number(oInfo.lastInsertRowid), property_id: propertyId, outcome: r.outcome,
+        next_action: r.next_action, seller_price: r.seller_price, offer_amount: r.offer_amount,
+        follow_up_date: r.follow_up_date, outreach_suppressed: r.outreach_suppressed },
+    });
+  } catch (e) { console.warn("[call-outcome] thinga mirror skipped:", e.message); }
   // A named seller price is evidence — persist it so spread/proof can use it.
   if (r.seller_price != null) {
     try { db.prepare("UPDATE properties SET asking_price = COALESCE(asking_price, ?) WHERE id = ?").run(r.seller_price, propertyId); }
