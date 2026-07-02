@@ -87,6 +87,12 @@ test("parse-memory endpoint resolves and remembers", async () => {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...rec, business_name: "Other" }),
   })).json();
   assert.equal(again.source, "memory", "same shape must hit memory");
+  // Self-clean: leave no synthetic shape behind (parse_memory holds only
+  // real-use learnings — tick-77 purge discipline, enforced here).
+  const forgot = await (await fetch(`${BASE}/api/parse/forget`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ signature: again.signature }),
+  })).json();
+  assert.equal(forgot.forgotten, true, "test must clean up its own shape");
 });
 
 test("stats endpoint (dashboard) answers", async () => {
