@@ -59,6 +59,20 @@ if (existsSync(envPath)) {
 
 // ---------- Database ----------
 const db = new DatabaseSync(join(__dirname, "crm.db"));
+// Concurrent writers exist by design (pipeline tools run as child processes
+// against the same crm.db). Without a busy timeout, any overlap turns into an
+// instant SQLITE_BUSY throw — one such throw inside a timer killed the whole
+// server (maybeAutoLeadEngine during build_pro_queue --persist). Wait instead.
+db.exec("PRAGMA busy_timeout = 15000");
+
+// Background timers must NEVER crash the process: a transient error (db lock,
+// network, mail) is logged and the next tick tries again.
+const safeTick = (name, fn) => () => {
+  try {
+    const r = fn();
+    if (r && typeof r.catch === "function") r.catch((e) => console.error(`[${name}] tick failed:`, e.message));
+  } catch (e) { console.error(`[${name}] tick failed:`, e.message); }
+};
 db.exec(`
   CREATE TABLE IF NOT EXISTS leads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1480,8 +1494,8 @@ async function autoSyncInbox() {
   catch (e) { console.error("inbox auto-sync failed:", e.message); }
   finally { inboxSyncing = false; }
 }
-setInterval(autoSyncInbox, 10 * 60 * 1000); // every 10 minutes
-setTimeout(autoSyncInbox, 15 * 1000); // and shortly after startup
+setInterval(safeTick("inbox-sync", autoSyncInbox), 10 * 60 * 1000); // every 10 minutes
+setTimeout(safeTick("inbox-sync", autoSyncInbox), 15 * 1000); // and shortly after startup
 
 // --- Templates ---
 app.get("/api/templates", (req, res) => {
@@ -1901,8 +1915,8 @@ function maybeAutoScan() {
   setSetting("last_auto_scan", new Date().toISOString());
   runAutoScan().catch((e) => console.error("auto-scan error:", e.message));
 }
-setInterval(maybeAutoScan, 60 * 60 * 1000); // check hourly
-setTimeout(maybeAutoScan, 45 * 1000);        // and shortly after startup
+setInterval(safeTick("auto-scan", maybeAutoScan), 60 * 60 * 1000); // check hourly
+setTimeout(safeTick("auto-scan", maybeAutoScan), 45 * 1000);        // and shortly after startup
 
 // ---- AI Acquisitions Assistant (Phase 5) — Claude Opus 4.8 ----
 function anthropicClient() {
@@ -3145,8 +3159,8 @@ function maybeAutoLeadEngine() {
   if (decision.action === "prime_clock") { setSetting("last_lead_engine_run", new Date().toISOString()); return; }
   runScheduledLeadEngine();
 }
-setInterval(maybeAutoLeadEngine, 60 * 60 * 1000);
-setTimeout(maybeAutoLeadEngine, 60 * 1000);
+setInterval(safeTick("lead-engine", maybeAutoLeadEngine), 60 * 60 * 1000);
+setTimeout(safeTick("lead-engine", maybeAutoLeadEngine), 60 * 1000);
 
 app.get("/api/lead-engine/runs", (req, res) => {
   const rows = db.prepare(`SELECT id, created_at, target_json, raw_records, raw_thingas, converged_properties,
@@ -3364,7 +3378,7 @@ app.listen(PORT, () => {
   // each copy the (large) crm.db into backups/ and fill the disk (the overnight loop's drain).
   if (!process.env.NO_BACKUP) {
     makeBackup(); // snapshot on every startup
-    setInterval(makeBackup, 6 * 60 * 60 * 1000); // and every 6 hours
+    setInterval(safeTick("backup", makeBackup), 6 * 60 * 60 * 1000); // and every 6 hours
   }
   console.log(`\n  🏠  Wholesale CRM running →  http://localhost:${PORT}\n`);
   console.log(`  Email: ${emailConfigured() ? "✅ Gmail connected (" + emailCfg().user + ")" : "⚠️  not configured — connect in the Outreach tab"}`);
