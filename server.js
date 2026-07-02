@@ -37,7 +37,7 @@ import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJ
 import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSettings } from "./lead_engine_scheduler.js";
 import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
 import { runPipeline, PIPELINE_STAGES, PIPELINE_PRESETS, resolveStageIds } from "./pipeline_run.js";
-import { createParseMemory } from "./parse_memory.js";
+import { createParseMemory, signatureOf } from "./parse_memory.js";
 import { normalizeCallOutcome, summarizeOutcomes } from "./call_outcome.js";
 import { createDncStore, normalizePhone } from "./dnc_records.js";
 import { buildThingaImportV2 } from "./ankhor_bridge.js";
@@ -1659,6 +1659,26 @@ app.post("/api/parse/resolve", (req, res) => {
 app.get("/api/parse/memory", (req, res) => {
   try { res.json({ stats: parseMemory.stats() }); }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+// Operator corrections: pin a shape to a kind (overrides detection), or forget
+// a memory so the next resolve re-detects. Body: { record?|signature?, kind }.
+app.post("/api/parse/remember", (req, res) => {
+  try {
+    const b = req.body || {};
+    const signature = b.signature || (b.record && typeof b.record === "object" ? signatureOf(b.record) : null);
+    if (!signature) return res.status(400).json({ error: "need signature or record" });
+    if (!b.kind) return res.status(400).json({ error: "need kind (the parser to pin)" });
+    res.json({ ok: true, ...parseMemory.remember(signature, String(b.kind), { pinned: true, by: "operator" }) });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.post("/api/parse/forget", (req, res) => {
+  try {
+    const b = req.body || {};
+    const signature = b.signature || (b.record && typeof b.record === "object" ? signatureOf(b.record) : null);
+    if (!signature) return res.status(400).json({ error: "need signature or record" });
+    parseMemory.forget(signature);
+    res.json({ ok: true, signature, forgotten: true });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 // ---------- ankhor88 live bridge: ThingaImportV2 over HTTP ----------
