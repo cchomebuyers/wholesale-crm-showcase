@@ -1703,7 +1703,20 @@ app.get("/api/stats", (req, res) => {
     .all(today + "￿");
   const offersToday = db.prepare("SELECT COUNT(*) n FROM leads WHERE offer_sent_at >= ?").get(cutoff9amET()).n;
   const prospects = db.prepare("SELECT COUNT(*) n FROM leads WHERE active=0 AND stage != 'Dead'").get().n;
-  res.json({ stages, totals, followups, today, offersToday, offersTarget: 5, prospects });
+  // Property call follow-ups (call_outcomes.follow_up_date): the LATEST outcome
+  // per property decides; due today/overdue; suppressed properties never appear.
+  let callFollowups = [];
+  try {
+    callFollowups = db.prepare(`
+      SELECT co.property_id, co.follow_up_date, co.outcome, p.address, p.formatted_address, p.city
+      FROM call_outcomes co
+      JOIN properties p ON p.id = co.property_id
+      WHERE co.id IN (SELECT MAX(id) FROM call_outcomes GROUP BY property_id)
+        AND co.follow_up_date IS NOT NULL AND co.follow_up_date <= ?
+        AND co.property_id NOT IN (SELECT property_id FROM call_outcomes WHERE outreach_suppressed = 1)
+      ORDER BY co.follow_up_date ASC LIMIT 50`).all(today);
+  } catch { /* call_outcomes not created yet */ }
+  res.json({ stages, totals, followups, callFollowups, today, offersToday, offersTarget: 5, prospects });
 });
 
 // ====================== ACQUISITIONS — Phase 1 ======================

@@ -976,7 +976,14 @@ async function loadDashboard() {
     return `<div class="fu ${overdue ? "overdue" : ""}"><span class="open-lead" data-id="${f.id}">⏰ ${f.address || f.seller_name || "Lead"} <span class="badge ${f.stage.replace(/ /g, "-")}">${f.stage}</span></span>
       <span class="when">${overdue ? "Overdue · " : ""}${f.next_followup}</span></div>`;
   }).join("");
-  fu.innerHTML = (taskHtml + fuHtml) || `<div class="empty">Nothing due. 🎉</div>`;
+  // Property call follow-ups (recorded on the Fill tab) — click jumps to the queue.
+  const cfHtml = (s.callFollowups || []).map((f) => {
+    const overdue = f.follow_up_date < s.today;
+    return `<div class="fu ${overdue ? "overdue" : ""}"><span class="open-fill" style="cursor:pointer">📞 ${esc(f.formatted_address || f.address || ("Property #" + f.property_id))} <span class="hint">${esc(f.outcome.replace(/_/g, " "))}</span></span>
+      <span class="when">${overdue ? "Overdue · " : ""}${f.follow_up_date}</span></div>`;
+  }).join("");
+  fu.innerHTML = (taskHtml + fuHtml + cfHtml) || `<div class="empty">Nothing due. 🎉</div>`;
+  $$(".open-fill", fu).forEach((c) => c.addEventListener("click", () => $('[data-tab="fill"]').click()));
   $$(".task-done", fu).forEach((cb) => cb.addEventListener("change", async () => {
     await api("/api/tasks/" + cb.dataset.id, { method: "PUT", body: JSON.stringify({ done: 1 }) });
     toast("Task done ✅"); loadDashboard();
@@ -995,6 +1002,7 @@ async function loadDashboard() {
   calItems = {};
   const addCal = (date, label) => { if (!date) return; (calItems[date] = calItems[date] || []).push(label); };
   s.followups.forEach((f) => addCal(f.next_followup, "⏰ " + (f.address || f.seller_name || "Follow-up")));
+  (s.callFollowups || []).forEach((f) => addCal(f.follow_up_date, "📞 " + (f.formatted_address || f.address || "Call follow-up")));
   tasks.forEach((t) => addCal(t.due_date, "📋 " + t.title));
   await loadDayNotes();
   loadDashMessages();
