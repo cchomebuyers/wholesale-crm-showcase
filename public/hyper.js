@@ -71,8 +71,8 @@
     return { lines, points };
   }
 
-  const outer = makeCell(0x14171a, 0.16); // graphite — matches --border
-  const inner = makeCell(0x0f9d6b, 0.22); // emerald  — matches --primary
+  const outer = makeCell(0x14171a, 0.34); // graphite — matches --border
+  const inner = makeCell(0x0f9d6b, 0.48); // emerald  — matches --primary
 
   function updateCell(cell, t, scale, dir) {
     const vs = verts4.map((v) => v.slice());
@@ -112,8 +112,8 @@
 
   let t = 0.7; // start mid-rotation so the first paint is already interesting
   function frame() {
-    updateCell(outer, t, 1.9, 1);
-    updateCell(inner, t, 1.05, -1);
+    updateCell(outer, t, 2.15, 1);
+    updateCell(inner, t, 1.2, -1);
     tiltX += (targX - tiltX) * 0.04;
     tiltY += (targY - tiltY) * 0.04;
     scene.rotation.set(tiltX, tiltY, 0);

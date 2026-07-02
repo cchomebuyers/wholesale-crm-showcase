@@ -807,6 +807,83 @@ table.fill-table th { text-transform: uppercase; letter-spacing: .04em; font-siz
 #hyperdim { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 #hyperdim canvas { display: block; width: 100%; height: 100%; }
 main { position: relative; z-index: 1; }
-header { position: sticky; z-index: 10; background: rgba(247,248,250,.82); backdrop-filter: blur(10px) saturate(1.15); -webkit-backdrop-filter: blur(10px) saturate(1.15); border-bottom: 1px solid var(--border); }
-/* Soft vignette so the lattice breathes at the edges and stays quiet mid-page */
-#hyperdim::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 38%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 62%); }
+/* Faint vignette only — the lattice is meant to be SEEN */
+#hyperdim::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 38%, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 58%); }
+
+/* ===================================================================
+   COMMAND SHELL — no top menu. Cube node top-left, striker knock-away,
+   slide-in overlay nav, floating actions, 3D-key buttons, translucent
+   panels so the hyperdimensional backdrop reads through the app.
+   =================================================================== */
+
+/* Content clears the fixed cube + floating actions */
+main { padding-top: 92px; }
+
+/* Panels go glassy so the tesseract is visible THROUGH the app,
+   while text sits on enough white to stay perfectly readable. */
+.panel, .card { background: rgba(247,248,250,.86); }
+.stage-card { background: rgba(247,248,250,.86); }
+
+/* ---- Cube dock (top-left) — the top node of the graph ---- */
+#cubeDock { position: fixed; top: 14px; left: 16px; z-index: 120; display: flex; align-items: center; gap: 12px; }
+#cubeLauncher { width: 58px; height: 58px; background: none; border: none; cursor: pointer; perspective: 640px; padding: 0; }
+.cube3d { position: relative; width: 34px; height: 34px; margin: 12px auto; transform-style: preserve-3d; animation: cubeIdle 16s linear infinite; transition: transform .9s cubic-bezier(.2,.65,.25,1), opacity .5s; }
+.cf { position: absolute; inset: 0; border: 1.5px solid var(--border); background: rgba(15,157,107,.10); backdrop-filter: none; }
+.cf-f { transform: translateZ(17px); background: rgba(15,157,107,.16); }
+.cf-b { transform: rotateY(180deg) translateZ(17px); }
+.cf-r { transform: rotateY(90deg) translateZ(17px); background: rgba(20,23,26,.06); }
+.cf-l { transform: rotateY(-90deg) translateZ(17px); background: rgba(20,23,26,.06); }
+.cf-t { transform: rotateX(90deg) translateZ(17px); }
+.cf-d { transform: rotateX(-90deg) translateZ(17px); }
+@keyframes cubeIdle { from { transform: rotateX(-22deg) rotateY(0deg); } to { transform: rotateX(-22deg) rotateY(360deg); } }
+#cubeLauncher:hover .cube3d { animation-duration: 4s; }
+/* Knocked away: flies off the RIGHT side of the screen, tumbling */
+#cubeLauncher.flung .cube3d { animation: none; transform: translateX(112vw) translateY(-12vh) rotateZ(720deg) rotateX(540deg); opacity: .0; }
+.brand-mini { font-weight: 700; font-size: 13.5px; letter-spacing: .02em; color: var(--text); background: rgba(247,248,250,.8); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+.brand-mini span { color: var(--primary2); }
+
+/* ---- Striker: the bolt that knocks the cube away ---- */
+#striker { position: fixed; top: 38px; left: -140px; width: 120px; height: 3px; z-index: 119; background: linear-gradient(90deg, transparent, var(--primary)); border-radius: 2px; opacity: 0; pointer-events: none; }
+#striker.go { animation: strike .42s cubic-bezier(.6,0,.9,.4) forwards; }
+@keyframes strike { 0% { left: -140px; opacity: 0; } 25% { opacity: 1; } 92% { left: 20px; opacity: 1; } 100% { left: 34px; opacity: 0; } }
+
+/* ---- Menu overlay: slides in OVER the current view ---- */
+#menuOverlay { position: fixed; inset: 0; z-index: 200; visibility: hidden; pointer-events: none; }
+#menuOverlay.open { visibility: visible; pointer-events: auto; }
+#menuScrim { position: absolute; inset: 0; background: rgba(13,15,18,.20); backdrop-filter: blur(3px); opacity: 0; transition: opacity .3s; }
+#menuOverlay.open #menuScrim { opacity: 1; }
+#menuSide { position: absolute; top: 0; left: 0; bottom: 0; width: 296px; background: rgba(247,248,250,.94); backdrop-filter: blur(14px) saturate(1.1); border-right: 1.5px solid var(--border); padding: 18px 14px; overflow-y: auto; transform: translateX(-104%); transition: transform .38s cubic-bezier(.2,.8,.25,1); box-shadow: 14px 0 44px rgba(13,15,18,.10); }
+#menuOverlay.open #menuSide { transform: translateX(0); }
+.menu-title { font-weight: 800; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 4px 8px 14px; }
+
+/* Accordion groups — few, calm, technical */
+.menu-group { border: 1.5px solid var(--border); border-radius: 8px; margin-bottom: 10px; background: rgba(255,255,255,.6); overflow: hidden; }
+.menu-head { width: 100%; text-align: left; background: none; border: none; cursor: pointer; font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--text); padding: 11px 12px; display: flex; align-items: center; justify-content: space-between; }
+.menu-head:hover { background: #00000008; }
+.mh-arrow { transition: transform .25s; color: var(--muted); }
+.menu-group:not(.open) .mh-arrow { transform: rotate(-90deg); }
+.menu-items { max-height: 0; overflow: hidden; transition: max-height .3s cubic-bezier(.2,.8,.25,1); display: flex; flex-direction: column; gap: 6px; padding: 0 10px; }
+.menu-group.open .menu-items { max-height: 320px; padding: 2px 10px 12px; }
+/* Sidebar tabs: full-width 3D keys */
+#menuSide .tab { display: block; width: 100%; text-align: left; font-size: 14px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 7px; background: #fff; color: var(--text); box-shadow: 0 3px 0 var(--border); transition: transform .1s, box-shadow .1s, background .15s; }
+#menuSide .tab:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--border); background: var(--accent-soft); }
+#menuSide .tab:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+#menuSide .tab.active { background: var(--primary); color: #fff; border-color: var(--primary2); box-shadow: 0 3px 0 var(--primary2); }
+
+/* ---- Floating actions (top-right) — always visible, never overlaid ---- */
+#floatActions { position: fixed; top: 14px; right: 16px; z-index: 120; display: flex; align-items: center; gap: 10px; }
+#floatActions .notif-panel { position: fixed; top: 64px; right: 16px; }
+
+/* ---- 3D+ dimensionality for ALL buttons: raised keys with a pressed state ---- */
+.btn { border-width: 1.5px; box-shadow: 0 3px 0 var(--border), 0 4px 10px rgba(13,15,18,.06); transform: translateY(0); }
+.btn:hover { transform: translateY(-1.5px); box-shadow: 0 4.5px 0 var(--border), 0 8px 16px rgba(13,15,18,.10); }
+.btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+.btn.primary { box-shadow: 0 3px 0 var(--primary2), 0 4px 12px rgba(15,157,107,.25); }
+.btn.primary:hover { box-shadow: 0 4.5px 0 var(--primary2), 0 8px 18px rgba(15,157,107,.30); }
+.btn.primary:active { box-shadow: 0 1px 0 var(--primary2); }
+.btn.danger { box-shadow: 0 3px 0 var(--red); }
+.btn.danger:active { box-shadow: 0 1px 0 var(--red); }
+.seg-btn { transition: transform .1s, background .15s, color .15s; }
+.seg-btn:active { transform: translateY(1px) scale(.98); }
+.bell { box-shadow: 0 3px 0 var(--border); }
+.bell:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }

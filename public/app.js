@@ -2713,3 +2713,40 @@ async function reloadFillQueue() {
   $$(".fillTier").forEach((c) => c.addEventListener("change", reloadFillQueue));
   ["fillOwnerKnown", "fillDistress", "fillMinGrade", "fillLimit"].forEach((id) => { const el = $("#" + id); if (el) el.addEventListener("change", reloadFillQueue); });
 })();
+
+// ---------- Command shell: cube node → striker → overlay nav ----------
+(function commandShell() {
+  const cube = $("#cubeLauncher"), striker = $("#striker"), overlay = $("#menuOverlay"), scrim = $("#menuScrim");
+  if (!cube || !overlay) return;
+  let busy = false;
+
+  function openMenu() {
+    if (busy || overlay.classList.contains("open")) return;
+    busy = true;
+    striker.classList.add("go");                       // bolt flies in from the left…
+    setTimeout(() => cube.classList.add("flung"), 340); // …impact: cube knocked off the right side
+    setTimeout(() => {
+      overlay.classList.add("open");                   // nav slides in over the current view
+      striker.classList.remove("go");
+      busy = false;
+    }, 520);
+  }
+  function closeMenu() {
+    overlay.classList.remove("open");
+    setTimeout(() => cube.classList.remove("flung"), 240); // cube tumbles back to its corner
+  }
+
+  cube.addEventListener("click", () => (overlay.classList.contains("open") ? closeMenu() : openMenu()));
+  if (scrim) scrim.addEventListener("click", closeMenu);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+
+  // Accordion groups
+  $$("#menuSide .menu-head").forEach((h) => h.addEventListener("click", () => h.parentElement.classList.toggle("open")));
+
+  // Selecting a view: the existing router (bound on .tab) switches the section;
+  // we close the overlay, open that tab's group next time, and update the label.
+  $$("#menuSide .tab").forEach((b) => b.addEventListener("click", () => {
+    const label = $("#brandView"); if (label) label.textContent = b.textContent.trim();
+    closeMenu();
+  }));
+})();
