@@ -38,6 +38,7 @@ import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSe
 import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
 import { runPipeline, PIPELINE_STAGES, PIPELINE_PRESETS, resolveStageIds } from "./pipeline_run.js";
 import { createParseMemory } from "./parse_memory.js";
+import { normalizeCallOutcome, summarizeOutcomes } from "./call_outcome.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -210,6 +211,20 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_pipeline_runs_created ON pipeline_runs(c
 try { db.prepare("UPDATE pipeline_runs SET status='interrupted', finished_at=?, error='server restarted mid-run' WHERE status='running'").run(new Date().toISOString()); } catch { /* table just created */ }
 // The memory unit the generic parser consults before parsing (parse_memory.js).
 const parseMemory = createParseMemory(db);
+// Post-dial paper trail (call_outcome.js — audit P1 #4).
+db.exec(`CREATE TABLE IF NOT EXISTS call_outcomes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  property_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  next_action TEXT,
+  seller_price REAL,
+  offer_amount REAL,
+  follow_up_date TEXT,
+  outreach_suppressed INTEGER DEFAULT 0,
+  notes TEXT
+);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_call_outcomes_property ON call_outcomes(property_id, id DESC)");
 db.exec(`CREATE TABLE IF NOT EXISTS ecosystem_search_plans (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
@@ -1626,6 +1641,34 @@ app.post("/api/parse/resolve", (req, res) => {
 app.get("/api/parse/memory", (req, res) => {
   try { res.json({ stats: parseMemory.stats() }); }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// ---------- Call outcomes: what happened after the dial (audit P1 #4) ----------
+app.post("/api/pro-queue/:propertyId/call-outcome", (req, res) => {
+  const propertyId = Number(req.params.propertyId);
+  if (!Number.isInteger(propertyId) || propertyId <= 0) return res.status(400).json({ error: "bad propertyId" });
+  const prop = db.prepare("SELECT id FROM properties WHERE id = ?").get(propertyId);
+  if (!prop) return res.status(404).json({ error: "property not found" });
+  const norm = normalizeCallOutcome(req.body || {});
+  if (!norm.ok) return res.status(400).json({ error: norm.error });
+  const r = norm.record;
+  db.prepare(`INSERT INTO call_outcomes (property_id, created_at, outcome, next_action, seller_price, offer_amount, follow_up_date, outreach_suppressed, notes)
+    VALUES (?,?,?,?,?,?,?,?,?)`).run(propertyId, new Date().toISOString(), r.outcome, r.next_action,
+    r.seller_price, r.offer_amount, r.follow_up_date, r.outreach_suppressed ? 1 : 0, r.notes);
+  // A named seller price is evidence — persist it so spread/proof can use it.
+  if (r.seller_price != null) {
+    try { db.prepare("UPDATE properties SET asking_price = COALESCE(asking_price, ?) WHERE id = ?").run(r.seller_price, propertyId); }
+    catch { /* schema without asking_price — outcome row still holds it */ }
+  }
+  const rows = db.prepare("SELECT * FROM call_outcomes WHERE property_id = ? ORDER BY id DESC").all(propertyId);
+  res.json({ ok: true, recorded: r, summary: summarizeOutcomes(rows) });
+});
+
+app.get("/api/pro-queue/:propertyId/call-outcomes", (req, res) => {
+  const propertyId = Number(req.params.propertyId);
+  if (!Number.isInteger(propertyId) || propertyId <= 0) return res.status(400).json({ error: "bad propertyId" });
+  const rows = db.prepare("SELECT * FROM call_outcomes WHERE property_id = ? ORDER BY id DESC").all(propertyId);
+  res.json({ outcomes: rows, summary: summarizeOutcomes(rows) });
 });
 
 app.get("/api/stats", (req, res) => {
