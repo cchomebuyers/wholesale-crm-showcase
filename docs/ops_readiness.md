@@ -80,3 +80,7 @@ Top-level keys: `generated_at`, `overall`, `server`, `database`, `backup`, `post
 
 `credentials.<key>` covers: `rentcast_api_key`, `anthropic_api_key`, `batchdata_api_key`,
 `google_maps_api_key`, `gmail_user`, `gmail_app_password` (`CREDENTIAL_KEYS` export).
+
+## Quick live check
+
+`node tools/watch_round.mjs` (server running) — the one-command battery: endpoints, byte integrity, db integrity, disk, git. Complements this report (which is pre-flight/state; the round is live verification).

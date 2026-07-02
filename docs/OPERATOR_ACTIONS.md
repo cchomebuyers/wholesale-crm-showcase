@@ -58,6 +58,9 @@ http://localhost:4000 (`npm start`).
   go — never applied autonomously.
 
 ## 6. Housekeeping (optional)
+- **One-command health check:** `node tools/watch_round.mjs` — server, money
+  endpoints, served-byte integrity, db pages/FK, disk, git. ALL CLEAR or a
+  non-zero exit. Run it any time something feels off.
 - `docs/HALT` still present (Jun 29) — remove it when you want the OLD
   autonomous tick wrapper (`tools/run_loop_tick.ps1`) to run again;
   user-initiated pipeline runs already bypass it via `PIPELINE_RUN=1`.
