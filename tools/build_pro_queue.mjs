@@ -91,6 +91,24 @@ const top = (tier) => decisions
   .map((x) => ({ property_id: x.r.id, state: x.r.state, source: x.r.source, score: x.d.priority_score, next: x.d.next_action }));
 summary.examples = { call_now: top("call_now"), pay_to_unlock: top("pay_to_unlock") };
 
+// Dial activity (call_outcomes) — the operator's morning read includes what
+// happened on the phones, not just what the data says. Guarded: pre-outcome
+// databases just omit the section.
+try {
+  const oc = db.prepare("SELECT outcome, COUNT(*) n FROM call_outcomes GROUP BY outcome ORDER BY n DESC").all();
+  if (oc.length) {
+    summary.dial_activity = {
+      total_outcomes: oc.reduce((s, r) => s + r.n, 0),
+      by_outcome: Object.fromEntries(oc.map((r) => [r.outcome, r.n])),
+      outreach_suppressed_properties: db.prepare("SELECT COUNT(DISTINCT property_id) c FROM call_outcomes WHERE outreach_suppressed=1").get().c,
+      followups_due: db.prepare(`SELECT COUNT(*) c FROM call_outcomes
+        WHERE id IN (SELECT MAX(id) FROM call_outcomes GROUP BY property_id)
+          AND follow_up_date IS NOT NULL AND follow_up_date <= ?`).get(new Date().toISOString().slice(0, 10)).c,
+      seller_prices_captured: db.prepare("SELECT COUNT(*) c FROM call_outcomes WHERE seller_price IS NOT NULL").get().c,
+    };
+  }
+} catch { /* call_outcomes table absent */ }
+
 writeFileSync(SUM, JSON.stringify(summary, null, 2) + "\n");
 
 console.log(`PRO QUEUE: ${decisions.length} properties ->`,
