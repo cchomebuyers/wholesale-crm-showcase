@@ -24,6 +24,7 @@ import { resolveContactRoute } from "./contact_route_engine.js";
 import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
 import { complianceCheck } from "./compliance_gate.js";
 import { skiptraceDecision } from "./skiptrace_gate.js";
+import { whyNotCallNow } from "./pro_wholesaler_queue.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
 import { buildProofStack, buyerSafeProofStack } from "./proof_stack.js";
 import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
@@ -35,6 +36,7 @@ import { buildSellerPromotionWorkflow } from "./seller_promotion.js";
 import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJob, syncCouncilJobResponses, writeAndDispatchCouncilReview } from "./council_dispatch.js";
 import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSettings } from "./lead_engine_scheduler.js";
 import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
+import { runPipeline, PIPELINE_STAGES, PIPELINE_PRESETS, resolveStageIds } from "./pipeline_run.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -186,6 +188,25 @@ db.exec(`CREATE TABLE IF NOT EXISTS lead_engine_candidates (
 try { db.exec("ALTER TABLE lead_engine_candidates ADD COLUMN lead_id INTEGER"); } catch { /* already exists */ }
 db.exec("CREATE INDEX IF NOT EXISTS idx_lead_engine_candidates_run ON lead_engine_candidates(run_id, score DESC)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_lead_engine_candidates_status ON lead_engine_candidates(status, score DESC)");
+// Fill-Properties pipeline runs (the one-button chain). One row per run; stages_json
+// holds the live per-stage progress the operator UI polls.
+db.exec(`CREATE TABLE IF NOT EXISTS pipeline_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  finished_at TEXT,
+  status TEXT NOT NULL DEFAULT 'running',
+  preset TEXT,
+  stage_ids TEXT,
+  filters_json TEXT,
+  current_stage TEXT,
+  stages_json TEXT,
+  tier_counts_json TEXT,
+  error TEXT
+);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_pipeline_runs_created ON pipeline_runs(created_at DESC)");
+// A run only lives in this process; if we restarted, any row still 'running' is a
+// zombie from a prior process — reconcile it so the UI doesn't poll it forever.
+try { db.prepare("UPDATE pipeline_runs SET status='interrupted', finished_at=?, error='server restarted mid-run' WHERE status='running'").run(new Date().toISOString()); } catch { /* table just created */ }
 db.exec(`CREATE TABLE IF NOT EXISTS ecosystem_search_plans (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
@@ -2104,25 +2125,134 @@ app.post("/api/resolve/contact-route", (req, res) => {
 
 app.get("/api/pro-queue", (req, res) => {
   try {
-    const tier = req.query.tier || null;
     const limit = Math.max(1, Math.min(2000, Number(req.query.limit) || 100));
+    // Post-processing filters (all optional). `tier` accepts a CSV for multi-select
+    // (e.g. tier=call_now,pay_to_unlock). SQL handles tier/score/grade/owner; the
+    // signal-derived filters (distress/spread/owner-type/ready) run in JS over the
+    // parsed signals so we never have to query inside signals_json.
+    const tiers = String(req.query.tier || "").split(",").map((t) => t.trim()).filter(Boolean);
+    const minScore = req.query.min_score != null ? Number(req.query.min_score) : null;
+    const minGrade = req.query.min_grade != null ? Number(req.query.min_grade) : null;
+    const ownerKnown = req.query.owner_known === "1";
+    const wantReady = req.query.ready === "1";
+    const wantDistress = req.query.distress === "1";
+    const spreadWant = req.query.spread || null;   // works | thin | fails | unproven
+    const signalWant = req.query.signal || null;   // absentee | entity | institutional
+    // Several columns are optional/additive across DB vintages (property_grade from
+    // the grade stage; asking_price/contract_price/offer_amount aren't in every
+    // schema). Reference each only if it exists, else alias NULL, so a column that
+    // isn't present can never 503 the whole endpoint.
+    const pcols = new Set(db.prepare("SELECT name FROM pragma_table_info('properties')").all().map((r) => r.name));
+    const optCol = (c) => (pcols.has(c) ? `p.${c}` : `NULL AS ${c}`);
+    const hasGrade = pcols.has("property_grade");
+
+    const where = [];
+    const params = [];
+    if (tiers.length) { where.push(`q.tier IN (${tiers.map(() => "?").join(",")})`); params.push(...tiers); }
+    if (minScore != null && !Number.isNaN(minScore)) { where.push("q.priority_score >= ?"); params.push(minScore); }
+    if (ownerKnown) where.push("p.owner_name IS NOT NULL AND TRIM(p.owner_name) <> ''");
+    if (hasGrade && minGrade != null && !Number.isNaN(minGrade)) { where.push("p.property_grade >= ?"); params.push(minGrade); }
+
+    // Contact + seller-price columns are pulled only to COMPUTE the call_now blockers
+    // (why_not_call_now); they are destructured OUT of the response so the payload
+    // shape is unchanged and the seller phone/email is never exposed here.
     const rows = db.prepare(`SELECT q.tier, q.priority_score, q.next_action, q.spend_allowed, q.signals_json,
         p.id AS property_id, p.address, p.formatted_address, p.city, p.state, p.county, p.source,
-        p.owner_name, p.owner_mailing, p.arv, p.mao
+        p.owner_name, p.owner_mailing, p.arv, p.mao, ${optCol("property_grade")},
+        ${optCol("listing_agent_phone")}, ${optCol("listing_agent_email")}, ${optCol("asking_price")}, ${optCol("contract_price")}, ${optCol("price")}, ${optCol("offer_amount")}
       FROM pro_queue q JOIN properties p ON p.id = q.property_id
-      ${tier ? "WHERE q.tier = ?" : ""}
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ORDER BY CASE q.tier WHEN 'call_now' THEN 0 WHEN 'pay_to_unlock' THEN 1 WHEN 'research' THEN 2 ELSE 3 END, q.priority_score DESC
-      LIMIT ${limit}`).all(...(tier ? [tier] : []));
+      LIMIT 2000`).all(...params);
     const counts = Object.fromEntries(db.prepare("SELECT tier, COUNT(*) c FROM pro_queue GROUP BY tier").all().map((r) => [r.tier, r.c]));
-    const items = rows.map((r) => {
+    let items = rows.map((r) => {
       let signals = {}; try { signals = JSON.parse(r.signals_json || "{}"); } catch { signals = {}; }
-      const { signals_json, ...rest } = r;
-      return { ...rest, signals };
+      const why = whyNotCallNow(r, { signals });
+      const { signals_json, listing_agent_phone, listing_agent_email, asking_price, contract_price, price, offer_amount, ...rest } = r;
+      return { ...rest, signals, why_not_call_now: why, call_now_ready: why.length === 0 };
     });
-    res.json({ counts, items });
+    if (wantReady) items = items.filter((it) => it.call_now_ready);
+    if (wantDistress) items = items.filter((it) => it.signals.distress || it.signals.distress_present || it.signals.distress_signal);
+    if (spreadWant) items = items.filter((it) => (it.signals.spread_status || it.signals.spread) === spreadWant);
+    if (signalWant) items = items.filter((it) => it.signals[`${signalWant}_owner`]);
+    const total = items.length;
+    items = items.slice(0, limit);
+    res.json({ counts, items, total, returned: items.length });
   } catch (e) {
-    res.status(503).json({ error: "pro-queue not built yet — run: node tools/build_pro_queue.mjs --persist", detail: String(e.message || e) });
+    res.status(503).json({ error: "pro-queue not built yet — run the Fill Properties pipeline (or: node tools/build_pro_queue.mjs --persist)", detail: String(e.message || e) });
   }
+});
+
+// ---------- Fill-Properties pipeline (the one-button chain) ----------
+// Free, no-spend chain: enrichment → grade → build pro-queue/tiers → export. The
+// only paid action (per-property skip-trace) is NOT in this chain — it stays a
+// separate human/AI-gated step. One run in flight at a time; POST returns a run_id
+// immediately and the work proceeds in the background; the UI polls the run.
+let pipelineRunning = false;
+const pjParse = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
+const proQueueTierCounts = () => {
+  try { return Object.fromEntries(db.prepare("SELECT tier, COUNT(*) c FROM pro_queue GROUP BY tier").all().map((r) => [r.tier, r.c])); }
+  catch { return {}; }
+};
+
+app.get("/api/pipeline/stages", (req, res) => {
+  res.json({
+    stages: PIPELINE_STAGES.map((s) => ({ id: s.id, label: s.label, optional: s.optional, network: s.network })),
+    presets: PIPELINE_PRESETS,
+    running: pipelineRunning,
+  });
+});
+
+app.get("/api/pipeline/runs", (req, res) => {
+  const rows = db.prepare("SELECT id, created_at, finished_at, status, preset, current_stage, tier_counts_json FROM pipeline_runs ORDER BY id DESC LIMIT 20").all();
+  res.json(rows.map((r) => ({ id: r.id, created_at: r.created_at, finished_at: r.finished_at, status: r.status, preset: r.preset, current_stage: r.current_stage, tier_counts: pjParse(r.tier_counts_json, {}) })));
+});
+
+app.get("/api/pipeline/runs/:id", (req, res) => {
+  const r = db.prepare("SELECT * FROM pipeline_runs WHERE id = ?").get(Number(req.params.id));
+  if (!r) return res.status(404).json({ error: "run not found" });
+  res.json({
+    id: r.id, status: r.status, created_at: r.created_at, finished_at: r.finished_at,
+    preset: r.preset, current_stage: r.current_stage, error: r.error,
+    filters: pjParse(r.filters_json, {}), stages: pjParse(r.stages_json, []), tier_counts: pjParse(r.tier_counts_json, {}),
+  });
+});
+
+app.post("/api/pipeline/run", (req, res) => {
+  if (pipelineRunning) return res.status(409).json({ error: "a pipeline run is already in progress" });
+  const body = req.body || {};
+  const preset = body.preset || (Array.isArray(body.stageIds) && body.stageIds.length ? "custom" : "full");
+  const stageIds = resolveStageIds({ preset: body.preset, stageIds: body.stageIds });
+  if (!stageIds.length) return res.status(400).json({ error: "no stages selected" });
+  const num = (v) => (v != null && v !== "" && !Number.isNaN(Number(v)) ? Number(v) : undefined);
+  const filters = { minScore: num(body.minScore), hotScore: num(body.hotScore), maxSources: num(body.maxSources), pages: num(body.pages) };
+  const now = new Date().toISOString();
+  const stageState = stageIds.map((id) => { const s = PIPELINE_STAGES.find((x) => x.id === id); return { id, label: s?.label || id, status: "pending", optional: !!s?.optional }; });
+  const info = db.prepare("INSERT INTO pipeline_runs (created_at, status, preset, stage_ids, filters_json, stages_json) VALUES (?,?,?,?,?,?)")
+    .run(now, "running", preset, JSON.stringify(stageIds), JSON.stringify(filters), JSON.stringify(stageState));
+  const runId = Number(info.lastInsertRowid);
+  pipelineRunning = true;
+
+  const persist = (currentStage) => { try { db.prepare("UPDATE pipeline_runs SET stages_json = ?, current_stage = ? WHERE id = ?").run(JSON.stringify(stageState), currentStage || null, runId); } catch (e) { console.warn("[pipeline] progress write skipped:", e.message); } };
+
+  setImmediate(async () => {
+    try {
+      const result = await runPipeline({ stageIds, filters, repoRoot: __dirname }, {
+        onStageStart: ({ id }) => { const st = stageState.find((x) => x.id === id); if (st) st.status = "running"; persist(id); },
+        onStageEnd: (r) => { const st = stageState.find((x) => x.id === r.id); if (st) { st.status = r.status; st.ms = r.ms; st.code = r.code; if (r.error) st.error = r.error; } persist(null); },
+      });
+      try {
+        db.prepare("UPDATE pipeline_runs SET status = ?, finished_at = ?, stages_json = ?, current_stage = NULL, tier_counts_json = ?, error = ? WHERE id = ?")
+          .run(result.ok ? "done" : "error", new Date().toISOString(), JSON.stringify(stageState), JSON.stringify(proQueueTierCounts()), result.abortedAt ? `aborted at stage: ${result.abortedAt}` : null, runId);
+      } catch (e) { console.error("[pipeline] final write failed:", e.message); }
+    } catch (e) {
+      try { db.prepare("UPDATE pipeline_runs SET status = 'error', finished_at = ?, error = ? WHERE id = ?").run(new Date().toISOString(), String(e.message || e), runId); } catch { /* ignore */ }
+    } finally {
+      pipelineRunning = false;
+    }
+  });
+
+  res.json({ run_id: runId, status: "running", stage_ids: stageIds, preset });
 });
 
 // Proof stack — one property's full evidence ledger (signal, owner, valuation,
@@ -2536,9 +2666,15 @@ app.post("/api/properties/recompute", (req, res) => {
 
 // ---------- Automatic backups (so a disk failure can't lose your leads) ----------
 const BACKUP_DIR = join(__dirname, "backups");
-mkdirSync(BACKUP_DIR, { recursive: true });
+// `backups/` may be a symlink to an external drive whose target is missing (the
+// D: mount isn't always present). Don't let that crash startup — degrade to
+// backups-disabled instead. makeBackup() also no-ops when the dir is unwritable.
+let backupDirReady = false;
+try { mkdirSync(BACKUP_DIR, { recursive: true }); backupDirReady = true; }
+catch (e) { console.warn(`[backup] disabled — cannot create ${BACKUP_DIR}: ${e.message}`); }
 let lastBackup = null;
 function makeBackup() {
+  if (!backupDirReady || process.env.NO_BACKUP === "1") return null;
   try {
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const file = join(BACKUP_DIR, `crm-${ts}.db`);
@@ -2555,8 +2691,8 @@ app.post("/api/backup", (req, res) => {
   res.json(f ? { ok: true, file: f.split("/").pop(), at: lastBackup } : { error: "backup failed" });
 });
 app.get("/api/backup/status", (req, res) => {
-  const files = readdirSync(BACKUP_DIR).filter((f) => f.startsWith("crm-") && f.endsWith(".db")).sort();
-  res.json({ count: files.length, last: lastBackup, latest: files[files.length - 1] || null });
+  const files = backupDirReady ? readdirSync(BACKUP_DIR).filter((f) => f.startsWith("crm-") && f.endsWith(".db")).sort() : [];
+  res.json({ count: files.length, last: lastBackup, latest: files[files.length - 1] || null, enabled: backupDirReady });
 });
 
 // CSV export of all leads — your data, downloadable anytime.

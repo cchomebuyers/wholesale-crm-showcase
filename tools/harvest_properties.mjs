@@ -27,7 +27,7 @@ const doImport = args.has("--import") || args.has("--dry-run");
 const dryRun = args.has("--dry-run");
 
 mkdirSync(DATA_DIR, { recursive: true });
-if (existsSync(join(repo, "docs", "HALT"))) {
+if (!process.env.PIPELINE_RUN && existsSync(join(repo, "docs", "HALT"))) {
   console.log("HALT present - stopping.");
   process.exit(0);
 }

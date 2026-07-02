@@ -6,15 +6,16 @@ The original app is a working CRM for leads, buyers, outreach, tasks, offers, an
 
 ## Current Status
 
-Verified June 30, 2026:
+Test suite (re-run `NO_BACKUP=1 npm test` to refresh): `414` tests, `414` pass, `0` fail.
 
-- `npm test` passes: `394` tests, `394` pass, `0` fail.
-- `crm.db` contains `10,000` properties, `1,046` leads, `291` buyer-discovery candidates, and `10,000` pro-queue rows.
+Runtime counts below are the June 30, 2026 audit snapshot from `audit/june30/06-database-live-state.md`. The database changes, so treat them as historical and re-derive current counts from that audit file (or the audit command behind it) rather than trusting these numbers verbatim:
+
+- `crm.db` contained `10,000` properties, `1,046` leads, `291` buyer-discovery candidates, and `10,000` pro-queue rows.
 - The Thinga substrate is live beside the CRM tables: `thingas`, `thinga_links`, and `thinga_meta`.
-- The graph contains `10,000` `property` Thingas, `10,000` `route_pack` Thingas, `1,046` `lead` Thingas, and `119` connector Thingas.
-- The pro queue currently has `401 pay_to_unlock`, `2,329 research`, `7,270 hold`, and `0 call_now`.
+- The graph contained `10,000` `property` Thingas, `10,000` `route_pack` Thingas, `1,046` `lead` Thingas, and `119` connector Thingas.
+- The pro queue held `401 pay_to_unlock`, `2,329 research`, `7,270 hold`, and `0 call_now` (`audit/june30/06-database-live-state.md`).
 
-The honest blocker: the system can rank where to spend next, but it is not yet an industrial call-ready machine. Seller phone acquisition, DNC clearance, and live paid skiptrace execution are still the gates.
+The honest blocker: the system can rank where to spend next, but it is not yet an industrial call-ready machine. Seller phone acquisition, DNC clearance, and live paid skiptrace execution are still the gates. Every pro-queue row now states *exactly* which of these gates is blocking it — see Operator Visibility below.
 
 ## Core Architecture
 
@@ -53,6 +54,14 @@ Important files:
 - Buyer signup and buyer-safe marketplace/proof-stack views.
 - Council/agent ledger for coordinated review and audit loops.
 
+## Operator Visibility & Readiness
+
+The system is built so an operator (or a fresh worker) can tell *what is true and what is blocking* without reading code:
+
+- **Why-not-call-now** — every `GET /api/pro-queue` row carries `why_not_call_now` (an ordered list of `{key, label, fix}` blockers) and `call_now_ready`. The ordered blocker keys are `not_a_seller`, `owner_missing`, `contact_missing`, `dnc_consent_missing`, `arv_mao_missing`, `buyer_demand_missing`, `seller_price_missing`, `proof_incomplete`. A found phone is never callable until DNC + consent verify (deny-by-default via `compliance_gate.js`). See `docs/pro_wholesaler_queue.md` ("Why-not-call-now").
+- **Ops readiness** — `node tools/ops_readiness_report.mjs` prints a JSON read-model of whether the system is ready to source / enrich / skip-trace / operate (server, database, backups, Postgres, sources, credentials, skip-trace, DNC). Credentials are reported as *presence only*, never values; there is intentionally no system-wide `ready_to_contact` (contact is per-contact, deny-until-checked). See `docs/ops_readiness.md`.
+- **Feature graph** — `data/feature-graph/*.json` maps each major feature to its code, routes, tests, tables, docs, and audit findings. Open one manifest to see everything that defines a feature. See `docs/feature-graph.md`.
+
 ## Run
 
 ```bash
@@ -66,6 +75,8 @@ Open:
 ```text
 http://localhost:4000
 ```
+
+Known boot caveat (June 30, 2026): a live `npm start` / `node server.js` currently fails before listening because `backups/` is a symlink to a missing external target (`/d/crm/backups` on a D: drive), so the startup `mkdirSync(BACKUP_DIR, …)` at `server.js:2548` throws `ENOENT`. This is an environment/symlink issue, not a code regression; `npm test` runs green with `NO_BACKUP=1`. Restore the backups target (or repoint the symlink) before booting. [verified: `councilRoom/comms/2026-06-30-audit-loop/DONE_CALLNOW.md`]
 
 ## Data
 

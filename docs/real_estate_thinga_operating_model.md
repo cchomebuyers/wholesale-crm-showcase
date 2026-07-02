@@ -13,7 +13,15 @@ Implementation files:
 
 ## Current CRM Facts
 
-As of the local database check:
+> **Historical snapshot — stale counts.** The numbers in this section are an early
+> 250-row database state and no longer match the live database. For current live
+> counts (properties, sources, enrichment, pro-queue tiers) see
+> `audit/june30/06-database-live-state.md`, or re-run the audit command behind it.
+> Do not trust the figures below as current. The *conclusions* (public
+> violation/property records are not confirmed for-sale listings; the CRM has lead
+> phone numbers but ~0 verified active for-sale listings with phones) still hold.
+
+As of an early local database check:
 
 - `properties` table: 250 rows
 - Source for all 250: `cook-il-violations`

@@ -1,0 +1,41 @@
+{
+  "feature": "Investor Marketplace",
+  "id": "investor-marketplace",
+  "summary": "Buyer-facing deal read model that exposes deals matched to buyer buy-boxes (with buyer-safe proof) and records buyer interest -- never raw seller contact data.",
+  "files": [
+    { "path": "investor_marketplace.js", "role": "buildInvestorMarketplace(): pure buyer-facing deal read model (matches deals to buy-boxes)." },
+    { "path": "buyer_discovery.js", "role": "rankBuyerDemand() used to match deals to buyers." },
+    { "path": "buyer_matching.js", "role": "Buyer buy-box matching logic." },
+    { "path": "buyer_interest.js", "role": "Buyer interest model recorded against deals." },
+    { "path": "proof_stack.js", "role": "buyerSafeProofStack() provides the redacted proof shown with each deal." },
+    { "path": "wholesale_spread.js", "role": "Spread evaluation behind each deal's economics." }
+  ],
+  "routes": [
+    { "method": "GET", "path": "/api/investor-marketplace/deals", "server_line": 2214, "summary": "Lists buyer-safe deals matched to buy-boxes." },
+    { "method": "POST", "path": "/api/investor-marketplace/deals/:id/interest", "server_line": 2249, "summary": "Records a buyer's interest in a deal (writes marketplace_interest)." },
+    { "method": "GET", "path": "/api/investor-marketplace/interest", "server_line": 2277, "summary": "Reads recorded buyer interest." }
+  ],
+  "tests": [
+    { "path": "investor_marketplace.test.js", "role": "Unit tests for buildInvestorMarketplace." },
+    { "path": "marketplace_privacy.test.js", "role": "Privacy boundary tests -- ensures buyer-safe redaction holds." },
+    { "path": "buyer_matching.test.js", "role": "Buy-box matching tests." },
+    { "path": "buyer_interest.test.js", "role": "Buyer interest tests." },
+    { "path": "buyer_discovery.test.js", "role": "Buyer demand ranking tests." }
+  ],
+  "tables": [
+    { "name": "marketplace_interest", "defined_in": "server.js", "role": "Recorded buyer interest in deals." },
+    { "name": "properties", "defined_in": "server.js", "role": "Source of deals exposed in the marketplace." },
+    { "name": "buyers", "defined_in": "server.js", "role": "Buyers whose buy-boxes deals are matched against." }
+  ],
+  "docs": [
+    { "path": "dev/architecture/NORTH_STAR_VISION.md", "role": "Defines the investor marketplace boundary (buyer-facing, no raw seller contact)." }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/27-crm-meta-projection-quality-visibility.md", "finding": "Marketplace view has a real buyer-safe boundary, but the relationship between buyer demand and property proof should be more visible: why a buyer matches this deal, what is redacted, what proof supports it, what is still uncertain." },
+    { "source": "audit/june30/13-compliance-and-privacy.md", "finding": "Marketplace is part of the compliance/privacy surface -- buyer views must not leak seller contact or competing buyer identity." }
+  ],
+  "next_actions": [
+    { "action": "Make 'why this buyer matches this deal' an explicit, inspectable match explanation rather than an opaque ranking.", "status": "open" },
+    { "action": "Show the redaction set and remaining uncertainty alongside each deal's proof.", "status": "open" }
+  ]
+}

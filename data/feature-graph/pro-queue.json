@@ -1,0 +1,40 @@
+{
+  "feature": "Pro Queue",
+  "id": "pro-queue",
+  "summary": "Ruthlessly split a large property database into operating tiers (call_now / pay_to_unlock / research / hold) so a wholesaler works the few callable deals instead of 10,000 vague rows.",
+  "files": [
+    { "path": "pro_wholesaler_queue.js", "role": "Pure tier classifier (classifyProQueue) -> tier decision. No I/O. Also exports whyNotCallNow(record,opts) + CALL_NOW_BLOCKERS + CALL_NOW_BLOCKER_KEYS (added by CALLNOW, verified at lines 103/113/182/308)." },
+    { "path": "wholesale_spread.js", "role": "Spread/assignment audit consumed by the classifier (imported by pro_wholesaler_queue.js)." },
+    { "path": "property_signals.js", "role": "deriveSignals() distress signals feeding the tier decision (imported by pro_wholesaler_queue.js)." },
+    { "path": "tools/build_pro_queue.mjs", "role": "Runner: scores DB rows, writes snapshot/summary, and (--persist) upserts the pro_queue table." },
+    { "path": "tools/pro_queue_report.mjs", "role": "Human-readable pro queue report generator." },
+    { "path": "data/pro_queue_snapshot.jsonl", "role": "Latest per-property tier decisions (built artifact)." },
+    { "path": "data/pro_queue_summary.json", "role": "Tier counts / summary (built artifact)." },
+    { "path": "data/pro_queue_report.md", "role": "Rendered operator report (built artifact)." }
+  ],
+  "routes": [
+    { "method": "GET", "path": "/api/pro-queue", "server_line": 2106, "summary": "Reads pro_queue JOIN properties, returns tier counts + ordered items (call_now first). 503 if table not built yet. Each item now also carries why_not_call_now (ordered blockers) + call_now_ready (bool) -- added by CALLNOW, verified at server.js:2129." },
+    { "method": "POST", "path": "/api/pro-queue/:propertyId/skiptrace", "server_line": 2054, "summary": "Finds owner contact but keeps outreach_allowed:false until DNC/consent clears (compliance gate)." }
+  ],
+  "tests": [
+    { "path": "pro_wholesaler_queue.test.js", "role": "Unit tests for the tier classifier." },
+    { "path": "wholesale_spread.test.js", "role": "Spread audit tests (classifier dependency)." },
+    { "path": "property_signals.test.js", "role": "Signal derivation tests (classifier dependency)." }
+  ],
+  "tables": [
+    { "name": "pro_queue", "defined_in": "tools/build_pro_queue.mjs", "role": "Persisted tier decision per property (tier, priority_score, next_action, spend_allowed, missing/reasons/signals JSON). Built by the runner, not by server.js." },
+    { "name": "properties", "defined_in": "server.js", "role": "Source rows joined into the queue." }
+  ],
+  "docs": [
+    { "path": "docs/pro_wholesaler_queue.md", "role": "Tier definitions and operating model." },
+    { "path": "data/pro_queue_report.md", "role": "Latest rendered queue snapshot." }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/27-crm-meta-projection-quality-visibility.md", "finding": "Pro Queue view is strong conceptually but has no call_now and the spend path is not closed; it should expose reason for tier, exact unlock cost, missing evidence, compliance status, and promotion path to call_now." },
+    { "source": "audit/june30/26-graph-view-projection.md", "finding": "Names Pro Queue as the worked example of a feature graph: code implements classifier, tests verify it, server exposes route, route reads pro_queue table, docs describe behavior, audit identifies the call_now=0 blocker, next action points to skiptrace/DNC work." }
+  ],
+  "next_actions": [
+    { "action": "Add a why_not_call_now blocker set to each queue row and expose it on GET /api/pro-queue.", "status": "done", "note": "Delivered by sibling CALLNOW (MSG_20260630T1358Z_FROM_CALLNOW_TO_ALL.md; exports verified in pro_wholesaler_queue.js and route in server.js:2129). Real ordered blocker keys (a property is call_now only when this list is EMPTY): not_a_seller, owner_missing, contact_missing, dnc_consent_missing, arv_mao_missing, buyer_demand_missing, seller_price_missing, proof_incomplete. contact_missing and dnc_consent_missing are mutually exclusive; a phone with unverified DNC/consent reports dnc_consent_missing and is NEVER call_now. Exposed via exports CALL_NOW_BLOCKERS ({key,label,fix}[]) and CALL_NOW_BLOCKER_KEYS." },
+    { "action": "Close the pay_to_unlock spend path: wire exact skip-trace unlock cost and provider readiness into the tier so spend is a deliberate operator action.", "status": "open" }
+  ]
+}

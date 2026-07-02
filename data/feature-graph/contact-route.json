@@ -1,0 +1,43 @@
+{
+  "feature": "Contact Route",
+  "id": "contact-route",
+  "summary": "Resolve a lawful, lowest-cost path to reach a property owner (free public sources before paid skip-trace), keeping outreach_allowed:false until DNC/consent is verified.",
+  "files": [
+    { "path": "contact_route_engine.js", "role": "resolveContactRoute(): pure engine that picks the legal contact path for a node/goal given available keys and channels." },
+    { "path": "contact_router.js", "role": "Lower-level contact routing primitives used across the contact stack." },
+    { "path": "packs/property_contact_route_pack.js", "role": "Turns a property Thinga substrate payload into executable ContactRouteEngine args + a route-pack Thinga + KG entities/edges/citations." },
+    { "path": "compliance_gate.js", "role": "complianceCheck(): gates every contact; outreach_allowed stays false until DNC/consent checked." },
+    { "path": "skiptrace_gate.js", "role": "skiptraceDecision(): decides whether paid skip-trace is justified before spending." },
+    { "path": "tools/persist_route_pack_kg.mjs", "role": "Persists route-pack KG entities/edges/citations to wholesale_kg." },
+    { "path": "tools/build_property_route_packs.mjs", "role": "Builds contact-route packs across properties." },
+    { "path": "data/property_route_kg_report.json", "role": "Built report of route-pack KG projection." }
+  ],
+  "routes": [
+    { "method": "POST", "path": "/api/resolve/contact-route", "server_line": 2088, "summary": "Resolves a contact route for a node or property_id; reports key presence (batchdata_api_key) without exposing the value." }
+  ],
+  "tests": [
+    { "path": "contact_route_engine.test.js", "role": "Unit tests for resolveContactRoute()." },
+    { "path": "contact_route_vertical.smoke.test.js", "role": "Vertical smoke test across the contact-route path." },
+    { "path": "contact_router.test.js", "role": "Tests for the lower-level router." },
+    { "path": "packs/property_contact_route_pack.test.js", "role": "Tests for the property contact-route pack." },
+    { "path": "compliance_gate.test.js", "role": "Compliance gate tests (outreach blocked until DNC/consent)." },
+    { "path": "skiptrace_gate.test.js", "role": "Skip-trace decision tests." }
+  ],
+  "tables": [
+    { "name": "kg_entities", "defined_in": "kg_projection_persistence.js", "role": "Route-pack KG nodes (owner/contact path) persisted from packs." },
+    { "name": "kg_edges", "defined_in": "kg_projection_persistence.js", "role": "Route-pack relationships (property -> owner -> route)." },
+    { "name": "kg_citations", "defined_in": "kg_projection_persistence.js", "role": "Source citations backing each route-pack fact." },
+    { "name": "properties", "defined_in": "server.js", "role": "Source of the node fields (address, owner_name, owner_mailing) the route is resolved from." }
+  ],
+  "docs": [
+    { "path": "docs/CONTACT_ROUTE_ENGINE.md", "role": "Contact route engine behavior and legal-path policy." }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/27-crm-meta-projection-quality-visibility.md", "finding": "Operator views should expose source trust and terms risk per lead/property; the property -> owner -> contact route -> compliance -> buyer -> offer path is named as the graph the system should make visible." },
+    { "source": "audit/june30/04-runtime-capability-map.md", "finding": "Contact route resolution is part of the runtime capability map for reaching owners lawfully." }
+  ],
+  "next_actions": [
+    { "action": "Make the chosen contact route and its compliance status a first-class, inspectable graph edge on each property rather than a one-shot API response.", "status": "open" },
+    { "action": "Surface per-route source trust / terms risk so operators see why a path is allowed or blocked.", "status": "open" }
+  ]
+}

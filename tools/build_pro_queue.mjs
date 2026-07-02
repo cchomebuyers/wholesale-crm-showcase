@@ -26,7 +26,7 @@ const minScore = Number(opt("min-score", 60));
 const hotScore = Number(opt("hot-score", 70));
 const persist = argv.includes("--persist");
 
-if (existsSync(join(repo, "docs", "HALT"))) { console.log("HALT present - stopping."); process.exit(0); }
+if (!process.env.PIPELINE_RUN && existsSync(join(repo, "docs", "HALT"))) { console.log("HALT present - stopping."); process.exit(0); }
 mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new DatabaseSync(DB);

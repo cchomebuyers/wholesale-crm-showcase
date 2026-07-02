@@ -16,6 +16,7 @@
 
 import { evaluateWholesaleSpread } from "./wholesale_spread.js";
 import { deriveSignals } from "./property_signals.js";
+import { complianceCheck } from "./compliance_gate.js";
 
 const num = (v) => {
   if (v === null || v === undefined || v === "") return null;
@@ -83,6 +84,113 @@ export function valueState(record = {}, spread) {
     acceptanceTargetMet,
     valueKnown: (arv != null && arv > 0) || buyerMatches > 0 || spreadCanWork,
   };
+}
+
+// ---------------------------------------------------------------------------
+// why_not_call_now — the operator-facing explanation of EXACTLY what is blocking a
+// property from the `call_now` tier, and the cheapest next action to unblock it.
+//
+// LOOP_PROMPT 07 ("Make the live product explain why each property is not yet
+// call_now"): a property reaches call_now only when every blocker below is cleared.
+// The order is the operator's free-work sequence (do the cheapest unblock first),
+// and matches the seven evidence pillars (proof_stack.js PILLARS) plus the
+// institutional hard-stop and the DNC/consent compliance gate (compliance_gate.js).
+//
+// Hard rule (CLAUDE.md ground rule 2 / LOOP_PROMPT): a found phone is NEVER callable
+// until DNC + consent clear. So a property with a phone but no verified DNC/consent
+// still reports `dnc_consent_missing` and is NOT call_now. This function only
+// REPORTS blockers — it never marks a contact callable.
+export const CALL_NOW_BLOCKERS = [
+  { key: "not_a_seller",         label: "Owner is institutional/govt/lender — not a seller lead",          fix: "drop from the seller pipeline (institutional owner never calls)" },
+  { key: "owner_missing",        label: "Owner identity unknown",                                          fix: "free owner-join (assessor/parcel) before any spend" },
+  { key: "contact_missing",      label: "No phone or email on file",                                       fix: "free contact enrichment; if still none, skip-trace gate (paid) once owner+distress+value present" },
+  { key: "dnc_consent_missing",  label: "Contact present but not cleared to call (DNC/consent unverified)", fix: "run DNC scrub + confirm consent; until then mail-only (outreach_allowed:false)" },
+  { key: "arv_mao_missing",      label: "No ARV/MAO valuation",                                            fix: "free comps → ARV → MAO" },
+  { key: "buyer_demand_missing", label: "No matched buyer demand",                                         fix: "match buy-boxes / discover buyers for the area + property type" },
+  { key: "seller_price_missing", label: "No seller price evidence",                                        fix: "capture asking/contract price or run seller intake" },
+  { key: "proof_incomplete",     label: "Assignment spread not yet proven to work",                        fix: "complete the proof stack (comps→ARV→MAO→buyer price) so the spread holds" },
+];
+export const CALL_NOW_BLOCKER_KEYS = CALL_NOW_BLOCKERS.map((b) => b.key);
+const BLOCKER_BY_KEY = Object.fromEntries(CALL_NOW_BLOCKERS.map((b) => [b.key, b]));
+
+// Any seller price evidence on the record (numeric > 0 or a stored evidence object).
+function sellerPricePresent(record = {}) {
+  if (record.seller_price_evidence) return true;
+  for (const k of ["seller_acceptable_price", "contract_price", "asking_price", "price", "offer_amount"]) {
+    const n = num(record[k]);
+    if (n != null && n > 0) return true;
+  }
+  return false;
+}
+
+// Is the contact legally callable RIGHT NOW? Routes through the authoritative
+// compliance gate (call/sms channels). Default DENY: without verified DNC/consent
+// this returns false even when a phone exists (the gate is authoritative).
+function callContactAllowed(record = {}) {
+  const phone = str(record.listing_agent_phone) || str(record.seller_phone) || str(record.phone);
+  const email = str(record.listing_agent_email) || str(record.seller_email) || str(record.email);
+  const cc = complianceCheck(
+    {
+      phone, email,
+      dnc_status: record.dnc_status,
+      sms_consent: record.sms_consent === true,
+      email_consent: record.email_consent === true,
+      opt_out: record.opt_out === true,
+    },
+    { channels: ["call", "sms"] },
+  );
+  return cc.outreach_allowed;
+}
+
+// Resolve the call_now facts from either a raw property record OR a queue row that
+// carries a precomputed `signals` object (server route). Owner/contact/ARV/MAO/
+// seller-price are read from the record columns (authoritative current DB state);
+// buyer-demand, spread status, and institutional-owner come from `signals` when
+// supplied (they need buyer-match/spread context not on a plain row), else are
+// computed from the record.
+function callNowFacts(record = {}, opts = {}) {
+  const sig = opts.signals && typeof opts.signals === "object" ? opts.signals : null;
+  const contact = contactState(record);
+  // On a raw record (no precomputed signals) compute the spread ourselves so the
+  // proof/spread blocker is real — mirrors classifyProQueue's safeSpread default.
+  const spread = sig ? null : (opts.spread ?? safeSpread(record, opts.spreadOptions));
+  const value = sig ? null : valueState(record, spread);
+  const institutional = sig ? !!sig.institutional_owner : !!deriveSignals(record).institutional_owner;
+  const hasContact = sig ? !!sig.callable : contact.callable;
+  const spreadStatus = sig ? (sig.spread_status ?? null) : value.spreadStatus;
+  return {
+    institutional,
+    ownerKnown: contact.ownerName,
+    hasContact,
+    complianceCleared: hasContact ? callContactAllowed(record) : false,
+    hasArvMao: (num(record.arv) ?? 0) > 0 || (num(record.mao) ?? 0) > 0 || (sig ? !!sig.arv : value.arv),
+    hasBuyerDemand: sig ? !!sig.buyer_demand : value.buyerDemand,
+    hasSellerPrice: sellerPricePresent(record),
+    spreadStatus,
+    spreadProven: spreadStatus === "works" || spreadStatus === "thin",
+  };
+}
+
+/**
+ * Ordered list of blockers keeping a property out of the `call_now` tier.
+ * PURE — no I/O. Returns [] when the property is call-now-ready.
+ * @param {object} record - a property row OR a /api/pro-queue row
+ * @param {object} [opts] - { signals?, spread? } pass a precomputed signals object
+ *                          (from classifyProQueue) to reuse buyer-demand/spread/owner facts
+ * @returns {Array<{key,label,fix}>} blockers in operator free-work order
+ */
+export function whyNotCallNow(record = {}, opts = {}) {
+  const f = callNowFacts(record, opts);
+  const out = [];
+  if (f.institutional) out.push(BLOCKER_BY_KEY.not_a_seller);
+  if (!f.ownerKnown) out.push(BLOCKER_BY_KEY.owner_missing);
+  if (!f.hasContact) out.push(BLOCKER_BY_KEY.contact_missing);
+  else if (!f.complianceCleared) out.push(BLOCKER_BY_KEY.dnc_consent_missing);
+  if (!f.hasArvMao) out.push(BLOCKER_BY_KEY.arv_mao_missing);
+  if (!f.hasBuyerDemand) out.push(BLOCKER_BY_KEY.buyer_demand_missing);
+  if (!f.hasSellerPrice) out.push(BLOCKER_BY_KEY.seller_price_missing);
+  if (!f.spreadProven) out.push(BLOCKER_BY_KEY.proof_incomplete);
+  return out.map((b) => ({ ...b }));
 }
 
 // priority_score: a single 0-100 ranking number inside a tier. Built from the existing
@@ -177,6 +285,28 @@ export function classifyProQueue(record = {}, opts = {}) {
     reasons.push(`buyer acceptance below 3x target: ${value.acceptanceScore}x (${value.acceptanceRating})`);
   }
 
+  const signals = {
+    lead_score: leadScore,
+    distress: dist.label,
+    distress_present: dist.present,
+    parcel_only: dist.parcelOnly,
+    owner: contact.ownerName,
+    callable: contact.callable,
+    arv: value.arv,
+    buyer_demand: value.buyerDemand,
+    spread_status: value.spreadStatus,
+    buyer_acceptance_score: value.acceptanceScore,
+    buyer_acceptance_rating: value.acceptanceRating,
+    buyer_projected_profit: value.acceptance?.profit ?? spread?.buyer_projected_profit ?? null,
+    absentee_owner: sig.absentee_owner,
+    entity_owner: sig.entity_owner,
+    institutional_owner: sig.institutional_owner,
+    signal_score: sig.signal_score,
+  };
+
+  // Operator visibility: the exact ordered blockers keeping this off `call_now`.
+  const why_not_call_now = whyNotCallNow(record, { signals, spread });
+
   return {
     tier,
     priority_score: priorityScore(record, dist, contact, value, sig),
@@ -184,24 +314,9 @@ export function classifyProQueue(record = {}, opts = {}) {
     reasons,
     next_action,
     spend_allowed,
-    signals: {
-      lead_score: leadScore,
-      distress: dist.label,
-      distress_present: dist.present,
-      parcel_only: dist.parcelOnly,
-      owner: contact.ownerName,
-      callable: contact.callable,
-      arv: value.arv,
-      buyer_demand: value.buyerDemand,
-      spread_status: value.spreadStatus,
-      buyer_acceptance_score: value.acceptanceScore,
-      buyer_acceptance_rating: value.acceptanceRating,
-      buyer_projected_profit: value.acceptance?.profit ?? spread?.buyer_projected_profit ?? null,
-      absentee_owner: sig.absentee_owner,
-      entity_owner: sig.entity_owner,
-      institutional_owner: sig.institutional_owner,
-      signal_score: sig.signal_score,
-    },
+    call_now_ready: why_not_call_now.length === 0,
+    why_not_call_now,
+    signals,
   };
 }
 

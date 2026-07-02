@@ -1,0 +1,45 @@
+{
+  "feature": "Proof Stack",
+  "id": "proof-stack",
+  "summary": "Assemble ONE property's full evidence ledger -- distress signal, owner identity, valuation (ARV/MAO), buyer demand, seller price evidence, assignment spread, and queue decision -- each tagged with the module/source that produced it, plus a buyer-safe redacted view.",
+  "files": [
+    { "path": "proof_stack.js", "role": "buildProofStack() (internal) + buyerSafeProofStack() (redacted) -- pure assembly of one property's evidence." },
+    { "path": "buyer_discovery.js", "role": "rankBuyerDemand() supplies the buyer-demand layer of the stack." },
+    { "path": "wholesale_spread.js", "role": "evaluateWholesaleSpread() supplies the spread + buyer-acceptance layer." },
+    { "path": "seller_price_evidence.js", "role": "bestSellerPriceEvidence() supplies the seller-price layer." },
+    { "path": "kg_evidence_view.js", "role": "buildPropertyKgEvidenceView(): KG-backed evidence view used by the kg evidence route." },
+    { "path": "field_edges.js", "role": "Evidence-preserving field edges underpinning proof provenance." }
+  ],
+  "routes": [
+    { "method": "GET", "path": "/api/proof-stack/:id", "server_line": 2159, "summary": "Full internal proof stack for a property id (buildProofStack)." },
+    { "method": "GET", "path": "/api/proof-stack/:id/buyer", "server_line": 2174, "summary": "Buyer-safe redacted proof stack (buyerSafeProofStack) -- hides competing buyer names." },
+    { "method": "GET", "path": "/api/kg/properties/:id/evidence", "server_line": 2189, "summary": "KG-backed evidence view for a property." },
+    { "method": "GET", "path": "/api/properties/:id/evidence", "server_line": 1904, "summary": "Raw property_evidence rows backing the stack." }
+  ],
+  "tests": [
+    { "path": "proof_stack.test.js", "role": "Unit tests for buildProofStack and buyerSafeProofStack." },
+    { "path": "buyer_discovery.test.js", "role": "Buyer demand ranking tests (stack dependency)." },
+    { "path": "wholesale_spread.test.js", "role": "Spread evaluation tests (stack dependency)." },
+    { "path": "seller_price_evidence.test.js", "role": "Seller price evidence tests (stack dependency)." },
+    { "path": "kg_evidence_view.test.js", "role": "KG evidence view tests." },
+    { "path": "field_edges.test.js", "role": "Field-edge evidence tests." }
+  ],
+  "tables": [
+    { "name": "properties", "defined_in": "server.js", "role": "Base record the stack is built for." },
+    { "name": "property_evidence", "defined_in": "server.js", "role": "Stored evidence rows surfaced in the stack." },
+    { "name": "seller_price_evidence", "defined_in": "server.js", "role": "Seller price layer of the stack." },
+    { "name": "buyers", "defined_in": "server.js", "role": "CRM buyers feeding buyer-demand." },
+    { "name": "buyer_discovery_candidates", "defined_in": "server.js", "role": "Discovered buyer candidates feeding buyer-demand." }
+  ],
+  "docs": [
+    { "path": "dev/architecture/NORTH_STAR_VISION.md", "role": "Defines 'Proof stack per property' (#5) and the Evidence Ledger module that proof_stack.js implements." }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/27-crm-meta-projection-quality-visibility.md", "finding": "Proof-stack APIs and buyer-safe proof-stack views are cited as real quality signals; the marketplace view should make the relationship between buyer demand and property proof more visible (what proof supports the deal, what is still uncertain)." },
+    { "source": "audit/june30/08-test-and-quality-gates.md", "finding": "Proof stack is covered by the test/quality gate suite." }
+  ],
+  "next_actions": [
+    { "action": "Show evidence completeness and 'next missing field' per property so the stack doubles as a checklist of what to gather next.", "status": "open" },
+    { "action": "Make 'what is redacted' explicit in the buyer-safe view so buyers see the boundary, not a silent omission.", "status": "open" }
+  ]
+}

@@ -33,6 +33,7 @@ $$(".tab").forEach((b) =>
     if (b.dataset.tab === "acquisitions") openAcquisitions();
     if (b.dataset.tab === "sources") { loadSearchPlans(); loadEcosystemMeta(); loadSources(); loadSpreadAudit(); loadEngineHistory(); loadLeadEngineSettings(); loadCouncilJobs(); }
     if (b.dataset.tab === "map") loadMap();
+    if (b.dataset.tab === "fill") loadFill();
   })
 );
 
@@ -2598,4 +2599,117 @@ $("#sellerIntakeRefresh")?.addEventListener("click", loadSellerIntake);
   wireMergeChips("mergeChips", () => $("#outBody"));
   wireMergeChips("tmplMergeChips", () => tmplForm.body);
   loadNotifications();
+})();
+
+// ---------- Fill Properties (one-button, no-spend pipeline) ----------
+let _fillPoll = null;
+
+async function loadFill() {
+  await reloadFillQueue();
+  try {
+    const runs = await api("/api/pipeline/runs");
+    const active = runs.find((r) => r.status === "running");
+    if (active) pollFill(active.id);
+    else if (runs[0]) renderFillRun(await api("/api/pipeline/runs/" + runs[0].id));
+  } catch { /* no runs yet */ }
+}
+
+function renderFillRun(run) {
+  const box = $("#fillStages");
+  if (!box) return;
+  if (!run || !run.stages) { box.innerHTML = ""; return; }
+  box.innerHTML = run.stages.map((s) => {
+    const ico = s.status === "ok" ? "✅" : s.status === "error" ? "❌" : s.status === "running" ? "⏳" : s.status === "skipped" ? "⏭️" : "•";
+    const ms = s.ms ? (s.ms > 1000 ? (s.ms / 1000).toFixed(1) + "s" : s.ms + "ms") : "";
+    const err = s.error ? ` <span style="color:var(--red,#ef4444)">— ${esc(String(s.error).slice(0, 140))}</span>` : "";
+    const opt = s.optional ? ' <span class="muted">(optional)</span>' : "";
+    return `<div class="fill-stage ${esc(s.status)}"><span class="st-ico">${ico}</span><span>${esc(s.label)}</span>${opt}${err}<span class="st-ms">${ms}</span></div>`;
+  }).join("");
+  const st = $("#fillStatus");
+  if (st) st.textContent = run.status === "running" ? "running: " + (run.current_stage || "") : run.status === "done" ? "done ✓" : run.status === "error" ? "finished with errors" : run.status || "";
+}
+
+async function pollFill(runId) {
+  if (_fillPoll) clearInterval(_fillPoll);
+  const btn = $("#fillRun");
+  const stop = () => { if (_fillPoll) clearInterval(_fillPoll); _fillPoll = null; if (btn) { btn.disabled = false; btn.textContent = "▶ Run pipeline"; } };
+  const tick = async () => {
+    try {
+      const run = await api("/api/pipeline/runs/" + runId);
+      renderFillRun(run);
+      if (run.status !== "running") {
+        stop();
+        await reloadFillQueue();
+        toast(run.status === "done" ? "Pipeline complete" : "Pipeline finished with errors", run.status !== "done");
+      }
+    } catch (e) { stop(); toast(e.message, true); }
+  };
+  _fillPoll = setInterval(tick, 1500);
+  tick();
+}
+
+async function runFill() {
+  const btn = $("#fillRun");
+  const body = {
+    preset: $("#fillPreset").value,
+    hotScore: Number($("#fillHot").value) || undefined,
+    minScore: Number($("#fillMin").value) || undefined,
+    maxSources: Number($("#fillMaxSrc").value) || undefined,
+  };
+  btn.disabled = true; btn.textContent = "Starting…";
+  try {
+    const r = await api("/api/pipeline/run", { method: "POST", body: JSON.stringify(body) });
+    btn.textContent = "Running…";
+    pollFill(r.run_id);
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "▶ Run pipeline";
+    toast(e.message, true);
+  }
+}
+
+function fillQueryParams() {
+  const tiers = $$(".fillTier").filter((c) => c.checked).map((c) => c.value);
+  const p = new URLSearchParams();
+  if (tiers.length) p.set("tier", tiers.join(","));
+  if ($("#fillOwnerKnown").checked) p.set("owner_known", "1");
+  if ($("#fillDistress").checked) p.set("distress", "1");
+  const mg = Number($("#fillMinGrade").value); if (mg > 0) p.set("min_grade", String(mg));
+  p.set("limit", String(Number($("#fillLimit").value) || 100));
+  return p.toString();
+}
+
+async function reloadFillQueue() {
+  const body = $("#fillBody");
+  if (!body) return;
+  try {
+    const d = await api("/api/pro-queue?" + fillQueryParams());
+    if ($("#fillCounts")) {
+      const c = d.counts ? Object.entries(d.counts).map(([t, n]) => `${t}: ${n}`).join("  ·  ") : "";
+      $("#fillCounts").textContent = c + (d.total != null ? `   (showing ${d.returned}/${d.total})` : "");
+    }
+    const items = d.items || [];
+    if (!items.length) { body.innerHTML = '<tr><td colspan="8" class="muted">No rows match these filters.</td></tr>'; return; }
+    body.innerHTML = items.map((it) => {
+      const why = (it.why_not_call_now || []).map((w) => (w && (w.label || w.key)) || w).join(", ");
+      return `<tr>
+        <td class="tier-${esc(it.tier)}">${esc(it.tier)}</td>
+        <td>${it.priority_score ?? ""}</td>
+        <td>${esc(it.formatted_address || it.address || "")}</td>
+        <td>${esc(it.city || "")}</td>
+        <td>${esc(it.owner_name || "—")}</td>
+        <td>${money(it.arv)}</td>
+        <td>${money(it.mao)}</td>
+        <td class="fill-why">${it.call_now_ready ? '<span style="color:var(--green,#22c55e)">ready ✓</span>' : esc(why)}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8" class="muted">${esc(e.message || "pro-queue not built yet — run the pipeline")}</td></tr>`;
+  }
+}
+
+(function wireFill() {
+  const run = $("#fillRun"); if (run) run.addEventListener("click", runFill);
+  const reload = $("#fillReload"); if (reload) reload.addEventListener("click", reloadFillQueue);
+  $$(".fillTier").forEach((c) => c.addEventListener("change", reloadFillQueue));
+  ["fillOwnerKnown", "fillDistress", "fillMinGrade", "fillLimit"].forEach((id) => { const el = $("#" + id); if (el) el.addEventListener("change", reloadFillQueue); });
 })();

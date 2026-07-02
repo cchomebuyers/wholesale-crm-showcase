@@ -1,7 +1,18 @@
 // pro_wholesaler_queue.test.js -- the ruthless narrowing gate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyProQueue, summarizeProQueue, distressSignal, contactState } from "./pro_wholesaler_queue.js";
+import { classifyProQueue, summarizeProQueue, distressSignal, contactState, whyNotCallNow, CALL_NOW_BLOCKER_KEYS } from "./pro_wholesaler_queue.js";
+
+const keys = (blockers) => blockers.map((b) => b.key);
+
+// A property that has cleared every blocker, including a VERIFIED DNC/consent.
+const READY = {
+  source: "cook-il-violations", lead_score: 78,
+  owner_name: "Jane Absentee", listing_agent_phone: "3125550100",
+  dnc_status: "clear", // <- the only thing that makes a phone legally callable
+  arv: 210000, repair_estimate: 40000, price: 90000, asking_price: 90000, offer_amount: 97000,
+  buyer_matches: [{ max_price: 150000 }],
+};
 
 test("hot distress violation with no owner/phone -> pay_to_unlock (skip-trace spend allowed)", () => {
   const d = classifyProQueue({
@@ -98,6 +109,59 @@ test("summarizeProQueue tallies tiers, spend, and missing", () => {
   assert.equal(s.tiers.hold, 1);
   assert.equal(s.tiers.research, 1);
   assert.ok(s.top_missing.owner >= 1);
+});
+
+test("why_not_call_now: empty record lists every non-contact blocker in operator order", () => {
+  const w = whyNotCallNow({});
+  // No phone -> contact_missing (NOT dnc_consent_missing, which needs a number first).
+  assert.deepEqual(keys(w), [
+    "owner_missing", "contact_missing", "arv_mao_missing",
+    "buyer_demand_missing", "seller_price_missing", "proof_incomplete",
+  ]);
+  assert.ok(!keys(w).includes("dnc_consent_missing"));
+});
+
+test("why_not_call_now: a phone with UNVERIFIED DNC/consent stays blocked (hard rule)", () => {
+  const w = whyNotCallNow({ ...READY, dnc_status: undefined });
+  assert.ok(keys(w).includes("dnc_consent_missing"), "phone present but DNC unchecked must block");
+  assert.ok(!keys(w).includes("contact_missing"), "contact exists, so it is not contact_missing");
+});
+
+test("why_not_call_now: fully proven property with DNC clear has ZERO blockers (call-now-ready)", () => {
+  const w = whyNotCallNow(READY);
+  assert.deepEqual(w, [], `expected no blockers, got ${JSON.stringify(keys(w))}`);
+});
+
+test("why_not_call_now: institutional/govt owner is the leading hard-stop blocker", () => {
+  const w = whyNotCallNow({ ...READY, owner_name: "CHICAGO TRANSIT AUTHORITY", address: "2842 W BELDEN AVE" });
+  assert.equal(keys(w)[0], "not_a_seller");
+});
+
+test("why_not_call_now: every emitted key is part of the published blocker catalog", () => {
+  const w = whyNotCallNow({ owner_name: "X", listing_agent_phone: "3125550100" });
+  for (const k of keys(w)) assert.ok(CALL_NOW_BLOCKER_KEYS.includes(k), `${k} must be a known blocker key`);
+});
+
+test("why_not_call_now: works off a precomputed signals object (server pro-queue row)", () => {
+  // Row shape the /api/pro-queue route builds: columns + parsed signals.
+  const row = {
+    owner_name: "Jane", listing_agent_phone: "3125550100", dnc_status: "clear",
+    arv: 200000, mao: 120000, asking_price: 90000,
+    signals: { owner: true, callable: true, arv: true, buyer_demand: false, spread_status: "works", institutional_owner: false },
+  };
+  const w = whyNotCallNow(row, { signals: row.signals });
+  assert.deepEqual(keys(w), ["buyer_demand_missing"], "only buyer demand should be missing here");
+});
+
+test("classifyProQueue exposes why_not_call_now + call_now_ready", () => {
+  const ready = classifyProQueue(READY);
+  assert.equal(ready.call_now_ready, true);
+  assert.deepEqual(ready.why_not_call_now, []);
+
+  const blocked = classifyProQueue({ source: "nyc-ny-violations", lead_score: 64 });
+  assert.equal(blocked.call_now_ready, false);
+  assert.ok(blocked.why_not_call_now.length > 0);
+  assert.ok(blocked.why_not_call_now.every((b) => b.key && b.label && b.fix));
 });
 
 test("institutional/govt owner is forced to hold regardless of score", () => {

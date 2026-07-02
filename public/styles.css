@@ -696,3 +696,19 @@ table.sched td:first-child, table.sched th:first-child, table.sched td:nth-child
 /* ---- Lead map ---- */
 #mapCanvas { height: 72vh; min-height: 420px; border-radius: 8px; border: 1px solid var(--line, #27313d); }
 .leaflet-popup-content { font: 13px ui-monospace, Menlo, Consolas, monospace; }
+
+/* ---- Fill Properties pipeline ---- */
+.fill-stages { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.fill-stage { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--panel2); }
+.fill-stage .st-ico { width: 18px; text-align: center; }
+.fill-stage.ok { border-color: var(--green); }
+.fill-stage.error { border-color: var(--red); }
+.fill-stage.running { border-color: var(--primary); background: #15233a40; }
+.fill-stage.skipped { opacity: .5; }
+.fill-stage .st-ms { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+table.fill-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.fill-table th, table.fill-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.fill-table th { color: var(--muted); font-weight: 600; }
+table.fill-table td.tier-call_now { font-weight: 700; color: var(--green); }
+table.fill-table td.tier-pay_to_unlock { font-weight: 700; color: var(--amber); }
+.fill-why { color: var(--muted); font-size: 12px; }

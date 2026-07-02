@@ -1,0 +1,53 @@
+{
+  "feature": "Thinga Substrate",
+  "id": "thinga-substrate",
+  "summary": "The universal content-addressed, recursive, shard-routable substrate (a database + graph) that mirrors CRM objects (leads, properties, routes) as Thingas, plus the KG projection persistence that records entities/edges/citations.",
+  "files": [
+    { "path": "thinga.js", "role": "Core Thinga store: thingas / thinga_links / thinga_meta tables (SQLite)." },
+    { "path": "thinga_pg.js", "role": "Postgres-backed Thinga store (same shape) for the optional pg path." },
+    { "path": "faceted_thinga.js", "role": "Faceted Thinga layer (typed facets over the base Thinga)." },
+    { "path": "crm_thinga.js", "role": "Mirrors CRM objects (leads etc.) into Thingas." },
+    { "path": "real_estate_thinga.js", "role": "Real-estate-specific Thinga shaping (config #1 of the substrate). No dedicated test file -- see tests note." },
+    { "path": "real_estate_facets.js", "role": "Real-estate facet definitions for faceted Thingas." },
+    { "path": "parser_registry.js", "role": "Parser registry for substrate payloads (parser node kind)." },
+    { "path": "kg_projection_persistence.js", "role": "createKgPool() + kg_entities/kg_edges/kg_citations schema -- the KG projection persistence." },
+    { "path": "tools/mirror_property_substrate.mjs", "role": "Mirrors property rows into the Thinga substrate." }
+  ],
+  "routes": [
+    { "method": "GET", "path": "/api/thinga", "server_line": 1100, "summary": "Lists Thingas." },
+    { "method": "GET", "path": "/api/thinga/:id", "server_line": 1094, "summary": "Reads one Thinga by id." },
+    { "method": "GET", "path": "/api/thinga/lead/:leadId/children", "server_line": 1105, "summary": "Reads child Thingas of a lead." },
+    { "method": "POST", "path": "/api/thinga/:id/invoke", "server_line": 1109, "summary": "Invokes a Thinga capability." }
+  ],
+  "tests": [
+    { "path": "thinga.test.js", "role": "Core Thinga store tests." },
+    { "path": "faceted_thinga.test.js", "role": "Faceted Thinga tests." },
+    { "path": "crm_thinga.test.js", "role": "CRM-object mirroring tests." },
+    { "path": "real_estate_facets.test.js", "role": "Real-estate facet tests." },
+    { "path": "parser_registry.test.js", "role": "Parser registry tests." },
+    { "path": "kg_projection_persistence.test.js", "role": "KG projection persistence tests." },
+    { "path": "real_estate_thinga.test.js", "role": "Dedicated test for real_estate_thinga.js.", "missing": true }
+  ],
+  "tables": [
+    { "name": "thingas", "defined_in": "thinga.js", "role": "Content-addressed Thinga records." },
+    { "name": "thinga_links", "defined_in": "thinga.js", "role": "Typed links between Thingas (from_id, link_kind, to_id)." },
+    { "name": "thinga_meta", "defined_in": "thinga.js", "role": "Substrate metadata key/value." },
+    { "name": "kg_entities", "defined_in": "kg_projection_persistence.js", "role": "Projected KG nodes." },
+    { "name": "kg_edges", "defined_in": "kg_projection_persistence.js", "role": "Projected KG relationships." },
+    { "name": "kg_citations", "defined_in": "kg_projection_persistence.js", "role": "Source citations per KG fact." }
+  ],
+  "docs": [
+    { "path": "docs/recursive_thinga_architecture.md", "role": "Recursive Thinga architecture." },
+    { "path": "docs/real_estate_thinga_operating_model.md", "role": "Real-estate operating model over the substrate." },
+    { "path": "THINGA_MIGRATION.md", "role": "Migration state from legacy tables to the substrate." }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/19-one-datatype-thinga-schema.md", "finding": "Defines the one-datatype Thinga schema the substrate converges toward." },
+    { "source": "audit/june30/20-migration-state.md", "finding": "Tracks how much of the CRM is mirrored into Thingas vs still legacy-table only." },
+    { "source": "audit/june30/27-crm-meta-projection-quality-visibility.md", "finding": "The substrate mirror exists, but most developers still think in legacy tables unless the projection explains which rows have Thingas." }
+  ],
+  "next_actions": [
+    { "action": "Add a dedicated real_estate_thinga.test.js so the real-estate shaping layer is independently protected.", "status": "open" },
+    { "action": "Make 'which rows have Thingas' visible so the substrate mirror is not invisible to developers reading legacy tables.", "status": "open" }
+  ]
+}

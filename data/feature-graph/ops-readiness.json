@@ -1,0 +1,35 @@
+{
+  "feature": "Ops Readiness",
+  "id": "ops-readiness",
+  "summary": "A pure read model that tells a worker whether the system is ready to source, enrich, skip-trace, DNC-check, and operate -- server/db/backup/postgres/source health, credential PRESENCE (never values), skiptrace + DNC posture, and recent job failures.",
+  "files": [
+    { "path": "ops_readiness.js", "role": "buildOpsReadiness(input): PURE read-model builder. Also exports CREDENTIAL_KEYS. Credentials are presence-only (never values)." },
+    { "path": "tools/ops_readiness_report.mjs", "role": "Read-only script surface: gathers real facts (db read-only, settings/env presence, backups dir, optional Postgres source-health) and prints JSON. No server boot, no backups written. Run: node tools/ops_readiness_report.mjs [--compact]." },
+    { "path": "source_health.js", "role": "createSourceHealth().health() supplies source freshness/up-down summarized into ops.sources." },
+    { "path": "skiptrace_gate.js", "role": "Per-record skip-trace gate; ops.skiptrace.spend_still_gated:true means key presence != authorization." },
+    { "path": "compliance_gate.js", "role": "Deny-by-default contact gate behind ops.dnc (outreach stays false until DNC/consent verified)." }
+  ],
+  "routes": [
+    { "method": "GET", "path": "/api/sources/health", "server_line": 2645, "summary": "Source health feed that ops.sources summarizes (related read surface; ops itself is exposed via script, not a route -- CALLNOW owns server.js)." },
+    { "method": "GET", "path": "/api/backup/status", "server_line": 2566, "summary": "Backup status that ops.backup overlaps (related read surface)." }
+  ],
+  "tests": [
+    { "path": "ops_readiness.test.js", "role": "13 unit tests for buildOpsReadiness, incl. an assertion that a planted secret can never serialize into the model." }
+  ],
+  "tables": [
+    { "name": "source_runs", "defined_in": "source_health.js", "role": "Source run history summarized into ops.sources and recent_job_failures." },
+    { "name": "settings", "defined_in": "server.js", "role": "Credential presence (gmail_user/gmail_app_password and other keys) read as present/source -- never the value." }
+  ],
+  "docs": [
+    { "path": "docs/ops_readiness.md", "role": "Operator pre-flight checklist + field-name reference (built by OPS)." }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/27-crm-meta-projection-quality-visibility.md", "finding": "Industrial ops visibility graded low-medium: source-health and backup concepts exist but there is no complete operations projection for server, relay, storage, credentials, jobs, and provider readiness. Ops view should show skiptrace/DNC/source/backup readiness." },
+    { "source": "audit/june30/11-industrial-execution.md", "finding": "Industrial execution audit motivating the ops-readiness read model." },
+    { "source": "audit/june30/16-gap-register.md", "finding": "Gap register entry for operations readiness visibility." }
+  ],
+  "next_actions": [
+    { "action": "Optionally add a read-only server route that imports buildOpsReadiness and feeds it the same facts the script gathers.", "status": "open", "note": "Per OPS DONE_OPS.md: a future server route can `import { buildOpsReadiness } from \"./ops_readiness.js\"`; CALLNOW (or a later owner of server.js) would own that edit. backup.last is server-only in-process state so the script reports it null; a route would have it." },
+    { "action": "Keep contact posture as per-contact deny-until-checked -- there is intentionally NO system-wide ready_to_contact field.", "status": "done", "note": "Confirmed by OPS (MSG_20260630T1352Z): ops.overall has ready_to_operate/ready_to_source/ready_to_skiptrace + contact_posture='deny_until_checked', not ready_to_contact." }
+  ]
+}

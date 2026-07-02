@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "title": "feature_graph manifest shape",
+  "purpose": "An explicit, hand-built map from a product feature to the code, routes, tests, tables, docs, audit findings, and next actions that define it. One manifest = one feature. A developer opens it and sees everything that governs that feature in one place (audit/june30/26-graph-view-projection.md, audit/june30/27-crm-meta-projection-quality-visibility.md 'IDE View').",
+  "law": "Every path under files/tests/docs MUST exist on disk. Every route MUST exist in server.js. A test that does not exist is kept but marked {\"missing\": true}. Facts a sibling agent has not yet posted are marked {\"pending\": true} with a note (never invent key names). Citation law: each claim cites the file behind it (CLAUDE.md THE CITATION LAW).",
+  "fields": {
+    "feature": "string -- human name of the feature.",
+    "id": "string -- stable slug, matches the manifest file name.",
+    "summary": "string -- one-line description of what the feature does.",
+    "files": "array of { path, role } -- source modules/tools/packs that implement the feature. path is repo-relative and must exist.",
+    "routes": "array of { method, path, server_line, summary } -- HTTP routes in server.js that expose the feature. Each must exist in server.js at the cited line.",
+    "tests": "array of { path, role, missing? } -- test files that protect the feature. Mark missing:true if the file does not exist.",
+    "tables": "array of { name, defined_in, role } -- database tables the feature reads or writes. defined_in is the file with the CREATE TABLE statement.",
+    "docs": "array of { path, role, pending? } -- docs that describe the feature. path must exist unless pending:true.",
+    "audit_findings": "array of { source, finding } -- relevant findings from the June 30 audit. source is an existing audit file.",
+    "next_actions": "array of { action, status, note? } -- what to build next. status one of done|open|pending. pending means it depends on a sibling agent's in-flight work."
+  },
+  "manifests": [
+    "pro-queue.json",
+    "contact-route.json",
+    "proof-stack.json",
+    "investor-marketplace.json",
+    "seller-intake.json",
+    "thinga-substrate.json",
+    "ops-readiness.json"
+  ],
+  "generated_by": "FEATUREGRAPH agent (dev/plans/2026-06-30-cohesive-vision/08-loop-prompt-feature-graph.md)",
+  "generated_at": "2026-06-30"
+}

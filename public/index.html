@@ -6,7 +6,7 @@
   <title>Wholesale CRM</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <link rel="stylesheet" href="styles.css?v=43" />
+  <link rel="stylesheet" href="styles.css?v=44" />
 </head>
 <body>
   <header>
@@ -22,6 +22,7 @@
       <button class="tab" data-tab="acquisitions">Acquisitions</button>
       <button class="tab" data-tab="sources">Sources</button>
       <button class="tab" data-tab="map">Map</button>
+      <button class="tab" data-tab="fill">⚡ Fill Properties</button>
     </nav>
     <button class="bell" id="bellBtn" title="Notifications">🔔<span class="bell-count" id="bellCount" style="display:none">0</span></button>
     <button class="btn primary" id="newLeadBtn">+ New Lead</button>
@@ -468,6 +469,48 @@
         <div id="mapCanvas"></div>
       </div>
     </section>
+
+    <!-- Fill Properties (the one-button, no-spend pipeline) -->
+    <section id="fill" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <b>⚡ Fill Properties</b>
+          <span class="muted" id="fillStatus" style="margin-left:8px"></span>
+          <button class="btn primary" id="fillRun" style="margin-left:auto">▶ Run pipeline</button>
+        </div>
+        <p class="hint">Runs the free, <b>no-spend</b> chain: enrich → grade → build tiers → export pursuable list. No money is spent here — paid skip-trace stays a separate, human/AI-gated step. <b>Local re-tier</b> re-ranks existing properties fast (no network); <b>Full pull</b> harvests + enriches first.</p>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin:6px 0 4px">
+          <label>Mode<br><select id="fillPreset"><option value="local">Local re-tier (fast, no network)</option><option value="full">Full pull (harvest + enrich)</option></select></label>
+          <label>Hot score<br><input id="fillHot" type="number" value="70" style="width:80px"></label>
+          <label>Min score<br><input id="fillMin" type="number" value="60" style="width:80px"></label>
+          <label>Max sources<br><input id="fillMaxSrc" type="number" value="6" style="width:80px"></label>
+        </div>
+        <div id="fillStages" class="fill-stages"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <b>Tiered queue</b>
+          <span class="muted" id="fillCounts" style="margin-left:8px"></span>
+          <button class="btn xs" id="fillReload" style="margin-left:auto">↻ Reload</button>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:13px">
+          <label><input type="checkbox" class="fillTier" value="call_now" checked> call_now</label>
+          <label><input type="checkbox" class="fillTier" value="pay_to_unlock" checked> pay_to_unlock</label>
+          <label><input type="checkbox" class="fillTier" value="research"> research</label>
+          <label><input type="checkbox" class="fillTier" value="hold"> hold</label>
+          <span style="opacity:.4">|</span>
+          <label><input type="checkbox" id="fillOwnerKnown"> owner known</label>
+          <label><input type="checkbox" id="fillDistress"> distress</label>
+          <label>Min grade <input id="fillMinGrade" type="number" value="0" style="width:64px"></label>
+          <label>Limit <input id="fillLimit" type="number" value="100" style="width:72px"></label>
+        </div>
+        <table class="fill-table">
+          <thead><tr><th>Tier</th><th>Score</th><th>Address</th><th>City</th><th>Owner</th><th>ARV</th><th>MAO</th><th>Why not call-now</th></tr></thead>
+          <tbody id="fillBody"><tr><td colspan="8" class="muted">Run the pipeline, then reload.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <!-- Lead modal -->
@@ -785,6 +828,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=42"></script>
+  <script src="app.js?v=43"></script>
 </body>
 </html>

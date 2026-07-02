@@ -1,0 +1,42 @@
+{
+  "feature": "Seller Intake",
+  "id": "seller-intake",
+  "summary": "First-party seller consent path: seller landing pages create consent records (the clean, lawful contact route), and a read-only intake queue + promotion workflow turn those records into operator work without mixing them into scraped/skip-traced contacts.",
+  "files": [
+    { "path": "consent.js", "role": "makeConsentRecord() / consentToContactCandidate(): validate and shape first-party consent." },
+    { "path": "seller_intake.js", "role": "buildSellerIntakeQueue(): pure read model over consent records -> daily intake queue, preserving allowed channels." },
+    { "path": "seller_promotion.js", "role": "buildSellerPromotionWorkflow(): links consented sellers to matching properties/proof + allowed/blocked actions." },
+    { "path": "seller_price_evidence.js", "role": "Seller price evidence extracted/stored from intake context." },
+    { "path": "compliance_gate.js", "role": "complianceCheck() applied to consent-derived contact candidates." }
+  ],
+  "routes": [
+    { "method": "POST", "path": "/api/seller-lead", "server_line": 1991, "summary": "Records a first-party consent record (lawful basis); can flip outreach_allowed:true on consented channels without paid skip-trace." },
+    { "method": "GET", "path": "/api/seller-intake/leads", "server_line": 2014, "summary": "Read-only intake queue over consent_records (buildSellerIntakeQueue)." },
+    { "method": "GET", "path": "/api/seller-intake/promotions", "server_line": 2031, "summary": "Promotion workflow linking consent records to properties (buildSellerPromotionWorkflow)." },
+    { "method": "GET", "path": "/api/seller-price/evidence", "server_line": 1961, "summary": "Lists stored seller price evidence." },
+    { "method": "POST", "path": "/api/seller-price/extract", "server_line": 1970, "summary": "Extracts seller price evidence from records." }
+  ],
+  "tests": [
+    { "path": "consent.test.js", "role": "Consent record validation tests." },
+    { "path": "seller_intake.test.js", "role": "Intake queue read-model tests." },
+    { "path": "seller_promotion.test.js", "role": "Promotion workflow tests." },
+    { "path": "seller_price_evidence.test.js", "role": "Seller price evidence tests." },
+    { "path": "compliance_gate.test.js", "role": "Compliance gate tests on consent-derived candidates." }
+  ],
+  "tables": [
+    { "name": "consent_records", "defined_in": "server.js", "role": "First-party consent leads (name/phone/email/address/channels/source/offer/legal_basis). Created lazily by the seller-lead/seller-intake routes." },
+    { "name": "seller_price_evidence", "defined_in": "server.js", "role": "Seller price evidence joined into intake/promotion." },
+    { "name": "properties", "defined_in": "server.js", "role": "Properties the promotion workflow matches consented sellers against." }
+  ],
+  "docs": [
+    { "path": "dev/architecture/NORTH_STAR_VISION.md", "role": "Defines first-party consent as the clean seller contact route." }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/27-crm-meta-projection-quality-visibility.md", "finding": "Seller Intake view has a first-party consent path, but consent should become an inspectable graph edge: consent channel, timestamp, matching property/proof, allowed actions, blocked actions." },
+    { "source": "audit/june30/13-compliance-and-privacy.md", "finding": "First-party consent is the compliance-clean contact basis and must stay separate from scraped/skip-traced contacts." }
+  ],
+  "next_actions": [
+    { "action": "Promote consent into an explicit graph edge (channel + timestamp + legal_basis) that operators can inspect and route around.", "status": "open" },
+    { "action": "Show allowed vs blocked actions per consented seller directly in the intake queue.", "status": "open" }
+  ]
+}
