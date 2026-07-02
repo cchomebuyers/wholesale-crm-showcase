@@ -1,0 +1,95 @@
+// server_smoke.test.js — boots the REAL server against the real crm.db and
+// hits the money-workflow endpoints. Exists because two real bugs (the
+// backups-symlink boot crash and the pro-queue asking_price 503) passed every
+// unit test: nothing in the suite ever actually started server.js. This does.
+//
+// NO_BACKUP=1 so the boot never snapshots the large db (LOOP_PROMPT.md disk
+// rule). Throwaway port. The child is killed in every exit path.
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repo = dirname(fileURLToPath(import.meta.url));
+const PORT = 4361; // throwaway smoke port
+const BASE = `http://127.0.0.1:${PORT}`;
+
+let child = null;
+
+async function up(timeoutMs = 25000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    try {
+      const r = await fetch(`${BASE}/api/health`);
+      if (r.ok) return true;
+    } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return false;
+}
+
+before(async () => {
+  child = spawn(process.execPath, [join(repo, "server.js")], {
+    cwd: repo,
+    env: { ...process.env, PORT: String(PORT), NO_BACKUP: "1" },
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  const ok = await up();
+  assert.ok(ok, `server did not come up on :${PORT} within 25s — boot is broken`);
+});
+
+after(() => { try { child?.kill(); } catch { /* already dead */ } });
+
+test("boot: /api/health answers", async () => {
+  const r = await fetch(`${BASE}/api/health`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.ok, true);
+  assert.equal(j.app, "wholesale-crm");
+});
+
+test("operator UI serves with the command shell + all 11 views", async () => {
+  const html = await (await fetch(`${BASE}/`)).text();
+  assert.ok(html.includes('id="cubeLauncher"'), "cube launcher present");
+  assert.ok(html.includes('id="menuOverlay"'), "overlay nav present");
+  const tabs = [...html.matchAll(/data-tab="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(tabs).size, 11, `expected 11 views, got ${new Set(tabs).size}`);
+});
+
+test("pro-queue answers with counts + blocker visibility (no 503)", async () => {
+  const r = await fetch(`${BASE}/api/pro-queue?limit=3`);
+  assert.equal(r.status, 200, "pro-queue must not 503 against the real schema");
+  const j = await r.json();
+  assert.ok(j.counts && typeof j.counts === "object");
+  if (j.items.length) {
+    assert.ok(Array.isArray(j.items[0].why_not_call_now), "blockers exposed");
+    assert.ok(!("listing_agent_phone" in j.items[0]), "seller contact not leaked");
+  }
+});
+
+test("pipeline surface is mounted (stages + runs)", async () => {
+  const s = await (await fetch(`${BASE}/api/pipeline/stages`)).json();
+  assert.ok(Array.isArray(s.stages) && s.stages.length >= 3);
+  assert.ok(s.presets.local.includes("build"));
+  const runs = await (await fetch(`${BASE}/api/pipeline/runs`)).json();
+  assert.ok(Array.isArray(runs));
+});
+
+test("parse-memory endpoint resolves and remembers", async () => {
+  const rec = { business_name: "Smoke Co", website: "smoke.example", license_id: "SMK-1" };
+  const first = await (await fetch(`${BASE}/api/parse/resolve`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rec),
+  })).json();
+  assert.equal(first.kind, "smb");
+  const again = await (await fetch(`${BASE}/api/parse/resolve`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...rec, business_name: "Other" }),
+  })).json();
+  assert.equal(again.source, "memory", "same shape must hit memory");
+});
+
+test("stats endpoint (dashboard) answers", async () => {
+  const r = await fetch(`${BASE}/api/stats`);
+  assert.equal(r.status, 200);
+});
