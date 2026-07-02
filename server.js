@@ -225,6 +225,9 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_pipeline_runs_created ON pipeline_runs(c
 // A run only lives in this process; if we restarted, any row still 'running' is a
 // zombie from a prior process — reconcile it so the UI doesn't poll it forever.
 try { db.prepare("UPDATE pipeline_runs SET status='interrupted', finished_at=?, error='server restarted mid-run' WHERE status='running'").run(new Date().toISOString()); } catch { /* table just created */ }
+// Retention: keep the newest 200 runs (each carries full stages_json). The runs
+// also live as kind:pipeline_run Thingas, so history is never truly lost.
+try { db.prepare("DELETE FROM pipeline_runs WHERE id NOT IN (SELECT id FROM pipeline_runs ORDER BY id DESC LIMIT 200)").run(); } catch { /* table just created */ }
 // The memory unit the generic parser consults before parsing (parse_memory.js).
 const parseMemory = createParseMemory(db);
 // Persisted DNC/consent verdicts (dnc_records.js — audit P1 #2).
