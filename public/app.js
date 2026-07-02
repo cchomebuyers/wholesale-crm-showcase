@@ -1140,7 +1140,16 @@ async function loadBackupInfo() {
   try {
     const b = await api("/api/backup/status");
     const when = b.last ? new Date(b.last).toLocaleString() : "—";
-    $("#backupInfo").innerHTML = `Auto-backups run every 6 hours &amp; on startup — <b>${b.count}</b> snapshots saved · last: ${when}. Your data lives in <code>crm.db</code>; even if the app stops, nothing is lost.`;
+    // Standing watch (tools/watch_round.mjs --log): show the last round.
+    let watch = "";
+    try {
+      const s = await api("/api/stats");
+      if (s.watchLast) {
+        const clear = s.watchLast.includes("CLEAR");
+        watch = ` · 🛡 watch: <b style="color:${clear ? "var(--em-deep,#0b8259)" : "var(--red,#c04a44)"}">${clear ? "CLEAR" : "FAIL"}</b> @ ${esc(s.watchLast.slice(11, 16))}Z`;
+      }
+    } catch { /* stats optional here */ }
+    $("#backupInfo").innerHTML = `Auto-backups run every 6 hours &amp; on startup — <b>${b.count}</b> snapshots saved · last: ${when}${watch}. Your data lives in <code>crm.db</code>; even if the app stops, nothing is lost.`;
   } catch { $("#backupInfo").textContent = ""; }
 }
 $("#backupNowBtn")?.addEventListener("click", async () => {

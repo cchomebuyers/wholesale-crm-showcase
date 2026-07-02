@@ -1791,7 +1791,14 @@ app.get("/api/stats", (req, res) => {
         AND co.property_id NOT IN (SELECT property_id FROM call_outcomes WHERE outreach_suppressed = 1)
       ORDER BY co.follow_up_date ASC LIMIT 50`).all(today);
   } catch { /* call_outcomes not created yet */ }
-  res.json({ stages, totals, followups, callFollowups, today, offersToday, offersTarget: 5, prospects });
+  // Last standing-watch round (tools/watch_round.mjs --log) — surfaces the
+  // autonomous health trace on the dashboard. Absent file = watch never run.
+  let watchLast = null;
+  try {
+    const lines = readFileSync(join(__dirname, "logs", "watch.log"), "utf8").trim().split("\n");
+    watchLast = lines[lines.length - 1] || null;
+  } catch { /* no log yet */ }
+  res.json({ stages, totals, followups, callFollowups, today, offersToday, offersTarget: 5, prospects, watchLast });
 });
 
 // ====================== ACQUISITIONS — Phase 1 ======================
