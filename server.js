@@ -2245,6 +2245,12 @@ app.post("/api/pro-queue/:propertyId/skiptrace", async (req, res) => {
     const id = Number(req.params.propertyId);
     const p = db.prepare("SELECT * FROM properties WHERE id = ?").get(id);
     if (!p) return res.status(404).json({ error: "property not found" });
+    // A do_not_call outcome is absolute: never spend money finding a contact
+    // for a seller who refused contact (call_outcome.js / outreach_suppressed).
+    try {
+      const sup = db.prepare("SELECT COUNT(*) c FROM call_outcomes WHERE property_id = ? AND outreach_suppressed = 1").get(id);
+      if (sup && sup.c > 0) return res.status(403).json({ ok: false, allowed: false, spent: false, reason: "outreach permanently suppressed (do_not_call recorded) — skip-trace refused" });
+    } catch { /* call_outcomes table absent */ }
     const q = db.prepare("SELECT tier, signals_json FROM pro_queue WHERE property_id = ?").get(id);
     let signals = {}; try { signals = JSON.parse(q?.signals_json || "{}"); } catch { signals = {}; }
     const decision = skiptraceDecision(
