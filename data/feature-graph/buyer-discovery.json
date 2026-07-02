@@ -1,0 +1,37 @@
+{
+  "feature": "Buyer Discovery & Demand",
+  "id": "buyer-discovery",
+  "summary": "Repeat cash buyers mined from official recorded-sales/deed data (Cook parcel sales, NYC ACRIS), filtered through real-buyer/lender gates, promoted into the active buyers list, and matched as market demand against queue properties.",
+  "files": [
+    { "path": "buyer_discovery.js", "role": "core: isRealBuyer (lender/trustee/GSE filter), buyerConfidence, buyerMarketDemand, normalizeBuyerCandidate, qualifiesForPromotion" },
+    { "path": "tools/discover_cook_buyers.mjs", "role": "Cook County parcel-sales aggregation (SoQL group/having) -> candidates" },
+    { "path": "tools/discover_nyc_buyers.mjs", "role": "NYC ACRIS DEED master + grantee parties join -> candidates (in-window confidence calibration)" },
+    { "path": "buyer_matching.js", "role": "per-property buyer ranking (rankBuyersForProperty)" },
+    { "path": "pro_wholesaler_queue.js", "role": "buyer_demand signal consumption in tiering" }
+  ],
+  "routes": [
+    { "method": "GET", "path": "/api/buyer-discovery/candidates", "server_line": 2125, "summary": "list candidates + source families" },
+    { "method": "POST", "path": "/api/buyer-discovery/candidates", "server_line": 2129, "summary": "save a candidate" },
+    { "method": "POST", "path": "/api/buyer-discovery/candidates/:id/promote", "server_line": 2137, "summary": "single promotion into buyers" },
+    { "method": "POST", "path": "/api/buyer-discovery/promote-qualified", "server_line": 2154, "summary": "BULK promotion behind qualifiesForPromotion gate (dry-run default)" }
+  ],
+  "tests": [
+    { "path": "buyer_discovery.test.js", "role": "gates: real-buyer filter incl. banks/trustees, confidence tiers, promotion qualifier, demand matching" },
+    { "path": "server_smoke.test.js", "role": "live pro-queue rows expose buyer-demand-derived blockers" }
+  ],
+  "tables": [
+    { "name": "buyer_discovery_candidates", "defined_in": "server.js", "role": "discovered candidates with confidence + evidence_json + imported_buyer_id" },
+    { "name": "buyers", "defined_in": "server.js", "role": "active buy-box list consumed by demand matching" }
+  ],
+  "docs": [
+    { "path": "councilRoom/comms/2026-07-02-nyc-buyer-discovery-blueprint.md", "role": "ACRIS recipe, live-verified fields, paging bounds" },
+    { "path": "councilRoom/comms/2026-07-02-owner-join-saturation.md", "role": "demand geography-bound verdict + CA-closed boundary" }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/18-next-actions.md", "finding": "P5 'promote qualified buyer candidates into active buyers' — built 2026-07-02; buyers 1 -> 107 across the session" }
+  ],
+  "next_actions": [
+    { "action": "CA buyer discovery", "status": "open", "note": "no open recorder data — operator/paid lane only (frontier boundary)" },
+    { "action": "borough-grained NYC buy-boxes", "status": "open", "note": "true counties now on file (tick 64); demand matching could use borough granularity when NYC buyer volume grows" }
+  ]
+}

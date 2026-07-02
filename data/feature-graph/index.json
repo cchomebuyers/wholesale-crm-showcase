@@ -43,6 +43,11 @@
       "id": "fill-pipeline",
       "feature": "Fill Pipeline & Dial Loop",
       "file": "fill-pipeline.json"
+    },
+    {
+      "id": "buyer-discovery",
+      "feature": "Buyer Discovery & Demand",
+      "file": "buyer-discovery.json"
     }
   ],
   "generated_by": "FEATUREGRAPH agent (dev/plans/2026-06-30-cohesive-vision/08-loop-prompt-feature-graph.md)",
