@@ -28,6 +28,15 @@ http://localhost:4000 (`npm start`).
   `data/source-registry/pilot-manifest-taxroll-riverside-ca-2026-06-28.md`
   (legal basis pre-written: names public RTC §408; NEVER bulk-republish
   mailing addresses §408.1(a)).
+- **LA fast path (1,206 violations/distress rows):** two concrete asks from
+  `pilot-manifest-taxroll-losangeles-ca-2026-06-27.md`:
+  1. **Quick official download, no login:** the Treasurer–Tax Collector
+     "Tax-Defaulted Property / Publication List" at `ttc.lacounty.gov` —
+     carries owner of record + APN + delinquent amount + auction date
+     (statutory notice, RTC §3701). Maximum-distress owners, legally public.
+     Drop the XLS/PDF in `data/` and the loop wires the parser.
+  2. **CPRA request** to the LA Assessor for the Secured Annual Assessment
+     Roll extract (AIN, OWNER_NAME, situs, assessed value) — Gov. Code §6253.
 - **Why an operator:** live probes confirmed no owner-bearing bulk layer is
   discoverable (`councilRoom/comms/2026-07-02-ca-owner-activation-plan.md` —
   incl. the federated-hub trap). Once a file/URL exists, the loop wires the
