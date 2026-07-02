@@ -2404,6 +2404,41 @@ app.get("/api/pro-queue", (req, res) => {
   }
 });
 
+// Daily call sheet — the operator's dial list. COMPLIANCE BY CONSTRUCTION:
+// a phone number appears ONLY when a fresh DNC clear is on record
+// (dnc_records.js); otherwise the cell is empty and dnc_status says why.
+// Suppressed (do_not_call) properties never appear at all.
+app.get("/api/pro-queue/call-sheet.csv", (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT q.tier, q.priority_score, p.id AS property_id,
+        p.address, p.formatted_address, p.city, p.state, p.owner_name, p.arv, p.mao, p.listing_agent_phone
+      FROM pro_queue q JOIN properties p ON p.id = q.property_id
+      WHERE q.tier IN ('call_now','pay_to_unlock') AND p.owner_name IS NOT NULL AND p.owner_name <> ''
+        AND p.id NOT IN (SELECT property_id FROM call_outcomes WHERE outreach_suppressed = 1)
+      ORDER BY q.priority_score DESC LIMIT 500`).all();
+    const dncMap = dncStore.statusMap();
+    const lastOutcome = new Map();
+    try {
+      for (const o of db.prepare("SELECT property_id, outcome, follow_up_date FROM call_outcomes WHERE id IN (SELECT MAX(id) FROM call_outcomes GROUP BY property_id)").all()) lastOutcome.set(o.property_id, o);
+    } catch { /* table absent */ }
+    const esc = (v) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const cols = ["property_id","tier","priority","owner_name","address","city","state","arv","mao","phone","dnc_status","last_outcome","follow_up_date"];
+    const lines = [cols.join(",")];
+    for (const r of rows) {
+      const key = normalizePhone(r.listing_agent_phone);
+      const verdict = key ? dncMap.get(key) : undefined;
+      const phone = verdict === "clear" ? r.listing_agent_phone : "";
+      const dncStatus = !key ? "no_phone_on_file" : verdict === "clear" ? "clear" : verdict ? verdict : "unchecked — do not dial";
+      const lo = lastOutcome.get(r.property_id);
+      lines.push([r.property_id, r.tier, r.priority_score, r.owner_name, r.address || r.formatted_address || "", r.city || "", r.state || "",
+        r.arv ?? "", r.mao ?? "", phone, dncStatus, lo?.outcome || "", lo?.follow_up_date || ""].map(esc).join(","));
+    }
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="call-sheet-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(lines.join("\n") + "\n");
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
 // ---------- Fill-Properties pipeline (the one-button chain) ----------
 // Free, no-spend chain: enrichment → grade → build pro-queue/tiers → export. The
 // only paid action (per-property skip-trace) is NOT in this chain — it stays a
