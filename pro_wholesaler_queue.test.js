@@ -1,7 +1,7 @@
 // pro_wholesaler_queue.test.js -- the ruthless narrowing gate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyProQueue, summarizeProQueue, distressSignal, contactState, whyNotCallNow, CALL_NOW_BLOCKER_KEYS } from "./pro_wholesaler_queue.js";
+import { classifyProQueue, summarizeProQueue, distressSignal, contactState, whyNotCallNow, CALL_NOW_BLOCKER_KEYS, applyOutreachSuppression, SUPPRESSED_BLOCKER } from "./pro_wholesaler_queue.js";
 
 const keys = (blockers) => blockers.map((b) => b.key);
 
@@ -199,4 +199,27 @@ test("priority_score prefers property_grade as ranking base when present, identi
   // Guard: absent property_grade -> unchanged behavior (does not throw, still ranks).
   const none = classifyProQueue({ ...base });
   assert.ok(Number.isFinite(none.priority_score));
+});
+
+// ---- outreach suppression: the do-not-call refusal is absolute ----
+test("suppressed property can never be call_now_ready", () => {
+  const ready = { property_id: 7, why_not_call_now: [], call_now_ready: true, next_action: "call now" };
+  const out = applyOutreachSuppression(ready, new Set([7]));
+  assert.equal(out.call_now_ready, false);
+  assert.equal(out.why_not_call_now[0].key, "outreach_suppressed");
+  assert.equal(out.next_action, "do_not_contact");
+});
+
+test("suppression blocker outranks (prepends) every other blocker", () => {
+  const item = { property_id: 9, why_not_call_now: [{ key: "owner_missing" }], call_now_ready: false };
+  const out = applyOutreachSuppression(item, new Set([9]));
+  assert.deepEqual(out.why_not_call_now.map((b) => b.key), ["outreach_suppressed", "owner_missing"]);
+});
+
+test("unsuppressed items pass through untouched; blocker never doubles", () => {
+  const item = { property_id: 3, why_not_call_now: [], call_now_ready: true };
+  assert.equal(applyOutreachSuppression(item, new Set([99])), item);
+  const once = applyOutreachSuppression(item, new Set([3]));
+  const twice = applyOutreachSuppression(once, new Set([3]));
+  assert.equal(twice.why_not_call_now.filter((b) => b.key === SUPPRESSED_BLOCKER.key).length, 1);
 });

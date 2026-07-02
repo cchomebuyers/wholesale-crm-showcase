@@ -193,6 +193,27 @@ export function whyNotCallNow(record = {}, opts = {}) {
   return out.map((b) => ({ ...b }));
 }
 
+// The seller said do-not-call (call_outcome.js records outreach_suppressed).
+// That refusal is ABSOLUTE: it outranks every other fact, so it is prepended
+// as a terminal blocker and the row can never read call_now_ready. Pure so
+// the queue route and tests share one implementation.
+export const SUPPRESSED_BLOCKER = Object.freeze({
+  key: "outreach_suppressed",
+  label: "seller refused contact (do-not-call)",
+  fix: "none — outreach permanently suppressed for this property",
+});
+
+export function applyOutreachSuppression(item, suppressedIds) {
+  if (!suppressedIds || !suppressedIds.has(item.property_id)) return item;
+  const already = (item.why_not_call_now || []).some((b) => b.key === SUPPRESSED_BLOCKER.key);
+  return {
+    ...item,
+    why_not_call_now: already ? item.why_not_call_now : [{ ...SUPPRESSED_BLOCKER }, ...(item.why_not_call_now || [])],
+    call_now_ready: false,
+    next_action: "do_not_contact",
+  };
+}
+
 // priority_score: a single 0-100 ranking number inside a tier. Built from the existing
 // lead_score with bumps for the things a wholesaler actually values: real contact,
 // known value, and a spread that can work.

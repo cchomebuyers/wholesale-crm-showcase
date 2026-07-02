@@ -24,7 +24,7 @@ import { resolveContactRoute } from "./contact_route_engine.js";
 import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
 import { complianceCheck } from "./compliance_gate.js";
 import { skiptraceDecision } from "./skiptrace_gate.js";
-import { whyNotCallNow } from "./pro_wholesaler_queue.js";
+import { whyNotCallNow, applyOutreachSuppression } from "./pro_wholesaler_queue.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
 import { buildProofStack, buyerSafeProofStack } from "./proof_stack.js";
 import { createKgPool, kgConnectionString } from "./kg_projection_persistence.js";
@@ -2233,11 +2233,16 @@ app.get("/api/pro-queue", (req, res) => {
       ORDER BY CASE q.tier WHEN 'call_now' THEN 0 WHEN 'pay_to_unlock' THEN 1 WHEN 'research' THEN 2 ELSE 3 END, q.priority_score DESC
       LIMIT 2000`).all(...params);
     const counts = Object.fromEntries(db.prepare("SELECT tier, COUNT(*) c FROM pro_queue GROUP BY tier").all().map((r) => [r.tier, r.c]));
+    // A do_not_call outcome anywhere in a property's history suppresses it forever
+    // (call_outcomes.outreach_suppressed) — enforced here, not just recorded.
+    let suppressed = new Set();
+    try { suppressed = new Set(db.prepare("SELECT DISTINCT property_id FROM call_outcomes WHERE outreach_suppressed = 1").all().map((x) => x.property_id)); }
+    catch { /* table not created yet */ }
     let items = rows.map((r) => {
       let signals = {}; try { signals = JSON.parse(r.signals_json || "{}"); } catch { signals = {}; }
       const why = whyNotCallNow(r, { signals });
       const { signals_json, listing_agent_phone, listing_agent_email, asking_price, contract_price, price, offer_amount, ...rest } = r;
-      return { ...rest, signals, why_not_call_now: why, call_now_ready: why.length === 0 };
+      return applyOutreachSuppression({ ...rest, signals, why_not_call_now: why, call_now_ready: why.length === 0 }, suppressed);
     });
     if (wantReady) items = items.filter((it) => it.call_now_ready);
     if (wantDistress) items = items.filter((it) => it.signals.distress || it.signals.distress_present || it.signals.distress_signal);
