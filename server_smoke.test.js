@@ -125,6 +125,20 @@ test("spend gate end-to-end: hold-tier skiptrace is DENIED before any provider c
   assert.ok(r.reason && r.reason.length > 3, "denial carries a reason");
 });
 
+test("call sheet serves CSV and never leaks a phone without a DNC clear", async () => {
+  const r = await fetch(`${BASE}/api/pro-queue/call-sheet.csv`);
+  assert.equal(r.status, 200);
+  const text = await r.text();
+  const lines = text.trim().split("\n");
+  assert.match(lines[0], /^property_id,tier,priority,owner_name/);
+  for (const line of lines.slice(1)) {
+    const cells = line.split(","); // phone is col 10 (index 9); quoted fields never contain digits-only phones
+    const phone = cells[9] || "";
+    const dnc = cells[10] || "";
+    if (phone.trim()) assert.equal(dnc, "clear", `phone present without clear: ${line.slice(0, 60)}`);
+  }
+});
+
 test("ankhor live bridge serves ThingaImportV2 with contacts redacted", async () => {
   const d = await (await fetch(`${BASE}/api/export/ankhor-import?kinds=lead&limit_per_kind=3`)).json();
   assert.equal(d.$schema, "ThingaImportV2");
