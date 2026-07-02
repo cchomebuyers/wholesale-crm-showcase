@@ -2367,6 +2367,21 @@ app.post("/api/pipeline/run", (req, res) => {
         db.prepare("UPDATE pipeline_runs SET status = ?, finished_at = ?, stages_json = ?, current_stage = NULL, tier_counts_json = ?, error = ? WHERE id = ?")
           .run(result.ok ? "done" : "error", new Date().toISOString(), JSON.stringify(stageState), JSON.stringify(proQueueTierCounts()), result.abortedAt ? `aborted at stage: ${result.abortedAt}` : null, runId);
       } catch (e) { console.error("[pipeline] final write failed:", e.message); }
+      // One graph: the run itself becomes a Thinga (like lead-engine runs and
+      // campaigns), so agents/projections can see pipeline history in the substrate.
+      try {
+        thinga.put({
+          id: `thinga:pipeline_run-${runId}`,
+          kind: "pipeline_run",
+          name: `pipeline ${preset} run ${runId} — ${result.ok ? "done" : "error"}`,
+          category_path: "Pipeline/Runs",
+          content: {
+            run_id: runId, status: result.ok ? "done" : "error", preset, filters,
+            stages: stageState.map((s) => ({ id: s.id, status: s.status, ms: s.ms ?? null })),
+            tier_counts: proQueueTierCounts(), aborted_at: result.abortedAt || null,
+          },
+        });
+      } catch (e) { console.warn("[pipeline] thinga mirror skipped:", e.message); }
     } catch (e) {
       try { db.prepare("UPDATE pipeline_runs SET status = 'error', finished_at = ?, error = ? WHERE id = ?").run(new Date().toISOString(), String(e.message || e), runId); } catch { /* ignore */ }
     } finally {
