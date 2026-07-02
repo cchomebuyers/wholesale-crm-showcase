@@ -36,8 +36,12 @@ test("presets reference only real stage ids", () => {
   }
 });
 
-test("local preset is exactly grade → build → export", () => {
-  assert.deepEqual(PIPELINE_PRESETS.local, ["grade", "build", "export"]);
+test("local preset = every no-network stage, in manifest order", () => {
+  assert.deepEqual(PIPELINE_PRESETS.local, ["geo_apply", "portfolio", "grade", "build", "export"]);
+  // Nothing in local may touch the network — that's the preset's contract.
+  for (const id of PIPELINE_PRESETS.local) {
+    assert.equal(PIPELINE_STAGES.find((s) => s.id === id).network, false, `${id} must be offline`);
+  }
 });
 
 test("full preset is the whole manifest in order", () => {
@@ -45,7 +49,7 @@ test("full preset is the whole manifest in order", () => {
 });
 
 test("resolveStageIds: preset selection", () => {
-  assert.deepEqual(resolveStageIds({ preset: "local" }), ["grade", "build", "export"]);
+  assert.deepEqual(resolveStageIds({ preset: "local" }), ["geo_apply", "portfolio", "grade", "build", "export"]);
   assert.deepEqual(resolveStageIds({ preset: "full" }), ids);
 });
 

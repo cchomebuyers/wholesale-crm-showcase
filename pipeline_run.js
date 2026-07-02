@@ -47,8 +47,11 @@ export const PIPELINE_STAGES = [
     args: () => [], optional: true, network: true, timeoutMs: 15 * 60_000 },
   { id: "portfolio", label: "Detect owner portfolios (bulk sellers)", script: "tools/detect_owner_portfolios.mjs",
     args: () => [], optional: true, network: false, timeoutMs: 5 * 60_000 },
+  // NOTE: fetches Cook County sold-comps from the SODA API (enrich_arv_cook.mjs:77)
+  // — it is a NETWORK stage; a run on 2026-07-02 proved it (URL ctor throw, chain
+  // degraded correctly past the optional failure).
   { id: "arv",       label: "ARV / MAO from comps", script: "tools/enrich_arv_cook.mjs",
-    args: () => [], optional: true, network: false, timeoutMs: 15 * 60_000 },
+    args: () => [], optional: true, network: true, timeoutMs: 15 * 60_000 },
   { id: "buyers",    label: "Discover cash buyers + market demand", script: "tools/discover_cook_buyers.mjs",
     args: () => [], optional: true, network: true, timeoutMs: 10 * 60_000 },
   { id: "grade",     label: "Per-property grade", script: "tools/apply_property_score.mjs",
@@ -61,10 +64,12 @@ export const PIPELINE_STAGES = [
 ];
 
 // Preset stage selections.
-//   local — re-tier from existing properties only (no network, fast, zero spend)
+//   local — every NO-NETWORK stage (staged-geo apply, portfolio detection, ARV
+//           from already-harvested comps, grade, build, export). Zero network,
+//           zero spend — but no free enrichment left on the table.
 //   full  — the whole chain incl. network enrichment (still zero spend)
 export const PIPELINE_PRESETS = {
-  local: ["grade", "build", "export"],
+  local: PIPELINE_STAGES.filter((s) => !s.network).map((s) => s.id),
   full: PIPELINE_STAGES.map((s) => s.id),
 };
 
