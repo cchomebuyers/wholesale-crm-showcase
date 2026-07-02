@@ -37,6 +37,7 @@ import { listCouncilJobs, loadCouncilParticipants, readCouncilJob, retryCouncilJ
 import { leadEngineSettingsWrites, leadEngineTickDecision, normalizeLeadEngineSettings } from "./lead_engine_scheduler.js";
 import { buildEcosystemSnapshot, normalizeSearchPlan } from "./ecosystem_search_plan.js";
 import { runPipeline, PIPELINE_STAGES, PIPELINE_PRESETS, resolveStageIds } from "./pipeline_run.js";
+import { createParseMemory } from "./parse_memory.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -207,6 +208,8 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_pipeline_runs_created ON pipeline_runs(c
 // A run only lives in this process; if we restarted, any row still 'running' is a
 // zombie from a prior process — reconcile it so the UI doesn't poll it forever.
 try { db.prepare("UPDATE pipeline_runs SET status='interrupted', finished_at=?, error='server restarted mid-run' WHERE status='running'").run(new Date().toISOString()); } catch { /* table just created */ }
+// The memory unit the generic parser consults before parsing (parse_memory.js).
+const parseMemory = createParseMemory(db);
 db.exec(`CREATE TABLE IF NOT EXISTS ecosystem_search_plans (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
@@ -1607,6 +1610,22 @@ app.patch("/api/leads/:id/collect-fee", (req, res) => {
 // status dot). No auth, no data — just "the CRM is up".
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, app: "wholesale-crm", at: new Date().toISOString() });
+});
+
+// The generic parser's button-click entry point: memory first, detect on miss,
+// remember the outcome (parse_memory.js). POST a raw record, get back which
+// registered kind parses it and whether that came from memory or detection.
+app.post("/api/parse/resolve", (req, res) => {
+  try {
+    const record = req.body && typeof req.body === "object" ? req.body : {};
+    if (!Object.keys(record).length) return res.status(400).json({ error: "POST a JSON record to resolve" });
+    const r = parseMemory.resolve(record);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.get("/api/parse/memory", (req, res) => {
+  try { res.json({ stats: parseMemory.stats() }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 app.get("/api/stats", (req, res) => {
