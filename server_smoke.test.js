@@ -93,3 +93,14 @@ test("stats endpoint (dashboard) answers", async () => {
   const r = await fetch(`${BASE}/api/stats`);
   assert.equal(r.status, 200);
 });
+
+test("ankhor live bridge serves ThingaImportV2 with contacts redacted", async () => {
+  const d = await (await fetch(`${BASE}/api/export/ankhor-import?kinds=lead&limit_per_kind=3`)).json();
+  assert.equal(d.$schema, "ThingaImportV2");
+  assert.ok(Array.isArray(d.thingas) && d.thingas.length > 0);
+  assert.equal(d.metadata.contacts_redacted, true, "HTTP surface must always redact");
+  const payload = JSON.parse(d.thingas[0].facets.note.content);
+  for (const v of Object.values(payload.content)) {
+    assert.ok(v !== "3135550100", "raw phone must never appear");
+  }
+});

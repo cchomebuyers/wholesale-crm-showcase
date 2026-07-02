@@ -40,6 +40,7 @@ import { runPipeline, PIPELINE_STAGES, PIPELINE_PRESETS, resolveStageIds } from 
 import { createParseMemory } from "./parse_memory.js";
 import { normalizeCallOutcome, summarizeOutcomes } from "./call_outcome.js";
 import { createDncStore, normalizePhone } from "./dnc_records.js";
+import { buildThingaImportV2 } from "./ankhor_bridge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1658,6 +1659,25 @@ app.post("/api/parse/resolve", (req, res) => {
 app.get("/api/parse/memory", (req, res) => {
   try { res.json({ stats: parseMemory.stats() }); }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// ---------- ankhor88 live bridge: ThingaImportV2 over HTTP ----------
+// ankhor's Smart Import auto-detects this document ($schema ThingaImportV2 —
+// ankhor88_remix/src/utils/importSchemas/registry.ts detectSchema). Serving it
+// live means import-from-URL instead of file shuffling. Contacts are ALWAYS
+// redacted on this route: HTTP surface, no DNC/consent gate on the other side
+// (--with-contacts exists only on the operator CLI exporter).
+app.get("/api/export/ankhor-import", (req, res) => {
+  try {
+    const kinds = String(req.query.kinds || "lead,property,buyer,campaign,plan,note,task").split(",").map((s) => s.trim()).filter(Boolean);
+    const limitPerKind = Math.max(1, Math.min(2000, Number(req.query.limit_per_kind) || 200));
+    const rows = [];
+    for (const kind of kinds) {
+      if (kind === "setting") continue;
+      rows.push(...db.prepare("SELECT id, kind, name, version, content, axes, category_path FROM thingas WHERE kind = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?").all(kind, limitPerKind));
+    }
+    res.json(buildThingaImportV2(rows, { withContacts: false }));
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 // ---------- DNC verdicts: store + query check results (audit P1 #2) ----------
