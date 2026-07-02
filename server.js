@@ -2380,6 +2380,17 @@ const proQueueTierCounts = () => {
   catch { return {}; }
 };
 
+// Enrichment coverage — why the funnel narrows. Reads the summary the build
+// stage writes (data/pro_queue_summary.json): tiers, what's missing, dials.
+app.get("/api/pipeline/coverage", (req, res) => {
+  try {
+    const p = join(__dirname, "data", "pro_queue_summary.json");
+    if (!existsSync(p)) return res.status(404).json({ error: "no pro_queue_summary.json yet — run the pipeline" });
+    const s = JSON.parse(readFileSync(p, "utf8"));
+    res.json({ built_at: s.built_at || null, total: s.total || null, tiers: s.tiers || {}, top_missing: s.top_missing || {}, dial_activity: s.dial_activity || null });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
 app.get("/api/pipeline/stages", (req, res) => {
   res.json({
     stages: PIPELINE_STAGES.map((s) => ({ id: s.id, label: s.label, optional: s.optional, network: s.network })),

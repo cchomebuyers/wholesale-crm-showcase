@@ -2629,12 +2629,29 @@ let _fillPoll = null;
 
 async function loadFill() {
   await reloadFillQueue();
+  loadFillCoverage();
   try {
     const runs = await api("/api/pipeline/runs");
     const active = runs.find((r) => r.status === "running");
     if (active) pollFill(active.id);
     else if (runs[0]) renderFillRun(await api("/api/pipeline/runs/" + runs[0].id));
   } catch { /* no runs yet */ }
+}
+
+// Why the funnel narrows: enrichment coverage from the last build.
+async function loadFillCoverage() {
+  const el = $("#fillCoverage");
+  if (!el) return;
+  try {
+    const c = await api("/api/pipeline/coverage");
+    const total = c.total || 1;
+    const pct = (missing) => Math.round(100 * (1 - (missing || 0) / total));
+    const m = c.top_missing || {};
+    const dial = c.dial_activity ? ` · dials ${c.dial_activity.total_outcomes} (follow-ups due ${c.dial_activity.followups_due})` : "";
+    el.innerHTML = `coverage of ${total.toLocaleString()} properties — ` +
+      `owner <b>${pct(m.owner)}%</b> · ARV <b>${pct(m.arv)}%</b> · buyer demand <b>${pct(m.buyer_demand)}%</b> · seller phone <b>${pct(m.seller_phone)}%</b>` +
+      `${dial} <span class="muted">(built ${esc((c.built_at || "").slice(0, 16).replace("T", " "))})</span>`;
+  } catch { el.textContent = ""; }
 }
 
 function renderFillRun(run) {
