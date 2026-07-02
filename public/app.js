@@ -1922,10 +1922,25 @@ async function openPropertyEvidence(id) {
   $("#evidenceModal").classList.add("open");
   try {
     const r = await api(`/api/properties/${id}/imagery`, { method: "POST" });
-    $("#evidenceContent").innerHTML = imageryBlock(r.evidence);
+    $("#evidenceContent").innerHTML = imageryBlock(r.evidence) + (await callHistoryBlock(id));
   } catch (e) {
     $("#evidenceContent").innerHTML = `<div class="err-line">${esc(e.message)}</div>`;
   }
+}
+
+// Call history for the evidence modal — every dial is evidence too.
+async function callHistoryBlock(propertyId) {
+  try {
+    const d = await api(`/api/pro-queue/${propertyId}/call-outcomes`);
+    if (!d.outcomes || !d.outcomes.length) return "";
+    const s = d.summary || {};
+    return `
+      <div class="evidence-meta" style="margin-top:14px">
+        <b>📞 Call history (${d.outcomes.length})</b>
+        <span class="muted">${s.outreach_suppressed ? "🚫 outreach suppressed" : esc(s.next_action || "")}</span>
+      </div>
+      ${d.outcomes.map((o) => `<div class="fu"><span>${esc(o.outcome.replace(/_/g, " "))}${o.seller_price ? ` · asked $${Number(o.seller_price).toLocaleString()}` : ""}${o.offer_amount ? ` · offered $${Number(o.offer_amount).toLocaleString()}` : ""}${o.follow_up_date ? ` · follow up ${o.follow_up_date}` : ""}${o.notes ? ` — ${esc(o.notes)}` : ""}</span><span class="when">${esc((o.created_at || "").slice(0, 10))}</span></div>`).join("")}`;
+  } catch { return ""; } // history is additive — never break the imagery view
 }
 
 function buyerRows(matches, gaps = []) {
