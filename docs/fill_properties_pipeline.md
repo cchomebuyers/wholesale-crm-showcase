@@ -29,10 +29,13 @@ grade → build → export`. The local re-tier core — **grade → build → ex
 required (a failure aborts the run); the network/enrichment stages are optional
 (best-effort; a failure is recorded and the chain continues).
 
-- **Local re-tier** preset = `grade, build, export` — fast, no network, no spend.
-  Re-ranks the existing `properties` rows into fresh tiers. Use this most of the time.
+- **Local re-tier** preset = **every no-network stage** (`geo_apply, portfolio,
+  grade, build, export`) — derived from the manifest's `network` flags so it
+  cannot drift. Fast, offline, no spend. Use this most of the time.
 - **Full pull** preset = the whole manifest — also harvests + enriches first
-  (network, slower; still no spend).
+  (network, slower; still no spend). Note: `arv` (Cook County SODA comps) is a
+  NETWORK stage — a 2026-07-02 run proved and corrected an earlier
+  misclassification.
 
 Tiering itself is `classifyProQueue()` in `pro_wholesaler_queue.js`
 (`call_now` / `pay_to_unlock` / `research` / `hold`).
@@ -56,8 +59,33 @@ All optional, all applied after the queue is built:
 Response: `{ counts, items, total, returned }`. Each item carries `why_not_call_now`
 (ordered blockers) and `call_now_ready`.
 
-## Verified live (2026-06-30)
+## The dial loop (added 2026-07-02)
 
-Local run via the button: `grade ✓ → build ✓ → export ✓`, queue rebuilt to
-`pay_to_unlock: 401`; filters return correct subsets; pursuable export written to
-`pursuableLeads/skiptrace_targets.{csv,jsonl}`. Zero network calls, zero spend.
+After the pipeline fills the queue, the operator loop continues in the same tab:
+
+- **Outcome column** — record any of 9 dial outcomes per row
+  (`call_outcome.js`; `POST /api/pro-queue/:id/call-outcome`). `seller_price` /
+  `offer_made` / `follow_up` collect their required facts; `do_not_call`
+  double-confirms and is permanent.
+- **do-not-call is absolute** — enforced at the queue (terminal
+  `outreach_suppressed` blocker), the dashboard (excluded from follow-ups), the
+  pursuable export (row removed entirely), and the paid skiptrace route (403).
+- **DNC verdicts persist** (`dnc_records.js`; `POST /api/dnc/record`): a fresh
+  source-attributed `clear` flips the `dnc_consent_missing` blocker; a stale
+  clear degrades to unchecked; `listed`/`refused` never expire.
+- **Follow-ups return to the dashboard** as 📞 rows + calendar marks
+  (`/api/stats` → `callFollowups`).
+- **Coverage line** under the stages (`GET /api/pipeline/coverage`): owner/ARV/
+  demand/phone percentages + dial activity from the last build.
+
+## Verified live (updated 2026-07-02)
+
+- Runs 3–7 through the button: full local chain green, including the survival
+  of a concurrent-writer window that previously crashed the server (fixed:
+  busy_timeout + safeTick) and the designed degradation past an optional-stage
+  failure. Runs mirror into the substrate as `kind:pipeline_run` Thingas.
+- Spend gate proven end-to-end over HTTP on every test run
+  (`server_smoke.test.js`): hold-tier skiptrace denied before any provider call.
+- Queue state: `pay_to_unlock: 401` — blocked only on seller phone + DNC
+  (operational skiptrace spend, not code). ARV coverage 330 after the
+  enrich_arv_cook fix.
