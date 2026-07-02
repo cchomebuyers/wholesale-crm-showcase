@@ -1,0 +1,33 @@
+{
+  "feature": "Parse Memory (memory-first parser)",
+  "id": "parse-memory",
+  "summary": "The memory unit the generic parser consults BEFORE parsing: shape-signature (field names only, never values/PII) -> remembered kind in O(1); detection by field overlap against parser_registry kinds on miss, then remember. Operator can pin/forget. Button-click surface on the Fill tab.",
+  "files": [
+    { "path": "parse_memory.js", "role": "core: signatureOf (shape-only), detectKind (overlap scoring), createParseMemory (recall/remember/forget/resolve/stats)" },
+    { "path": "parser_registry.js", "role": "kind -> fieldJoins registry that detection scores against (the parseable surface)" },
+    { "path": "public/app.js", "role": "resolveParse: the 🧠 Parse-resolver panel (provenance display: memory-hit vs detected)" }
+  ],
+  "routes": [
+    { "method": "POST", "path": "/api/parse/resolve", "server_line": 1654, "summary": "memory-first resolution; detects + remembers on miss" },
+    { "method": "GET", "path": "/api/parse/memory", "server_line": 1662, "summary": "shapes/hits stats per kind" },
+    { "method": "POST", "path": "/api/parse/remember", "server_line": 1668, "summary": "operator pin: shape -> kind (attributed pinned:true)" },
+    { "method": "POST", "path": "/api/parse/forget", "server_line": 1677, "summary": "drop a memory so the next resolve re-detects" }
+  ],
+  "tests": [
+    { "path": "parse_memory.test.js", "role": "shape-only signatures (no PII), detect/remember/recall, pin overrides, persistence across instances, stats" },
+    { "path": "server_smoke.test.js", "role": "live resolve->memory-hit round-trip; self-cleans its shape (zero residue)" }
+  ],
+  "tables": [
+    { "name": "parse_memory", "defined_in": "parse_memory.js", "role": "signature -> kind/config/hits/last_used; holds only real-use learnings (synthetic rows purged, tests self-clean)" }
+  ],
+  "docs": [
+    { "path": "dev/ankhor88-crm-compatibility.md", "role": "the memory-unit design + ankhor-side consult (meta-parser.ts) as future work" }
+  ],
+  "audit_findings": [
+    { "source": "dev/plans/2026-06-30-cohesive-vision/00-README.md", "finding": "parser-registry-OS direction: same engine over any kind via config; parse-memory adds the learned-dispatch layer on top" }
+  ],
+  "next_actions": [
+    { "action": "ankhor-side memory consult in meta-parser.ts", "status": "open", "note": "remix core edit; deferred until the remix has npm i + typecheck available" },
+    { "action": "wire resolve into CSV import flow", "status": "open", "note": "imports could auto-suggest the kind for unknown record shapes" }
+  ]
+}

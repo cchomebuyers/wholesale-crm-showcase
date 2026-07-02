@@ -48,6 +48,11 @@
       "id": "buyer-discovery",
       "feature": "Buyer Discovery & Demand",
       "file": "buyer-discovery.json"
+    },
+    {
+      "id": "parse-memory",
+      "feature": "Parse Memory (memory-first parser)",
+      "file": "parse-memory.json"
     }
   ],
   "generated_by": "FEATUREGRAPH agent (dev/plans/2026-06-30-cohesive-vision/08-loop-prompt-feature-graph.md)",
