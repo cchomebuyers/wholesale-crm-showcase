@@ -1,0 +1,22 @@
+{
+  "$header": {
+    "$version": "1.0",
+    "$type": "program",
+    "$facets": ["program", "note"],
+    "$meta": {
+      "source": "wholesale-crm",
+      "createdAt": "2026-07-02T00:00:00Z",
+      "note": "Import this file in ankhor88 (Smart Import / ThingaFile) to get the CRM as a program thinga. The folder-named-crm convention: a thinga named 'crm' whose program facet points at the running app."
+    }
+  },
+  "program": {
+    "name": "crm",
+    "url": "http://localhost:4000",
+    "source": "iframe",
+    "health_url": "http://localhost:4000/api/health",
+    "description": "Wholesale CRM — 11-view operator app (pro queue, Fill pipeline, outreach, map). Renders overlaid; zero cost to ankhor until launched."
+  },
+  "note": {
+    "content": "Program thinga for the wholesale CRM. Start the CRM with `npm start` in wholesale-crm/, then Launch here. Health dot polls /api/health. Same-machine only by default; the CRM sets no X-Frame-Options, so the iframe renders fully."
+  }
+}

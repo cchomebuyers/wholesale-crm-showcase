@@ -1603,6 +1603,12 @@ app.patch("/api/leads/:id/collect-fee", (req, res) => {
 });
 
 // --- Dashboard stats ---
+// Liveness probe for embedders (ankhor88 ProgramThingaCard polls this for its
+// status dot). No auth, no data — just "the CRM is up".
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, app: "wholesale-crm", at: new Date().toISOString() });
+});
+
 app.get("/api/stats", (req, res) => {
   const stages = db.prepare("SELECT stage, COUNT(*) n FROM leads WHERE active=1 GROUP BY stage").all();
   const totals = db
