@@ -1007,6 +1007,27 @@ async function loadDashboard() {
   await loadDayNotes();
   loadDashMessages();
   loadBackupInfo();
+  loadNextAction(s);
+}
+
+// 🎯 The single next money action, derived from live state (docs/OPERATOR_ACTIONS.md order).
+async function loadNextAction(stats) {
+  const panel = $("#nextActionPanel"), body = $("#nextActionBody");
+  if (!panel || !body) return;
+  try {
+    const due = (stats.callFollowups || []).length;
+    let cov = null;
+    try { cov = await api("/api/pipeline/coverage"); } catch { /* no build yet */ }
+    const ptu = cov?.tiers?.pay_to_unlock || 0;
+    const callNow = cov?.tiers?.call_now || 0;
+    let msg;
+    if (due > 0) msg = `<b>${due} call follow-up${due === 1 ? "" : "s"} due</b> — dial from the queue (Outcome column records the result).`;
+    else if (callNow > 0) msg = `<b>${callNow} call-now lead${callNow === 1 ? "" : "s"} ready</b> — pull the ⬇ Call sheet and dial.`;
+    else if (ptu > 0) msg = `<b>${ptu.toLocaleString()} leads are one skip-trace from callable</b> — fund a provider and run the pursuable export (docs/OPERATOR_ACTIONS.md #1).`;
+    else msg = `Run the ⚡ Fill pipeline to build the queue.`;
+    body.innerHTML = msg;
+    panel.style.display = "";
+  } catch { panel.style.display = "none"; }
 }
 
 // ----- Dashboard: recent messages panel -----
