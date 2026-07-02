@@ -139,6 +139,27 @@ async function main() {
     last_lead_engine_error: lastLeadEngineError,
   });
 
+  // Live operational counters (additive — appended after the pure build so the
+  // buildOpsReadiness contract/tests stay untouched). Sources: dnc_records
+  // (verdicts by status), call_outcomes (dials + permanent suppressions),
+  // pipeline_runs (last one-button run), buyers (active list size).
+  try {
+    const { DatabaseSync } = await import("node:sqlite");
+    const ldb = new DatabaseSync(dbPath, { readOnly: true });
+    const safe = (fn, d) => { try { return fn(); } catch { return d; } };
+    model.live_counts = {
+      dnc_records: safe(() => Object.fromEntries(ldb.prepare("SELECT status, COUNT(*) n FROM dnc_records GROUP BY status").all().map((r) => [r.status, r.n])), {}),
+      call_outcomes: safe(() => ldb.prepare("SELECT COUNT(*) c FROM call_outcomes").get().c, 0),
+      outreach_suppressed_properties: safe(() => ldb.prepare("SELECT COUNT(DISTINCT property_id) c FROM call_outcomes WHERE outreach_suppressed=1").get().c, 0),
+      active_buyers: safe(() => ldb.prepare("SELECT COUNT(*) c FROM buyers").get().c, 0),
+      last_pipeline_run: safe(() => {
+        const r = ldb.prepare("SELECT id, status, finished_at, preset FROM pipeline_runs ORDER BY id DESC LIMIT 1").get();
+        return r ? { id: r.id, status: r.status, preset: r.preset, finished_at: r.finished_at } : null;
+      }, null),
+    };
+    ldb.close();
+  } catch { /* db absent — model stands on its own */ }
+
   const compact = process.argv.includes("--compact");
   process.stdout.write(JSON.stringify(model, null, compact ? 0 : 2) + "\n");
 }
