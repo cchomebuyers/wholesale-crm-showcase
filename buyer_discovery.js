@@ -58,7 +58,7 @@ const num = (v) => {
 
 // A recorded "buyer" from county sales is only a real cash-buyer candidate if it is an
 // actual purchaser — not a title/escrow vehicle, land-trust holder, lender, or public agency.
-const NOT_A_BUYER_RX = /\b(LAND TRUST|TRUST COMPANY|TITLE|ESCROW|AUTHORITY|CITY OF|COUNTY OF|STATE OF|AGENCY|HABITAT|FANNIE MAE|FREDDIE MAC|\bHUD\b|DEPARTMENT|SECRETARY OF|REDEVELOPMENT|HOUSING AUTH)\b/i;
+const NOT_A_BUYER_RX = /\b(LAND TRUST|TRUST COMPANY|TITLE|ESCROW|AUTHORITY|CITY OF|COUNTY OF|STATE OF|AGENCY|HABITAT|FANNIE MAE|FREDDIE MAC|\bHUD\b|DEPARTMENT|SECRETARY OF|REDEVELOPMENT|HOUSING AUTH|\bBANK\b|BANCORP|TRUSTEE|NATIONAL ASSOCIATION|\bN\.?A\.?\b$|MORTGAGE|\bFHLMC\b|\bFNMA\b|\bGNMA\b|CREDIT UNION)\b/i;
 export function isRealBuyer(name) {
   const s = clean(name);
   return s.length > 2 && !NOT_A_BUYER_RX.test(s);

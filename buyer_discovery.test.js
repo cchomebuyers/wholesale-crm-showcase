@@ -83,3 +83,12 @@ test("gate loosens with minConfidence=medium / requireCash=false", () => {
   assert.equal(qualifiesForPromotion({ name: "X LLC", cash: 1, confidence: "medium", areas: "Cook" }, { minConfidence: "medium" }).ok, true);
   assert.equal(qualifiesForPromotion({ name: "X LLC", cash: 0, confidence: "high", areas: "Cook" }, { requireCash: false }).ok, true);
 });
+
+test("banks, trustees, and GSE vehicles are not buyers", () => {
+  for (const name of ["U.S. BANK NATIONAL ASSOCIATION", "JOANNE WEISKOPF, AS TRUSTEE", "WELLS FARGO BANK", "NATIONSTAR MORTGAGE LLC", "NAVY FEDERAL CREDIT UNION"]) {
+    assert.equal(isRealBuyer(name), false, name);
+  }
+  // real investors still pass
+  assert.equal(isRealBuyer("416 4TH AVE REALTY LLC"), true);
+  assert.equal(isRealBuyer("CHEN, WEI"), true);
+});
