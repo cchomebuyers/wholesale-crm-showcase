@@ -1,0 +1,50 @@
+{
+  "feature": "Fill Pipeline & Dial Loop",
+  "id": "fill-pipeline",
+  "summary": "One-button no-spend chain (enrich -> grade -> tier -> export) plus the post-dial loop: call outcomes, DNC verdict persistence, absolute do-not-call enforcement, and dashboard follow-ups.",
+  "files": [
+    { "path": "pipeline_run.js", "role": "stage manifest + presets + sequential child-process orchestrator (PIPELINE_RUN=1 HALT bypass)" },
+    { "path": "call_outcome.js", "role": "9 dial outcomes -> derived next actions; do_not_call sets outreach_suppressed" },
+    { "path": "dnc_records.js", "role": "source-attributed DNC verdicts; stale clear degrades to unchecked (deny-by-default)" },
+    { "path": "pro_wholesaler_queue.js", "role": "classifyProQueue tiers + whyNotCallNow blockers + applyOutreachSuppression" },
+    { "path": "tools/build_pro_queue.mjs", "role": "tier build + pro_queue_summary.json incl. dial_activity" },
+    { "path": "tools/export_pursuable_leads.mjs", "role": "skip-trace export; suppressed properties excluded entirely" },
+    { "path": "public/app.js", "role": "Fill tab: run/poll UI, filter bar, Outcome column, coverage line" }
+  ],
+  "routes": [
+    { "method": "POST", "path": "/api/pipeline/run", "server_line": 2417, "summary": "start a background run (409 if one is in flight)" },
+    { "method": "GET", "path": "/api/pipeline/runs/:id", "server_line": 2407, "summary": "live per-stage progress (UI polls)" },
+    { "method": "GET", "path": "/api/pipeline/runs", "server_line": 2402, "summary": "recent runs" },
+    { "method": "GET", "path": "/api/pipeline/stages", "server_line": 2394, "summary": "stage manifest + presets" },
+    { "method": "GET", "path": "/api/pipeline/coverage", "server_line": 2385, "summary": "enrichment coverage + dial activity from the last build" },
+    { "method": "POST", "path": "/api/pro-queue/:propertyId/call-outcome", "server_line": 1700, "summary": "record a dial outcome (validates required facts)" },
+    { "method": "GET", "path": "/api/pro-queue/:propertyId/call-outcomes", "server_line": 1720, "summary": "history + rolled summary" },
+    { "method": "POST", "path": "/api/dnc/record", "server_line": 1687, "summary": "store a source-attributed DNC verdict" },
+    { "method": "GET", "path": "/api/dnc/status", "server_line": 1692, "summary": "current verdict for a phone (or stats)" }
+  ],
+  "tests": [
+    { "path": "pipeline_run.test.js", "role": "manifest integrity, presets (local = offline-only), CLI-arg threading" },
+    { "path": "call_outcome.test.js", "role": "outcome validation, required facts, sticky do_not_call" },
+    { "path": "dnc_records.test.js", "role": "verdict round-trip, staleness degradation, listed never expires" },
+    { "path": "pro_wholesaler_queue.test.js", "role": "tiers, blockers, applyOutreachSuppression" },
+    { "path": "server_smoke.test.js", "role": "boots the REAL server: pipeline surface, pro-queue no-503, redacted ankhor export" }
+  ],
+  "tables": [
+    { "name": "pipeline_runs", "defined_in": "server.js", "role": "one row per run; stages_json live progress; boot reconciliation marks zombies interrupted" },
+    { "name": "call_outcomes", "defined_in": "server.js", "role": "post-dial paper trail; outreach_suppressed is the absolute do-not-call flag" },
+    { "name": "dnc_records", "defined_in": "dnc_records.js", "role": "phone -> verdict/source/checked_at; hydrates pro-queue dnc_status" },
+    { "name": "pro_queue", "defined_in": "tools/build_pro_queue.mjs", "role": "tiered queue the Fill tab reads" }
+  ],
+  "docs": [
+    { "path": "docs/fill_properties_pipeline.md", "role": "feature doc: stages, presets, post-processing filters" },
+    { "path": "docs/pro_wholesaler_queue.md", "role": "tier cascade + why-not-call-now visibility" }
+  ],
+  "audit_findings": [
+    { "source": "audit/june30/18-next-actions.md", "finding": "P1 #2 (DNC persistence) and P1 #4 (call outcome model) — both built in the 2026-07-02 session" },
+    { "source": "audit/june30/15-product-workflow-audit.md", "finding": "the money workflow previously stopped before phone acquisition; the dial loop now exists end-to-end, gated on operational skiptrace/DNC spend" }
+  ],
+  "next_actions": [
+    { "action": "fund a skip-trace provider and run the gated export (401 pay_to_unlock)", "status": "open", "note": "operational, not code — see LOOP_PROMPT frontier #0" },
+    { "action": "new county owner/ARV sources", "status": "open", "note": "coverage saturated on NY+IL: councilRoom/comms/2026-07-02-owner-join-saturation.md" }
+  ]
+}

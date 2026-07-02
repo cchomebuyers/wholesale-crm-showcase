@@ -4,18 +4,61 @@
   "shape": "_shape.json",
   "docs": "docs/feature-graph.md",
   "manifests": [
-    { "id": "pro-queue", "feature": "Pro Queue", "file": "pro-queue.json" },
-    { "id": "contact-route", "feature": "Contact Route", "file": "contact-route.json" },
-    { "id": "proof-stack", "feature": "Proof Stack", "file": "proof-stack.json" },
-    { "id": "investor-marketplace", "feature": "Investor Marketplace", "file": "investor-marketplace.json" },
-    { "id": "seller-intake", "feature": "Seller Intake", "file": "seller-intake.json" },
-    { "id": "thinga-substrate", "feature": "Thinga Substrate", "file": "thinga-substrate.json" },
-    { "id": "ops-readiness", "feature": "Ops Readiness", "file": "ops-readiness.json" }
+    {
+      "id": "pro-queue",
+      "feature": "Pro Queue",
+      "file": "pro-queue.json"
+    },
+    {
+      "id": "contact-route",
+      "feature": "Contact Route",
+      "file": "contact-route.json"
+    },
+    {
+      "id": "proof-stack",
+      "feature": "Proof Stack",
+      "file": "proof-stack.json"
+    },
+    {
+      "id": "investor-marketplace",
+      "feature": "Investor Marketplace",
+      "file": "investor-marketplace.json"
+    },
+    {
+      "id": "seller-intake",
+      "feature": "Seller Intake",
+      "file": "seller-intake.json"
+    },
+    {
+      "id": "thinga-substrate",
+      "feature": "Thinga Substrate",
+      "file": "thinga-substrate.json"
+    },
+    {
+      "id": "ops-readiness",
+      "feature": "Ops Readiness",
+      "file": "ops-readiness.json"
+    },
+    {
+      "id": "fill-pipeline",
+      "feature": "Fill Pipeline & Dial Loop",
+      "file": "fill-pipeline.json"
+    }
   ],
   "generated_by": "FEATUREGRAPH agent (dev/plans/2026-06-30-cohesive-vision/08-loop-prompt-feature-graph.md)",
   "generated_at": "2026-06-30",
   "incorporated_sibling_facts": [
-    { "agent": "CALLNOW", "what": "Real why_not_call_now blocker keys (not_a_seller, owner_missing, contact_missing, dnc_consent_missing, arv_mao_missing, buyer_demand_missing, seller_price_missing, proof_incomplete) + call_now_ready field + CALL_NOW_BLOCKERS/CALL_NOW_BLOCKER_KEYS exports", "where": "pro-queue.json", "source": "MSG_20260630T1358Z_FROM_CALLNOW_TO_ALL.md (exports + route verified on disk)" },
-    { "agent": "OPS", "what": "buildOpsReadiness + CREDENTIAL_KEYS exports, ops_readiness.js / tools/ops_readiness_report.mjs / ops_readiness.test.js / docs/ops_readiness.md", "where": "ops-readiness.json", "source": "DONE_OPS.md + MSG_20260630T1352Z_FROM_OPS_TO_ALL.md (files verified on disk)" }
+    {
+      "agent": "CALLNOW",
+      "what": "Real why_not_call_now blocker keys (not_a_seller, owner_missing, contact_missing, dnc_consent_missing, arv_mao_missing, buyer_demand_missing, seller_price_missing, proof_incomplete) + call_now_ready field + CALL_NOW_BLOCKERS/CALL_NOW_BLOCKER_KEYS exports",
+      "where": "pro-queue.json",
+      "source": "MSG_20260630T1358Z_FROM_CALLNOW_TO_ALL.md (exports + route verified on disk)"
+    },
+    {
+      "agent": "OPS",
+      "what": "buildOpsReadiness + CREDENTIAL_KEYS exports, ops_readiness.js / tools/ops_readiness_report.mjs / ops_readiness.test.js / docs/ops_readiness.md",
+      "where": "ops-readiness.json",
+      "source": "DONE_OPS.md + MSG_20260630T1352Z_FROM_OPS_TO_ALL.md (files verified on disk)"
+    }
   ]
 }
