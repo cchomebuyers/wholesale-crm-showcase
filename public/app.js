@@ -2688,7 +2688,14 @@ async function reloadFillQueue() {
       $("#fillCounts").textContent = c + (d.total != null ? `   (showing ${d.returned}/${d.total})` : "");
     }
     const items = d.items || [];
-    if (!items.length) { body.innerHTML = '<tr><td colspan="8" class="muted">No rows match these filters.</td></tr>'; return; }
+    if (!items.length) { body.innerHTML = '<tr><td colspan="9" class="muted">No rows match these filters.</td></tr>'; return; }
+    const OUTCOMES = ["contacted", "no_answer", "voicemail", "wrong_number", "seller_price", "offer_made", "follow_up", "do_not_call", "dead"];
+    const outcomeSel = (it) => it.next_action === "do_not_contact"
+      ? '<span title="seller refused contact">🚫 suppressed</span>'
+      : `<select class="fillOutcome" data-pid="${it.property_id}">
+          <option value="">record…</option>
+          ${OUTCOMES.map((o) => `<option value="${o}">${o.replace(/_/g, " ")}</option>`).join("")}
+        </select>`;
     body.innerHTML = items.map((it) => {
       const why = (it.why_not_call_now || []).map((w) => (w && (w.label || w.key)) || w).join(", ");
       return `<tr>
@@ -2700,17 +2707,52 @@ async function reloadFillQueue() {
         <td>${money(it.arv)}</td>
         <td>${money(it.mao)}</td>
         <td class="fill-why">${it.call_now_ready ? '<span style="color:var(--green,#22c55e)">ready ✓</span>' : esc(why)}</td>
+        <td>${outcomeSel(it)}</td>
       </tr>`;
     }).join("");
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="8" class="muted">${esc(e.message || "pro-queue not built yet — run the pipeline")}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" class="muted">${esc(e.message || "pro-queue not built yet — run the pipeline")}</td></tr>`;
   }
+}
+
+// Record what happened on the dial, straight from the queue row. The couple of
+// outcomes that need extra facts collect them via prompt() — deliberate, zero
+// new modal surface. do_not_call double-confirms because it is permanent.
+async function recordFillOutcome(pid, outcome, selEl) {
+  const body = { outcome };
+  if (outcome === "seller_price") {
+    const p = Number(prompt("Seller's asking price ($):"));
+    if (!Number.isFinite(p) || p <= 0) { selEl.value = ""; return; }
+    body.seller_price = p;
+  }
+  if (outcome === "offer_made") {
+    const a = Number(prompt("Offer amount ($):"));
+    if (!Number.isFinite(a) || a <= 0) { selEl.value = ""; return; }
+    body.offer_amount = a;
+  }
+  if (outcome === "offer_made" || outcome === "follow_up") {
+    const d = prompt("Follow-up date (YYYY-MM-DD):", new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10));
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) { selEl.value = ""; return; }
+    body.follow_up_date = d;
+  }
+  if (outcome === "do_not_call" && !confirm("Permanently suppress ALL outreach to this property? This cannot be undone from the UI.")) { selEl.value = ""; return; }
+  try {
+    const r = await api(`/api/pro-queue/${pid}/call-outcome`, { method: "POST", body: JSON.stringify(body) });
+    toast(`Recorded: ${outcome.replace(/_/g, " ")} → ${r.recorded.next_action}`);
+    reloadFillQueue();
+  } catch (e) { toast(e.message, true); selEl.value = ""; }
 }
 
 (function wireFill() {
   const run = $("#fillRun"); if (run) run.addEventListener("click", runFill);
   const reload = $("#fillReload"); if (reload) reload.addEventListener("click", reloadFillQueue);
   $$(".fillTier").forEach((c) => c.addEventListener("change", reloadFillQueue));
+  // Outcome selects are re-rendered per reload → one delegated listener on the tbody.
+  const fb = $("#fillBody");
+  if (fb) fb.addEventListener("change", (e) => {
+    const sel = e.target.closest(".fillOutcome");
+    if (sel && sel.value) recordFillOutcome(Number(sel.dataset.pid), sel.value, sel);
+  });
   ["fillOwnerKnown", "fillDistress", "fillMinGrade", "fillLimit"].forEach((id) => { const el = $("#" + id); if (el) el.addEventListener("change", reloadFillQueue); });
 })();
 
