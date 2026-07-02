@@ -9,6 +9,9 @@ http://localhost:4000 (`npm start`).
 - **What:** add a BatchData key (Settings → Acquisitions, or `BATCHDATA_API_KEY`),
   then work through `pursuableLeads/skiptrace_targets.csv` (401 spend-gated
   rows; regenerate any time via ⚡ Fill → Run pipeline).
+- **Wave 2 queued behind it:** 292 `research` rows are phone-ONLY (owner+ARV+
+  demand already complete — `GET /api/pipeline/coverage` → `promotion_yield`);
+  total dialable pipeline ≈ 693 once funded.
 - **Guardrails already enforced:** per-property spend gate (`skiptrace_gate.js`),
   suppressed properties 403 (`server.js` skiptrace route), found numbers stay
   `outreach_allowed:false` until DNC.

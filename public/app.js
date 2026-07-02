@@ -2669,9 +2669,10 @@ async function loadFillCoverage() {
     const pct = (missing) => Math.round(100 * (1 - (missing || 0) / total));
     const m = c.top_missing || {};
     const dial = c.dial_activity ? ` · dials ${c.dial_activity.total_outcomes} (follow-ups due ${c.dial_activity.followups_due})` : "";
+    const wave2 = c.promotion_yield?.research_phone_only ? ` · <b>wave-2: ${c.promotion_yield.research_phone_only}</b> research rows are phone-only` : "";
     el.innerHTML = `coverage of ${total.toLocaleString()} properties — ` +
       `owner <b>${pct(m.owner)}%</b> · ARV <b>${pct(m.arv)}%</b> · buyer demand <b>${pct(m.buyer_demand)}%</b> · seller phone <b>${pct(m.seller_phone)}%</b>` +
-      `${dial} <span class="muted">(built ${esc((c.built_at || "").slice(0, 16).replace("T", " "))})</span>`;
+      `${dial}${wave2} <span class="muted">(built ${esc((c.built_at || "").slice(0, 16).replace("T", " "))})</span>`;
   } catch { el.textContent = ""; }
 }
 
