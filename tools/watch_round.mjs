@@ -17,6 +17,7 @@ const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const port = (process.argv.find((a) => a.startsWith("--port=")) || "--port=4000").split("=")[1];
 const BASE = `http://127.0.0.1:${port}`;
 let failures = 0;
+let freeGB = "?";
 const ok = (name, pass, detail = "") => { console.log(`${pass ? " ok " : "FAIL"}  ${name}${detail ? "  " + detail : ""}`); if (!pass) failures++; };
 
 // 1) server + money endpoints
@@ -58,6 +59,7 @@ try {
 try {
   const o = execSync("wmic logicaldisk where name='C:' get freespace /format:value").toString();
   const free = Number((/FreeSpace=(\d+)/.exec(o) || [0, 0])[1]) / 1e9;
+  freeGB = free.toFixed(1);
   ok("disk C: headroom", free > 1.5, `${free.toFixed(1)} GB free`);
   if (free <= 1.5) {
     // Known culprit from the tick-365 incident: RD-client auto-trace grows
@@ -83,7 +85,9 @@ if (process.argv.includes("--log")) {
   try {
     const { appendFileSync, mkdirSync } = await import("node:fs");
     mkdirSync(join(repo, "logs"), { recursive: true });
-    appendFileSync(join(repo, "logs", "watch.log"), `${new Date().toISOString()} ${failures === 0 ? "CLEAR" : "FAIL:" + failures}\n`);
+    // free-GB per round makes drain RATE greppable — the tick-513 lesson:
+    // collapses take ~2h, so trend data turns surprises into forecasts.
+    appendFileSync(join(repo, "logs", "watch.log"), `${new Date().toISOString()} ${failures === 0 ? "CLEAR" : "FAIL:" + failures} disk=${freeGB}GB\n`);
   } catch { /* logging must never fail the round */ }
 }
 process.exit(failures === 0 ? 0 : 1);
