@@ -59,6 +59,15 @@ try {
   const o = execSync("wmic logicaldisk where name='C:' get freespace /format:value").toString();
   const free = Number((/FreeSpace=(\d+)/.exec(o) || [0, 0])[1]) / 1e9;
   ok("disk C: headroom", free > 1.5, `${free.toFixed(1)} GB free`);
+  if (free <= 1.5) {
+    // Known culprit from the tick-365 incident: RD-client auto-trace grows
+    // unbounded in Temp. Name it when it's plausibly the drain (read-only hint).
+    try {
+      const dir = join(process.env.LOCALAPPDATA || "", "Temp", "DiagOutputDir", "RdClientAutoTrace");
+      const gb = Number(execSync(`powershell -NoProfile -Command "(Get-ChildItem -Recurse '${dir}' -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum"`).toString().trim() || 0) / 1e9;
+      if (gb > 1) console.log(`      hint: RdClientAutoTrace is ${gb.toFixed(1)} GB — safe to clear (see loop-8h-summary tick 365)`);
+    } catch { /* hint only */ }
+  }
 } catch { console.log(" ?    disk check unavailable"); }
 
 // 5) git cleanliness (informational — a dirty tree mid-work is not a failure)
