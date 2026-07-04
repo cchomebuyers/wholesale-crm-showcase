@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "app": "node crm-app.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

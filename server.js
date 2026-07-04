@@ -3566,3 +3566,4 @@ app.listen(PORT, () => {
   console.log(`  Email: ${emailConfigured() ? "✅ Gmail connected (" + emailCfg().user + ")" : "⚠️  not configured — connect in the Outreach tab"}`);
   console.log(`  Backups: auto every 6h → ${BACKUP_DIR}\n`);
 });
+
