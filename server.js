@@ -24,6 +24,7 @@ import { resolveContactRoute } from "./contact_route_engine.js";
 import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
 import { complianceCheck } from "./compliance_gate.js";
 import { mountFocus } from "./focus/focus-server.mjs";
+import { mountWorkspace } from "./workspace_api.mjs";
 import { skiptraceDecision } from "./skiptrace_gate.js";
 import { whyNotCallNow, applyOutreachSuppression } from "./pro_wholesaler_queue.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
@@ -702,6 +703,7 @@ app.use(express.static(join(__dirname, "public"), {
 // Serves GET /focus (iframed by the operator UI's Focus view) + the focus
 // API (/api/focus, POST /api/tasks[/:id/toggle], /api/agents/:name/run).
 mountFocus(app);
+mountWorkspace(app); // /api/ws/* — merged-workspace adapter (workspace_api.mjs)
 
 // --- Leads ---
 app.get("/api/leads", (req, res) => {
