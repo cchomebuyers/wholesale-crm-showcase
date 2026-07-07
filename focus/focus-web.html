@@ -96,11 +96,18 @@
   /* ---- clawdbot agent cards ---- */
   .agentcard{display:flex;align-items:center;gap:12px;border:1px solid var(--edge2);background:rgba(12,12,20,.55);padding:9px 11px;margin-bottom:7px}
   .agentcard:hover{border-color:var(--edge)}
-  .agentcard .bot{flex:none;width:52px;height:52px;animation:bob 2.6s ease-in-out infinite}
-  .agentcard .bot svg{display:block}
-  .agentcard.running .bot{animation:work .5s ease-in-out infinite;filter:drop-shadow(0 0 7px rgba(251,191,36,.55))}
+  .agentcard .bot{flex:none;width:56px;height:52px;animation:bob 2.6s ease-in-out infinite}
+  .agentcard .bot svg{display:block;overflow:visible}
+  .agentcard.running .bot{animation:work 1.1s ease-in-out infinite;filter:drop-shadow(0 0 7px rgba(251,191,36,.55))}
+  /* claw snip — claws pivot at the arm joints while the bot works */
+  .agentcard .clawL,.agentcard .clawR{transform-origin:5px 6px}
+  .agentcard .clawR{transform-origin:15px 6px}
+  .agentcard.running .clawL{animation:snipL .38s ease-in-out infinite}
+  .agentcard.running .clawR{animation:snipR .38s ease-in-out infinite;animation-delay:.19s}
+  @keyframes snipL{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-17deg)}}
+  @keyframes snipR{0%,100%{transform:rotate(0deg)}50%{transform:rotate(17deg)}}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-  @keyframes work{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-4px) rotate(4deg)}}
+  @keyframes work{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
   .agentcard .meta{flex:1;min-width:0}
   .agentcard .nm{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
   .agentcard .nm .st{color:var(--ink3);letter-spacing:.1em}
@@ -208,44 +215,59 @@ const ago = (iso) => { if (!iso) return "—"; const m = Math.round((Date.now() 
   return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
 const pctColor = (p) => p >= .8 ? "var(--good)" : p >= .4 ? "var(--warn)" : "var(--bad)";
 
-// ---- clawdbots: pixel lobster sprites, one accessory per job ----
-// 14×14 grid → crisp SVG rects. '.'=empty r=shell d=shade w=eye a=accessory x=accessory-2
+// ---- clawdbots: soft-pixel lobster sprites, one accessory per job ----
+// 20×18 grid → rounded anti-aliased SVG rects (softer than hard pixels).
+// Claws (rows 0-5, left x≤6 / right x≥13) render in their own <g> so they
+// can SNIP while the agent works. '.'=empty r=shell d=shade w=eye a=accessory x=lens
 const BOT_BASE = [
-  "..d........d..",
-  "..rr......rr..",
-  ".rrrr....rrrr.",
-  ".rrrr....rrrr.",
-  "..rr.rrrr.rr..",
-  "....rrrrrr....",
-  "...rrwrrwrr...",
-  "...rrrrrrrr...",
-  "....rdrrdr....",
-  ".....rrrr.....",
-  "....drrrrd....",
-  ".....rrrr.....",
-  "....r.rr.r....",
-  "...rrrrrrrr...",
+  "....d..........d....",
+  "....d..........d....",
+  "..rrrr........rrrr..",
+  ".rrrrrr......rrrrrr.",
+  ".rrrrrr......rrrrrr.",
+  ".rrrr..........rrrr.",
+  "..rrr..dddddd..rrr..",
+  "...rr.drrrrrrd.rr...",
+  "......rrrrrrrr......",
+  ".....rrwwrrwwrr.....",
+  "......rrrrrrrr......",
+  "......drrrrrrd......",
+  ".......rrrrrr.......",
+  "......drrrrrrd......",
+  ".......rrrrrr.......",
+  "......r.rrrr.r......",
+  ".....rr.rrrr.rr.....",
+  "....rrrrrrrrrrrr....",
 ];
 const BOTS = {
-  momentum:     { color: "#fbbf24", title: "hard hat — keeps the pipeline moving", overlay: {3:".....aaaa.....",4:"...aaaaaaaa..."} },
-  acquisitions: { color: "#cbd5e1", title: "binoculars — scouts new deals",        overlay: {6:"...axxaaxxa..."} },
-  underwriting: { color: "#34d399", title: "eyeshade — runs the numbers",          overlay: {4:"...aaaaaaaa...",5:"...a......a..."} },
-  outreach:     { color: "#8b8ff0", title: "headset — drafts the scripts",         overlay: {4:"...aarrrraa...",6:"..arrwrrwrra..",8:"..a.rdrrdr....",9:"..aa.rrrr....."} },
-  engine:       { color: "#5eead4", title: "antenna — autonomous lead engine",     overlay: {0:"..d...aa...d..",1:"..rr.a..a.rr..",2:".rrrr.aa.rrrr."} },
+  momentum:     { color: "#fbbf24", title: "hard hat — keeps the pipeline moving",
+    overlay: { 5: ".......aaaaaa.......", 6: ".....aaaaaaaaaa....." } },
+  acquisitions: { color: "#cbd5e1", title: "binoculars — scouts new deals",
+    overlay: { 9: ".....aaxxaaxxaa.....", 10: ".....aaxxaaxxaa....." } },
+  underwriting: { color: "#34d399", title: "eyeshade — runs the numbers",
+    overlay: { 8: ".....aaaaaaaaaa.....", 9: "....a..........a...." } },
+  outreach:     { color: "#8b8ff0", title: "headset — drafts the scripts",
+    overlay: { 6: "......aaaaaaaa......", 9: "....aa........aa....", 10: "....a...............", 11: "....aa.............." } },
+  engine:       { color: "#5eead4", title: "antenna — autonomous lead engine",
+    overlay: { 0: ".........aa.........", 1: "........a..a........", 2: ".........aa........." } },
 };
 function botSprite(name) {
   const b = BOTS[name] || BOTS.engine;
   const pal = { r: "#e0604a", d: "#9c3527", w: "#ffe9e2", a: b.color, x: "#141420" };
-  let rects = "";
+  const isClaw = (x, y) => y <= 5 && (x <= 6 || x >= 13);
+  const g = { L: "", R: "", B: "" };
   BOT_BASE.forEach((row, y) => {
     const over = b.overlay[y] || "";
     [...row].forEach((ch, x) => {
       const o = over[x];
       const c = o && o !== "." ? o : ch;
-      if (c !== ".") rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${pal[c] || pal.r}"/>`;
+      if (c === ".") return;
+      const key = isClaw(x, y) ? (x <= 6 ? "L" : "R") : "B";
+      g[key] += `<rect x="${x}" y="${y}" width="1.06" height="1.06" rx="0.45" fill="${pal[c] || pal.r}"/>`;
     });
   });
-  return `<svg viewBox="0 0 14 14" width="52" height="52" shape-rendering="crispEdges" role="img" aria-label="${b.title}">${rects}</svg>`;
+  return `<svg viewBox="0 0 20 18" width="56" height="52" role="img" aria-label="${b.title}">
+    <g class="clawL">${g.L}</g><g class="clawR">${g.R}</g><g>${g.B}</g></svg>`;
 }
 
 // ---- sparkline (inline SVG polyline, VAULT style) ----
