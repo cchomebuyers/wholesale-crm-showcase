@@ -56,5 +56,7 @@ for (const l of needsComps) {
   store.addTaskOnce(`Underwrite ${l.address || "lead #" + l.id} (needs comps/ARV)`, { leadId: l.id });
 }
 
-console.log(`underwriting: ${priced} leads priced (MAO written + offer task filed), ${needsComps.length} queued for comps, ${flagged} flagged for judgment`);
+const digest = `${priced} leads priced (MAO written + offer task filed), ${needsComps.length} queued for comps, ${flagged} flagged for judgment`;
+console.log(`underwriting: ${digest}`);
+store.recordAgentRun("underwriting", digest);
 store.close();

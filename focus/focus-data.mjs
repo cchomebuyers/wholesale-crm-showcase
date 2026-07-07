@@ -139,5 +139,30 @@ export function openFocusDb(dbPath = DB_PATH) {
     return { skipped: false, id: Number(info.lastInsertRowid) };
   }
 
-  return { db, computeKpis, followupsDue, listTasks, tasksDoneToday, toggleTask, addTask, addTaskOnce, close: () => db.close() };
+  // --- agent visibility -------------------------------------------------
+  // Every focus agent records its run digest here; the terminal and the web
+  // dashboard read it back so "what are my agents doing" has one answer.
+  function recordAgentRun(agent, digest) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS agent_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, agent TEXT NOT NULL,
+        finished_at TEXT NOT NULL, digest TEXT)`);
+      write("INSERT INTO agent_runs (agent, finished_at, digest) VALUES (?,?,?)", [agent, new Date().toISOString(), digest]);
+    } catch { /* visibility is best-effort — never fail the agent over it */ }
+  }
+  function listAgentRuns() {
+    // latest run per agent
+    return safeAll(
+      `SELECT agent, finished_at, digest FROM agent_runs
+       WHERE id IN (SELECT MAX(id) FROM agent_runs GROUP BY agent)
+       ORDER BY agent`);
+  }
+  function lastLeadEngineRun() {
+    // the autonomous lead engine (server.js hourly loop) logs its own runs
+    return safeGet(
+      `SELECT created_at, raw_records, converged_properties, shortlist_count
+       FROM lead_engine_runs ORDER BY id DESC LIMIT 1`);
+  }
+
+  return { db, computeKpis, followupsDue, listTasks, tasksDoneToday, toggleTask, addTask, addTaskOnce, recordAgentRun, listAgentRuns, lastLeadEngineRun, close: () => db.close() };
 }

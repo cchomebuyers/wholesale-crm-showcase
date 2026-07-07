@@ -49,5 +49,7 @@ for (const l of leads) {
   } catch (e) { console.error(`outreach: skipped lead ${l.id}: ${e.message}`); }
 }
 
-console.log(`outreach: ${drafted} drafts written to activity feeds (0 sent — approval tasks filed)`);
+const digest = `${drafted} drafts written to activity feeds (0 sent — approval tasks filed)`;
+console.log(`outreach: ${digest}`);
+store.recordAgentRun("outreach", digest);
 store.close();

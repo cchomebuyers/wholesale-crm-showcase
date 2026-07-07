@@ -60,5 +60,7 @@ for (const c of candidates) {
   }
 }
 
-console.log(`acquisitions: ${candidates.length} candidates ≥${MIN_SCORE} → ${promoted} promoted, ${duped} duplicates linked`);
+const digest = `${candidates.length} candidates ≥${MIN_SCORE} → ${promoted} promoted, ${duped} duplicates linked`;
+console.log(`acquisitions: ${digest}`);
+store.recordAgentRun("acquisitions", digest);
 store.close();

@@ -41,5 +41,7 @@ for (const l of stuck) {
   file(`Unstick: ${l.address || l.seller_name || "lead #" + l.id} — stuck in ${l.stage}`, { leadId: l.id, dueDate: today });
 }
 
-console.log(`momentum: ${due.leads.length} lead follow-ups, ${due.calls.length} call-backs, ${stuck.length} stuck → ${created} tasks filed, ${skipped} already queued`);
+const digest = `${due.leads.length} lead follow-ups, ${due.calls.length} call-backs, ${stuck.length} stuck → ${created} tasks filed, ${skipped} already queued`;
+console.log(`momentum: ${digest}`);
+store.recordAgentRun("momentum", digest);
 store.close();

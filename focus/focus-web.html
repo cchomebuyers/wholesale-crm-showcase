@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>☥ Focus</title>
+<style>
+  :root{
+    --bg:#0b0f0c; --panel:#101611; --edge:#1c2a1e;
+    --ink:#e8f0ea; --ink2:#9aa5a0; --ink3:#5b675f;
+    --good:#34d399; --warn:#fbbf24; --bad:#f87171; --accent:#5eead4;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font:14px/1.5 ui-monospace,"SF Mono",Menlo,monospace;padding:20px;max-width:1080px;margin:0 auto}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--edge);padding-bottom:12px;margin-bottom:16px}
+  h1{font-size:17px;letter-spacing:.35em;color:var(--ink)}
+  .dim{color:var(--ink2)} .faint{color:var(--ink3)} .streak{color:var(--warn)}
+  .grid{display:grid;gap:14px;grid-template-columns:1fr 1fr}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  section{background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:14px 16px}
+  section h2{font-size:11px;letter-spacing:.2em;color:var(--accent);margin-bottom:10px;text-transform:uppercase}
+  /* next action hero */
+  #next{grid-column:1/-1;border-color:#245335}
+  #next .title{font-size:20px;color:var(--good);font-weight:700;margin:2px 0 4px}
+  /* meters */
+  .kpi{display:grid;grid-template-columns:96px 1fr 72px;align-items:center;gap:10px;margin:7px 0}
+  .kpi .label{color:var(--ink2)}
+  .meter{height:10px;background:#17211a;border-radius:4px;overflow:hidden}
+  .meter i{display:block;height:100%;border-radius:4px;transition:width .4s}
+  .kpi .val{text-align:right;color:var(--ink)}
+  .tiles{display:flex;gap:12px;margin-top:12px}
+  .tile{flex:1;background:#0d1410;border:1px solid var(--edge);border-radius:6px;padding:10px 12px}
+  .tile b{display:block;font-size:18px;color:var(--ink)}
+  .tile span{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.12em}
+  /* agents */
+  .agent{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--edge)}
+  .agent:first-of-type{border-top:none}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .dot.idle{background:var(--ink3)} .dot.ok{background:var(--good)}
+  .dot.run{background:var(--warn);animation:pulse 1s infinite alternate}
+  @keyframes pulse{to{opacity:.35}}
+  .agent .meta{flex:1;min-width:0}
+  .agent .nm{color:var(--ink)}
+  .agent .dg{color:var(--ink2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .agent button{background:#132018;border:1px solid #2a4a33;color:var(--good);border-radius:5px;padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}
+  .agent button:hover{background:#1a2f21}
+  .agent button:disabled{color:var(--ink3);border-color:var(--edge);cursor:default}
+  /* tasks */
+  .task{display:flex;gap:9px;align-items:baseline;padding:5px 0;cursor:pointer}
+  .task:hover .tt{color:var(--good)}
+  .task .box{color:var(--ink3)} .task .tt{color:var(--ink)}
+  .task .due{color:var(--warn);font-size:11px}
+  .task .addr{color:var(--ink3);font-size:12px}
+  #addrow{display:flex;gap:8px;margin-top:10px}
+  #addrow input{flex:1;background:#0d1410;border:1px solid var(--edge);color:var(--ink);font:inherit;padding:7px 10px;border-radius:5px;outline:none}
+  #addrow input:focus{border-color:#2a4a33}
+  #addrow button{background:#132018;border:1px solid #2a4a33;color:var(--good);font:inherit;padding:7px 14px;border-radius:5px;cursor:pointer}
+  .empty{color:var(--ink3);font-style:italic}
+  footer{margin-top:16px;color:var(--ink3);font-size:11px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>☥ FOCUS</h1>
+  <span class="dim" id="date"></span>
+  <span class="streak" id="streak"></span>
+  <span class="faint" id="clock" style="margin-left:auto"></span>
+</header>
+
+<div class="grid">
+  <section id="next">
+    <h2>Next action</h2>
+    <div class="title" id="next-title">…</div>
+    <div class="dim" id="next-why"></div>
+  </section>
+
+  <section>
+    <h2>KPIs today</h2>
+    <div id="kpis"></div>
+    <div class="tiles">
+      <div class="tile"><b id="pipe">$0</b><span>pipeline projected</span></div>
+      <div class="tile"><b id="coll">$0</b><span>fees collected</span></div>
+      <div class="tile"><b id="fu">0</b><span>follow-ups due</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Agents</h2>
+    <div id="agents"></div>
+    <div class="agent" id="engine-row">
+      <span class="dot idle" id="engine-dot"></span>
+      <div class="meta"><div class="nm">Lead Engine <span class="faint">(runs hourly in server.js)</span></div>
+      <div class="dg" id="engine-dg">no runs recorded</div></div>
+    </div>
+  </section>
+
+  <section style="grid-column:1/-1">
+    <h2>Tasks <span class="faint" id="taskcount"></span></h2>
+    <div id="tasks"></div>
+    <div id="addrow">
+      <input id="newtask" placeholder="brain-dump a task — press enter to park it" maxlength="300">
+      <button onclick="addTask()">park it</button>
+    </div>
+  </section>
+</div>
+
+<footer>live from crm.db · refreshes every 3s · targets in focus/daily-goals.json</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const money = (v) => "$" + Math.round(v || 0).toLocaleString("en-US");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pctColor = (p) => p >= .8 ? "var(--good)" : p >= .4 ? "var(--warn)" : "var(--bad)";
+const ago = (iso) => {
+  if (!iso) return "";
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  return m < 1 ? "just now" : m < 60 ? m + "m ago" : m < 1440 ? Math.round(m/60) + "h ago" : Math.round(m/1440) + "d ago";
+};
+
+function meter(label, done, target) {
+  const p = target > 0 ? Math.min(1, done / target) : 1;
+  return `<div class="kpi"><span class="label">${label}</span>
+    <span class="meter"><i style="width:${Math.round(p*100)}%;background:${pctColor(p)}"></i></span>
+    <span class="val">${done}/${target}</span></div>`;
+}
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/api/focus")).json(); } catch { return; }
+  const d = new Date(s.now);
+  $("date").textContent = d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  $("clock").textContent = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  $("streak").textContent = `🔥 ${s.doneToday} done today`;
+
+  $("next-title").textContent = "▶ " + s.next.title;
+  $("next-why").textContent = `${s.next.timeboxMin} min timebox · ${s.next.why}`;
+
+  const k = s.kpis;
+  $("kpis").innerHTML =
+    meter("New leads", k.newLeads.done, k.newLeads.target) +
+    meter("Calls", k.calls.done, k.calls.target) +
+    meter("Offers", k.offers.done, k.offers.target) +
+    meter("Stage moves", k.stageAdvances.done, k.stageAdvances.target);
+  $("pipe").textContent = money(k.pipelineFees);
+  $("coll").textContent = money(k.collectedFees);
+  $("fu").textContent = k.followups.remaining;
+  $("fu").style.color = k.followups.remaining ? "var(--bad)" : "var(--good)";
+
+  $("agents").innerHTML = s.agents.map((a) => `
+    <div class="agent">
+      <span class="dot ${a.running ? "run" : a.lastRun ? "ok" : "idle"}"></span>
+      <div class="meta">
+        <div class="nm">${esc(a.label)} ${a.lastRun ? `<span class="faint">· ${ago(a.lastRun)}</span>` : ""}</div>
+        <div class="dg" title="${esc(a.digest)}">${esc(a.digest)}</div>
+      </div>
+      <button ${a.running ? "disabled" : ""} onclick="runAgent('${a.name}')">${a.running ? "running…" : "run now"}</button>
+    </div>`).join("");
+  if (s.leadEngine) {
+    $("engine-dot").className = "dot ok";
+    $("engine-dg").textContent = `${ago(s.leadEngine.created_at)} · ${s.leadEngine.raw_records ?? 0} records → ${s.leadEngine.converged_properties ?? 0} properties → ${s.leadEngine.shortlist_count ?? 0} shortlisted`;
+  }
+
+  $("taskcount").textContent = s.tasks.length ? `· ${s.tasks.length} open` : "";
+  $("tasks").innerHTML = s.tasks.length ? s.tasks.slice(0, 20).map((t) => {
+    const today = t.due_date && t.due_date <= s.now.slice(0, 10);
+    return `<div class="task" onclick="toggle(${t.id})" title="click to mark done">
+      <span class="box">[ ]</span><span class="tt">${esc(t.title)}</span>
+      ${t.address ? `<span class="addr">· ${esc(t.address)}</span>` : ""}
+      ${today ? `<span class="due">◈ today</span>` : ""}</div>`;
+  }).join("") : `<div class="empty">nothing open — park a thought below or run an agent</div>`;
+}
+
+async function runAgent(name) { await fetch(`/api/agents/${name}/run`, { method: "POST" }); setTimeout(refresh, 400); setTimeout(refresh, 2000); }
+async function toggle(id) { await fetch(`/api/tasks/${id}/toggle`, { method: "POST" }); refresh(); }
+async function addTask() {
+  const el = $("newtask"), title = el.value.trim();
+  if (!title) return;
+  await fetch("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title }) });
+  el.value = ""; refresh();
+}
+$("newtask").addEventListener("keydown", (e) => { if (e.key === "Enter") addTask(); });
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
