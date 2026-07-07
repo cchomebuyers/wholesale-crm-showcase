@@ -1,0 +1,19 @@
+{
+  "targets": {
+    "newLeads": 25,
+    "calls": 20,
+    "offers": 5,
+    "followupsCleared": "all",
+    "stageAdvances": 5
+  },
+  "focus": {
+    "pomodoroMin": 25,
+    "breakMin": 5,
+    "longBreakMin": 15,
+    "cyclesBeforeLongBreak": 4
+  },
+  "copy": {
+    "greetingAM": "Let's move. One thing at a time.",
+    "streakEmoji": "🔥"
+  }
+}

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "app": "node crm-app.mjs"
+    "app": "node crm-app.mjs",
+    "focus": "node focus/focus-terminal.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
