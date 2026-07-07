@@ -92,10 +92,23 @@
   .cmd.busy::after{content:"→";margin-left:auto;animation:blink 1s infinite alternate}
   @keyframes blink{to{opacity:.2}}
   .deck-note{margin-top:8px;font-size:8px;letter-spacing:.14em;color:var(--ink3);text-transform:uppercase}
-  .wire{padding:6px 0;border-bottom:1px solid var(--edge2);color:var(--ink2);font-size:11px}
-  .wire b{color:var(--ink);font-weight:400}
-  .wire .age{color:var(--ink3)}
-  .wire::before{content:"• ";color:var(--acc)}
+
+  /* ---- clawdbot agent cards ---- */
+  .agentcard{display:flex;align-items:center;gap:12px;border:1px solid var(--edge2);background:rgba(12,12,20,.55);padding:9px 11px;margin-bottom:7px}
+  .agentcard:hover{border-color:var(--edge)}
+  .agentcard .bot{flex:none;width:52px;height:52px;animation:bob 2.6s ease-in-out infinite}
+  .agentcard .bot svg{display:block}
+  .agentcard.running .bot{animation:work .5s ease-in-out infinite;filter:drop-shadow(0 0 7px rgba(251,191,36,.55))}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+  @keyframes work{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-4px) rotate(4deg)}}
+  .agentcard .meta{flex:1;min-width:0}
+  .agentcard .nm{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+  .agentcard .nm .st{color:var(--ink3);letter-spacing:.1em}
+  .agentcard .nm .st.on{color:var(--good)} .agentcard .nm .st.busy{color:var(--warn)}
+  .agentcard .dg{font-size:10px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .agentcard button{flex:none;background:transparent;border:1px solid var(--edge);color:var(--acc);font:inherit;font-size:9px;letter-spacing:.2em;text-transform:uppercase;padding:6px 10px;cursor:pointer}
+  .agentcard button:hover{border-color:var(--acc2);color:var(--glow)}
+  .agentcard button:disabled{color:var(--ink3);cursor:default;border-color:var(--edge2)}
   .meterrow{display:flex;align-items:center;gap:8px;margin:4px 0}
   .meterrow .lbl2{width:86px;font-size:9px;letter-spacing:.18em;color:var(--ink3);text-transform:uppercase}
   .meterrow .mt{flex:1;height:2px;background:var(--edge2);position:relative}
@@ -172,19 +185,17 @@
     </div>
 
     <div>
-      <div class="rule"><span class="lbl">Command Deck</span><span class="micro" id="deckstatus">idle · 0/4 active</span></div>
-      <div class="deck" id="deck"></div>
-      <div class="deck-note">commands run the focus agents — outputs land in the task trail</div>
+      <div class="rule"><span class="lbl">Agents</span><span class="micro" id="deckstatus">clawd.unit · idle</span></div>
+      <div id="agents"></div>
+      <div class="deck" style="grid-template-columns:1fr 1fr">
+        <div class="cmd" onclick="runAll()">run all</div><div class="cmd" onclick="refresh()">refresh</div>
+      </div>
+      <div class="deck-note">bots file their output into the task trail — nothing sends without you</div>
     </div>
 
     <div>
       <div class="rule"><span class="lbl">KPI Meters</span><span class="micro">targets · daily-goals.json</span></div>
       <div id="meters"></div>
-    </div>
-
-    <div>
-      <div class="rule"><span class="lbl">Agent Wire</span><span class="micro">last.runs</span></div>
-      <div id="wire"></div>
     </div>
   </div>
 </div>
@@ -196,6 +207,46 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"
 const ago = (iso) => { if (!iso) return "—"; const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
   return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
 const pctColor = (p) => p >= .8 ? "var(--good)" : p >= .4 ? "var(--warn)" : "var(--bad)";
+
+// ---- clawdbots: pixel lobster sprites, one accessory per job ----
+// 14×14 grid → crisp SVG rects. '.'=empty r=shell d=shade w=eye a=accessory x=accessory-2
+const BOT_BASE = [
+  "..d........d..",
+  "..rr......rr..",
+  ".rrrr....rrrr.",
+  ".rrrr....rrrr.",
+  "..rr.rrrr.rr..",
+  "....rrrrrr....",
+  "...rrwrrwrr...",
+  "...rrrrrrrr...",
+  "....rdrrdr....",
+  ".....rrrr.....",
+  "....drrrrd....",
+  ".....rrrr.....",
+  "....r.rr.r....",
+  "...rrrrrrrr...",
+];
+const BOTS = {
+  momentum:     { color: "#fbbf24", title: "hard hat — keeps the pipeline moving", overlay: {3:".....aaaa.....",4:"...aaaaaaaa..."} },
+  acquisitions: { color: "#cbd5e1", title: "binoculars — scouts new deals",        overlay: {6:"...axxaaxxa..."} },
+  underwriting: { color: "#34d399", title: "eyeshade — runs the numbers",          overlay: {4:"...aaaaaaaa...",5:"...a......a..."} },
+  outreach:     { color: "#8b8ff0", title: "headset — drafts the scripts",         overlay: {4:"...aarrrraa...",6:"..arrwrrwrra..",8:"..a.rdrrdr....",9:"..aa.rrrr....."} },
+  engine:       { color: "#5eead4", title: "antenna — autonomous lead engine",     overlay: {0:"..d...aa...d..",1:"..rr.a..a.rr..",2:".rrrr.aa.rrrr."} },
+};
+function botSprite(name) {
+  const b = BOTS[name] || BOTS.engine;
+  const pal = { r: "#e0604a", d: "#9c3527", w: "#ffe9e2", a: b.color, x: "#141420" };
+  let rects = "";
+  BOT_BASE.forEach((row, y) => {
+    const over = b.overlay[y] || "";
+    [...row].forEach((ch, x) => {
+      const o = over[x];
+      const c = o && o !== "." ? o : ch;
+      if (c !== ".") rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${pal[c] || pal.r}"/>`;
+    });
+  });
+  return `<svg viewBox="0 0 14 14" width="52" height="52" shape-rendering="crispEdges" role="img" aria-label="${b.title}">${rects}</svg>`;
+}
 
 // ---- sparkline (inline SVG polyline, VAULT style) ----
 function spark(arr, w = 250, h = 24) {
@@ -259,12 +310,26 @@ async function refresh() {
     `<div class="chip" style="left:${anchors[i][0]}%;top:${anchors[i][1]}%" onclick="toggle(${t.id})" title="click to complete">
       <span>${esc(t.title.split(":")[0].split(" on ")[0])}<span class="sub">${esc(t.title)}</span></span><span class="x">✕</span></div>`).join("");
 
-  // command deck
+  // clawdbot agent cards
   const runningN = s.agents.filter((a) => a.running).length;
-  $("deckstatus").textContent = (runningN ? "active" : "idle") + ` · ${runningN}/4 active · ${s.tasks.length} queued`;
-  $("deck").innerHTML = s.agents.map((a) =>
-    `<div class="cmd ${a.running ? "busy" : ""}" onclick="runAgent('${a.name}')">${a.name}</div>`).join("") +
-    `<div class="cmd" onclick="runAll()">run all</div><div class="cmd" onclick="refresh()">refresh</div>`;
+  $("deckstatus").textContent = `clawd.unit · ${runningN ? runningN + " working" : "idle"} · ${s.tasks.length} queued`;
+  $("agents").innerHTML = s.agents.map((a) => `
+    <div class="agentcard ${a.running ? "running" : ""}" title="${BOTS[a.name]?.title || ""}">
+      <div class="bot">${botSprite(a.name)}</div>
+      <div class="meta">
+        <div class="nm">${esc(a.label)} <span class="st ${a.running ? "busy" : a.lastRun ? "on" : ""}">· ${a.running ? "working…" : a.lastRun ? ago(a.lastRun) + " ago" : "never run"}</span></div>
+        <div class="dg" title="${esc(a.digest)}">${esc(a.digest)}</div>
+      </div>
+      <button ${a.running ? "disabled" : ""} onclick="runAgent('${a.name}')">${a.running ? "…" : "run"}</button>
+    </div>`).join("") +
+    (s.leadEngine ? `
+    <div class="agentcard" title="${BOTS.engine.title}">
+      <div class="bot">${botSprite("engine")}</div>
+      <div class="meta">
+        <div class="nm">Lead Engine <span class="st on">· ${ago(s.leadEngine.created_at)} ago · hourly</span></div>
+        <div class="dg">${s.leadEngine.raw_records ?? 0} records → ${s.leadEngine.converged_properties ?? 0} properties → ${s.leadEngine.shortlist_count ?? 0} shortlisted</div>
+      </div>
+    </div>` : "");
 
   // meters
   const meter = (label, done, target) => { const p = Math.min(1, done / Math.max(1, target));
@@ -279,11 +344,6 @@ async function refresh() {
     `<div class="meterrow"><span class="lbl2">follow-ups</span>
       <span class="mt"><i style="width:${k.followups.remaining ? 100 : 0}%;background:var(--bad)"></i></span>
       <span class="v">${k.followups.remaining} due</span></div>`;
-
-  // agent wire
-  $("wire").innerHTML = s.agents.map((a) =>
-    `<div class="wire"><b>${esc(a.label)}</b> <span class="age">· ${a.running ? "running…" : ago(a.lastRun)}</span><br>${esc(a.digest)}</div>`).join("") +
-    (s.leadEngine ? `<div class="wire"><b>Lead Engine</b> <span class="age">· ${ago(s.leadEngine.created_at)} · hourly in server.js</span><br>${s.leadEngine.raw_records ?? 0} records → ${s.leadEngine.converged_properties ?? 0} properties → ${s.leadEngine.shortlist_count ?? 0} shortlisted</div>` : "");
 
   // ticker
   $("tk-agents").textContent = runningN ? runningN + " RUNNING" : "4 READY";
