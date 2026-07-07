@@ -50,12 +50,22 @@ test("boot: /api/health answers", async () => {
   assert.equal(j.app, "wholesale-crm");
 });
 
-test("operator UI serves with the command shell + all 11 views", async () => {
+test("operator UI serves with the command shell + all 12 views", async () => {
   const html = await (await fetch(`${BASE}/`)).text();
   assert.ok(html.includes('id="cubeLauncher"'), "cube launcher present");
   assert.ok(html.includes('id="menuOverlay"'), "overlay nav present");
   const tabs = [...html.matchAll(/data-tab="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(new Set(tabs).size, 11, `expected 11 views, got ${new Set(tabs).size}`);
+  assert.equal(new Set(tabs).size, 12, `expected 12 views, got ${new Set(tabs).size}`);
+  assert.ok(tabs.includes("focus"), "focus view registered");
+});
+
+test("focus dashboard is mounted inside the CRM", async () => {
+  const page = await (await fetch(`${BASE}/focus`)).text();
+  assert.ok(page.includes("F.O.C.U.S."), "focus page serves");
+  const state = await (await fetch(`${BASE}/api/focus`)).json();
+  assert.ok(Array.isArray(state.agents) && state.agents.length === 4, "4 agents visible");
+  assert.ok(state.next && typeof state.next.title === "string", "coach next action present");
+  assert.equal(state.history.days.length, 14, "sparkline history");
 });
 
 test("pro-queue answers with counts + blocker visibility (no 503)", async () => {
