@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wholesale Workspace</title>
+<link rel="stylesheet" href="./css/tokens.css">
+<link rel="stylesheet" href="./css/shell.css">
+</head>
+<body>
+<div id="shell">
+  <!-- icon rail — 5 items max, per spec -->
+  <nav id="rail" aria-label="Views">
+    <div class="logo">☥</div>
+    <!-- buttons injected by main.js from the view registry -->
+  </nav>
+
+  <!-- single-view panel -->
+  <main id="main"><div class="view-root" id="viewRoot"></div></main>
+</div>
+
+<!-- global quick-add bar (shell only in Phase 1; parsing lands in Phase 7) -->
+<div id="quickbar">
+  <span class="slash">/</span>
+  <input id="quickAdd" placeholder="quick add — l lead · b buyer · t task (Phase 7)" maxlength="300" autocomplete="off">
+</div>
+
+<div id="toast" role="status"></div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

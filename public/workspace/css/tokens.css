@@ -1,0 +1,53 @@
+/* ============================================================================
+   tokens.css — the ONE design-token block (spec Phase 1)
+   Dark glassmorphic · near-black base · ONE accent (electric green) = URGENCY
+   ONLY, never decoration · warm gray ink · WCAG AA.
+   Every color/space/radius/shadow/type/motion value in the workspace comes
+   from here. No component file may introduce a raw hex.
+   ========================================================================== */
+:root {
+  /* -- surfaces ---------------------------------------------------------- */
+  --bg: #0B0E14;
+  --bg-raise: #0F131B;
+  --panel: rgba(255, 255, 255, 0.04);        /* frosted glass */
+  --panel-strong: rgba(255, 255, 255, 0.07);
+  --edge: rgba(255, 255, 255, 0.10);
+  --edge-soft: rgba(255, 255, 255, 0.05);
+  --blur: blur(16px) saturate(1.25);
+
+  /* -- ink (warm gray, AA on --bg) --------------------------------------- */
+  --ink: #E8EAE6;        /* 15.2:1 on bg */
+  --ink-2: #A9B0A9;      /*  7.4:1 */
+  --ink-3: #6E7672;      /*  3.6:1 — large/secondary text only */
+
+  /* -- THE accent — urgency only ------------------------------------------
+     #39FF6A on #0B0E14 ≈ 12.6:1. Allowed uses: overdue follow-up, closing
+     <7 days, blocking confirmations. NEVER decorative. Everything else
+     stays in ink. */
+  --urgent: #39FF6A;
+  --urgent-ink: #0B0E14;                      /* text ON an urgent fill */
+  --urgent-wash: rgba(57, 255, 106, 0.12);    /* urgent row/badge background */
+  --urgent-edge: rgba(57, 255, 106, 0.35);
+
+  /* -- spacing scale ------------------------------------------------------ */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px;
+
+  /* -- radii --------------------------------------------------------------- */
+  --r1: 6px; --r2: 10px; --r3: 16px;
+
+  /* -- shadows ------------------------------------------------------------- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.5);
+
+  /* -- type scale (system stack, no webfont dependency) -------------------- */
+  --font: -apple-system, "SF Pro Text", "Segoe UI", Inter, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --t-xs: 11px; --t-sm: 12.5px; --t-md: 14px;
+  --t-lg: 17px; --t-xl: 22px; --t-hero: 34px;
+
+  /* -- motion: spring-feel, transform/opacity only, 150–250ms -------------- */
+  --spring: cubic-bezier(0.2, 0.9, 0.25, 1.08);
+  --fast: 160ms;
+  --med: 230ms;
+}

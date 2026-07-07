@@ -1,0 +1,128 @@
+/* ============================================================================
+   shell.css — Phase 1 layout: icon rail · single-view panel · quick-add bar
+   All values come from tokens.css. Transitions: transform/opacity only.
+   ========================================================================== */
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-md)/1.55 var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+/* soft depth wash behind the glass — a gradient, not an animation */
+body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(900px 500px at 78% -10%, rgba(255,255,255,0.05), transparent 60%),
+    radial-gradient(700px 460px at -10% 105%, rgba(255,255,255,0.035), transparent 55%);
+}
+
+#shell { display: grid; grid-template-columns: 68px 1fr; height: 100vh; }
+
+/* ---- icon rail (5 items max, per spec) ---------------------------------- */
+#rail {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--s2); padding: var(--s4) 0;
+  border-right: 1px solid var(--edge-soft);
+  background: var(--panel); backdrop-filter: var(--blur);
+}
+#rail .logo {
+  font: 600 var(--t-lg)/1 var(--font-mono);
+  color: var(--ink); padding: var(--s2) 0 var(--s4);
+  user-select: none;
+}
+.rail-btn {
+  width: 46px; height: 46px; border: 0; border-radius: var(--r2);
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  display: grid; place-items: center;
+  transition: transform var(--fast) var(--spring), opacity var(--fast);
+}
+.rail-btn svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+.rail-btn:hover { transform: translateY(-1px); color: var(--ink); }
+.rail-btn[aria-current="page"] {
+  background: var(--panel-strong); color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+.rail-btn .tip {
+  position: absolute; left: 60px; padding: 3px 9px;
+  background: var(--bg-raise); border: 1px solid var(--edge);
+  border-radius: var(--r1); font-size: var(--t-xs); color: var(--ink-2);
+  opacity: 0; transform: translateX(-4px); pointer-events: none;
+  transition: opacity var(--fast), transform var(--fast) var(--spring);
+  white-space: nowrap;
+}
+.rail-btn:hover .tip, .rail-btn:focus-visible .tip { opacity: 1; transform: translateX(0); }
+.rail-btn:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+
+/* ---- main single-view panel --------------------------------------------- */
+#main { overflow-y: auto; padding: var(--s6) var(--s7) 96px; }
+#main > .view-root { max-width: 1080px; margin: 0 auto; }
+.view-enter { animation: viewIn var(--med) var(--spring); }
+@keyframes viewIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+h1.view-title { font-size: var(--t-xl); font-weight: 650; letter-spacing: -0.01em; }
+.view-sub { color: var(--ink-2); font-size: var(--t-sm); margin-top: var(--s1); }
+
+/* glass panel primitive */
+.glass {
+  background: var(--panel); backdrop-filter: var(--blur);
+  border: 1px solid var(--edge-soft); border-radius: var(--r3);
+  box-shadow: var(--shadow-1);
+}
+
+/* empty state (every view ships one, spec Phase 9 brought forward) */
+.empty {
+  margin-top: var(--s6); padding: var(--s7) var(--s5);
+  text-align: center; color: var(--ink-2);
+}
+.empty .glyph { font-size: 30px; opacity: 0.75; }
+.empty h2 { font-size: var(--t-lg); color: var(--ink); margin-top: var(--s3); font-weight: 600; }
+.empty p { font-size: var(--t-sm); margin-top: var(--s2); }
+.empty .phase { display: inline-block; margin-top: var(--s4); font: var(--t-xs)/1 var(--font-mono);
+  color: var(--ink-3); border: 1px solid var(--edge-soft); border-radius: var(--r1); padding: 5px 10px; }
+
+/* urgency — the ONLY place the accent may appear */
+.urgent-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--urgent-wash); color: var(--urgent);
+  border: 1px solid var(--urgent-edge); border-radius: var(--r1);
+  padding: 2px 9px; font: 600 var(--t-xs)/1.6 var(--font);
+}
+
+/* ---- global quick-add bar (visual shell; capture logic = Phase 7) -------- */
+#quickbar {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  width: min(560px, 86vw); display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--panel-strong); backdrop-filter: var(--blur);
+  border: 1px solid var(--edge); border-radius: var(--r3);
+  box-shadow: var(--shadow-2);
+  transition: transform var(--fast) var(--spring);
+}
+#quickbar:focus-within { transform: translateX(-50%) translateY(-2px); }
+#quickbar .slash {
+  font: var(--t-sm)/1 var(--font-mono); color: var(--ink-3);
+  border: 1px solid var(--edge-soft); border-radius: var(--r1); padding: 4px 7px;
+}
+#quickAdd {
+  flex: 1; background: transparent; border: 0; outline: 0;
+  color: var(--ink); font: var(--t-md) var(--font);
+}
+#quickAdd::placeholder { color: var(--ink-3); }
+
+/* toast */
+#toast {
+  position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%) translateY(8px);
+  background: var(--bg-raise); border: 1px solid var(--edge); border-radius: var(--r2);
+  color: var(--ink-2); font-size: var(--t-sm); padding: var(--s2) var(--s4);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--med), transform var(--med) var(--spring);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
