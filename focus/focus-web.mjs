@@ -62,6 +62,8 @@ function statePayload() {
     plan: rankPlan({ kpis, tasks, followups }).slice(0, 6),
     agents: agentStatus(),
     leadEngine: store.lastLeadEngineRun(), // the hourly autonomous engine in server.js
+    history: store.kpiHistory(14),         // sparkline feeds
+    activity: store.recentActivity(6),     // inbox trail
   };
 }
 

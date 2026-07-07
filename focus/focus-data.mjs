@@ -164,5 +164,24 @@ export function openFocusDb(dbPath = DB_PATH) {
        FROM lead_engine_runs ORDER BY id DESC LIMIT 1`);
   }
 
-  return { db, computeKpis, followupsDue, listTasks, tasksDoneToday, toggleTask, addTask, addTaskOnce, recordAgentRun, listAgentRuns, lastLeadEngineRun, close: () => db.close() };
+  // Per-day KPI counts for the last N days — feeds the dashboard sparklines.
+  function kpiHistory(days = 14) {
+    const dayList = [...Array(days)].map((_, i) => new Date(Date.now() - (days - 1 - i) * 86400000).toISOString().slice(0, 10));
+    const since = dayList[0];
+    const fill = (rows) => { const m = Object.fromEntries(rows.map((r) => [r.d, r.n])); return dayList.map((d) => m[d] || 0); };
+    return {
+      days: dayList,
+      newLeads: fill(safeAll("SELECT substr(created_at,1,10) d, COUNT(*) n FROM leads WHERE created_at >= ? GROUP BY d", [since])),
+      calls: fill(safeAll("SELECT substr(created_at,1,10) d, COUNT(*) n FROM call_outcomes WHERE created_at >= ? GROUP BY d", [since])),
+      offers: fill(safeAll("SELECT substr(offer_sent_at,1,10) d, COUNT(*) n FROM leads WHERE offer_sent_at IS NOT NULL AND offer_sent_at >= ? GROUP BY d", [since])),
+      stageAdvances: fill(safeAll("SELECT substr(created_at,1,10) d, COUNT(*) n FROM activities WHERE type='stage_change' AND body LIKE 'Stage:%' AND created_at >= ? GROUP BY d", [since])),
+    };
+  }
+  function recentActivity(limit = 6) {
+    return safeAll(
+      `SELECT a.created_at, a.type, a.body, l.address FROM activities a
+       LEFT JOIN leads l ON l.id = a.lead_id ORDER BY a.id DESC LIMIT ?`, [limit]);
+  }
+
+  return { db, computeKpis, followupsDue, listTasks, tasksDoneToday, toggleTask, addTask, addTaskOnce, recordAgentRun, listAgentRuns, lastLeadEngineRun, kpiHistory, recentActivity, close: () => db.close() };
 }
