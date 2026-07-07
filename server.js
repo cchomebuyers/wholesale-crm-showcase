@@ -23,6 +23,7 @@ import { evaluateWholesaleSpread, summarizeSpreadAudits } from "./wholesale_spre
 import { resolveContactRoute } from "./contact_route_engine.js";
 import { makeConsentRecord, consentToContactCandidate } from "./consent.js";
 import { complianceCheck } from "./compliance_gate.js";
+import { mountFocus } from "./focus/focus-server.mjs";
 import { skiptraceDecision } from "./skiptrace_gate.js";
 import { whyNotCallNow, applyOutreachSuppression } from "./pro_wholesaler_queue.js";
 import { bestSellerPriceEvidence, sellerPriceEvidenceFromRecord } from "./seller_price_evidence.js";
@@ -696,6 +697,11 @@ app.use(express.static(join(__dirname, "public"), {
   etag: false,
   setHeaders: (res) => res.setHeader("Cache-Control", "no-store, max-age=0"),
 }));
+
+// --- Focus dashboard (ADHD command layer) — additive mount, see focus/ ---
+// Serves GET /focus (iframed by the operator UI's Focus view) + the focus
+// API (/api/focus, POST /api/tasks[/:id/toggle], /api/agents/:name/run).
+mountFocus(app);
 
 // --- Leads ---
 app.get("/api/leads", (req, res) => {

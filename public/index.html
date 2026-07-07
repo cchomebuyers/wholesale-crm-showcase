@@ -28,6 +28,12 @@
     <div id="menuScrim"></div>
     <aside id="menuSide">
       <div class="menu-title">⌘ Command</div>
+      <div class="menu-group open" data-group="focus-grp">
+        <button class="menu-head" type="button">Focus <span class="mh-arrow">▾</span></button>
+        <div class="menu-items">
+          <button class="tab" data-tab="focus">☥ Focus</button>
+        </div>
+      </div>
       <div class="menu-group open" data-group="pipeline">
         <button class="menu-head" type="button">Pipeline <span class="mh-arrow">▾</span></button>
         <div class="menu-items">
@@ -72,6 +78,13 @@
   </div>
 
   <main>
+    <!-- Focus — the ADHD command layer, served by focus/focus-server.mjs at /focus.
+         loading="lazy" + display:none view = the iframe only loads on first open. -->
+    <section id="focus" class="view">
+      <iframe src="/focus" loading="lazy" title="Focus dashboard"
+        style="width:100%;height:calc(100vh - 40px);border:0;border-radius:14px;background:#08080d;display:block"></iframe>
+    </section>
+
     <!-- Dashboard -->
     <section id="dashboard" class="view active">
       <div class="cards" id="statCards"></div>
