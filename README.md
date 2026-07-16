@@ -1,6 +1,25 @@
 # Wholesale CRM / Thinga Acquisition Engine
 
 Local-first real-estate wholesaling CRM plus a broader Thinga graph substrate.
+Built solo in Node.js: 17,000+ lines, 228 commits, 489 automated tests.
+
+## Try it in 60 seconds
+
+Requires Node 26+ (uses the built-in `node:sqlite`, so there is nothing to
+install beyond the four runtime dependencies).
+
+```
+npm install
+npm run seed     # builds a demo database of fabricated leads and properties
+npm start        # http://localhost:4000
+npm test         # 489 tests
+```
+
+`npm run seed` generates invented data only: 555-range phone numbers,
+example.com emails, fictional street names, and made-up buyer companies. No
+real lead, seller, or customer data ships in this repo, and the seed never
+calls a paid or external API.
+
 
 The original app is a working CRM for leads, buyers, outreach, tasks, offers, and email. The current system is larger: it ingests public property signals, mirrors CRM objects into a universal Thinga graph, ranks a pro wholesaler queue, plans legal contact routes, preserves proof stacks, gates outreach through compliance, and exposes buyer/seller marketplace surfaces.
 

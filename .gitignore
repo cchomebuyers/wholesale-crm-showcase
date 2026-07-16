@@ -35,3 +35,5 @@ data/property_grade_report.md
 data/owner_portfolios.md
 data/enrichment_priority.md
 data/ankhor-export/
+data/pro_queue_snapshot.jsonl
+data/pro_queue_summary.json

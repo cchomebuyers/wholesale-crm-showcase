@@ -1,15 +1,16 @@
 {
   "name": "wholesale-crm",
   "version": "1.0.0",
-  "description": "Custom CRM for real estate wholesaling — lead tracking, pipeline, email",
+  "description": "Custom CRM for real estate wholesaling \u2014 lead tracking, pipeline, email",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test",
+    "test": "node --test '**/*.test.js' '**/*.test.mjs'",
     "app": "node crm-app.mjs",
     "focus": "node focus/focus-terminal.mjs",
-    "focus:web": "node focus/focus-web.mjs"
+    "focus:web": "node focus/focus-web.mjs",
+    "seed": "node tools/seed_demo.mjs --fresh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
