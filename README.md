@@ -1,7 +1,7 @@
 # Wholesale CRM / Thinga Acquisition Engine
 
 Local-first real-estate wholesaling CRM plus a broader Thinga graph substrate.
-Built solo in Node.js: 17,000+ lines, 228 commits, 489 automated tests.
+Built solo in Node.js: 17,000+ lines, 223 commits, 489 automated tests.
 
 ## Try it in 60 seconds
 
