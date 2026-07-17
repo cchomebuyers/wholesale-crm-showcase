@@ -4,7 +4,7 @@ A real-estate wholesaling CRM I built and run my own lead pipeline through.
 Local-first Node.js: leads, pipeline stages, cash buyers, offers, deal math,
 and two-way email - all in one app, with the data in a single SQLite file.
 
-Built solo: 17,000+ lines across 90+ modules, 179 commits, 450 automated tests.
+Built solo: 17,000+ lines across 90+ modules, 180 commits, 450 automated tests.
 
 ## Try it in 60 seconds
 

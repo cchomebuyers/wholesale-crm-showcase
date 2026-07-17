@@ -44,7 +44,7 @@ const email = (n) => `${n.split(" ")[0].toLowerCase()}.${n.split(" ")[1].toLower
 async function ensureSchema() {
   if (fresh) for (const f of [DB, `${DB}-wal`, `${DB}-shm`]) if (existsSync(f)) rmSync(f);
   if (existsSync(DB)) return;
-  const port = 4399;
+  const port = 4300 + (process.pid % 500); // avoid collisions with other local servers
   const child = spawn(process.execPath, [join(repo, "server.js")], {
     cwd: repo,
     env: { ...process.env, PORT: String(port), NO_BACKUP: "1" },
