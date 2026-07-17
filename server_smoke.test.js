@@ -63,7 +63,12 @@ test("focus dashboard is mounted inside the CRM", async () => {
   const page = await (await fetch(`${BASE}/focus`)).text();
   assert.ok(page.includes("F.O.C.U.S."), "focus page serves");
   const state = await (await fetch(`${BASE}/api/focus`)).json();
-  assert.ok(Array.isArray(state.agents) && state.agents.length === 4, "4 agents visible");
+  // The crew can grow (briefing joined the original four) — pin the core four
+  // by name instead of an exact count.
+  const names = (state.agents || []).map((a) => a.name);
+  for (const core of ["momentum", "acquisitions", "underwriting", "outreach"]) {
+    assert.ok(names.includes(core), `core agent ${core} visible`);
+  }
   assert.ok(state.next && typeof state.next.title === "string", "coach next action present");
   assert.equal(state.history.days.length, 14, "sparkline history");
 });

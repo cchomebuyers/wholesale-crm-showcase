@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
-  <link rel="stylesheet" href="styles.css?v=49" />
+  <link rel="stylesheet" href="styles.css?v=50" />
 </head>
 <body>
   <div id="hyperdim" aria-hidden="true"></div>
@@ -329,6 +329,26 @@
     <!-- Outreach -->
     <section id="outreach" class="view">
       <div id="connectPanel" class="connect-panel"></div>
+
+      <!-- Sonny Email Agent — drafts offers in Sonny's voice, you approve & send -->
+      <div class="eq-panel" id="emailAgentPanel">
+        <div class="eq-head">
+          <h2>🤖 Sonny Email Agent <span id="eqCount" class="hint"></span></h2>
+          <div class="eq-controls">
+            <select id="eqAudience" title="Who to draft offers for">
+              <option value="both">Realtors + homeowners</option>
+              <option value="realtor">Realtors only</option>
+              <option value="homeowner">Homeowners only</option>
+            </select>
+            <select id="eqTemplate" title="Template (auto-picks per recipient by default)"><option value="">Auto template</option></select>
+            <input id="eqMax" type="number" min="1" max="50" value="8" title="Max drafts per run" />
+            <button class="btn" id="eqRunBtn">✍ Draft emails</button>
+            <button class="btn primary" id="eqSendAllBtn" style="display:none">Send all (<span id="eqSendAllCount">0</span>)</button>
+          </div>
+        </div>
+        <div class="eq-status" id="eqStatus"></div>
+        <div id="eqList" class="eq-list"></div>
+      </div>
 
       <div class="outreach-main">
         <!-- Templates -->
@@ -899,7 +919,7 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=54"></script>
+  <script src="app.js?v=55"></script>
   <script src="hyper.js?v=2"></script>
 </body>
 </html>

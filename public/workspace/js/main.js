@@ -5,11 +5,14 @@ import { el, toast } from "./ui.js";
 import { post } from "./api.js";
 import * as today from "./views/today.js";
 import * as acquisitions from "./views/acquisitions.js";
+import * as engine from "./views/engine.js";
+import * as oven from "./views/oven.js";
 import * as dispo from "./views/dispo.js";
 import * as buyers from "./views/buyers.js";
 import * as analytics from "./views/analytics.js";
+import * as agents from "./views/agents.js";
 
-const VIEWS = { today, acquisitions, dispo, buyers, analytics };
+const VIEWS = { today, engine, acquisitions, oven, dispo, buyers, analytics, agents };
 const DEFAULT = "today";
 
 const rail = document.getElementById("rail");

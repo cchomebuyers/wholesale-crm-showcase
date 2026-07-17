@@ -1,5 +1,5 @@
 // Dispo — per-deal disposition board + buyer matching (spec Phase 5).
-import { el, emptyState, toast } from "../ui.js";
+import { el, emptyState, toast, focusTimer } from "../ui.js";
 import { get, post, patch, money } from "../api.js";
 
 export const title = "Dispo";
@@ -49,7 +49,9 @@ async function dealCard(deal, root) {
   const card = el("div", { class: "card glass" },
     el("div", { class: "deal" },
       el("div", {},
-        el("div", { class: "addr" }, deal.address || `deal #${deal.id}`, " ", countdown),
+        el("div", { class: "addr" }, deal.address || `deal #${deal.id}`, " ", countdown, " ",
+          el("button", { class: "btn-ghost timer-btn", title: "15-min sprint: work this deal",
+            onclick: (e) => { e.stopPropagation(); focusTimer(deal.address || `deal #${deal.id}`, 15); } }, "⏱")),
         el("div", { class: "meta" },
           `${money(deal.contract_price)} contract · fee target ${money(deal.assignment_fee_target)}`,
           deal.emd ? ` · EMD ${money(deal.emd)}` : "",

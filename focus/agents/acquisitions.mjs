@@ -45,10 +45,13 @@ for (const c of candidates) {
       continue;
     }
     const info = db.prepare(
-      `INSERT INTO leads (created_at, updated_at, stage, address, city, state, zip, asking_price, arv, source, notes, active, addr_canon)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)`).run(
+      `INSERT INTO leads (created_at, updated_at, stage, address, city, state, zip, asking_price, arv, seller_name, seller_phone, seller_email, source, notes, active, addr_canon)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`).run(
       now, now, "New", address, d.city ?? null, d.state ?? null, d.zip ?? null,
-      d.price ?? d.asking_price ?? null, d.arv ?? null, "lead-engine",
+      d.price ?? d.asking_price ?? null, d.arv ?? null,
+      d.seller_name ?? d.owner_name ?? d.taxpayer ?? null,
+      d.seller_phone ?? d.owner_phone ?? null, d.seller_email ?? d.owner_email ?? null,
+      "lead-engine",
       `Promoted by acquisitions agent · score ${c.score} · thinga ${c.thinga_id || "n/a"}`, canonicalAddr(address));
     const leadId = Number(info.lastInsertRowid);
     db.prepare("UPDATE lead_engine_candidates SET status='promoted', lead_id=? WHERE id=?").run(leadId, c.id);

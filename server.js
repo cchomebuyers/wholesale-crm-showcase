@@ -70,9 +70,15 @@ const db = new DatabaseSync(join(__dirname, "crm.db"));
 db.exec("PRAGMA busy_timeout = 15000");
 
 // Background timers must NEVER crash the process: a transient error (db lock,
-// network, mail) is logged and the next tick tries again.
+// network, mail) is logged and the next tick tries again. docs/HALT is the
+// repo-wide kill switch (AGENT_COORDINATION.md) — while it exists, autonomous
+// loops that spend money or generate work (auto-scan, lead-engine) skip their
+// tick. Benign local upkeep (backup, briefing, inbox cache, news) always runs;
+// manual API calls are never gated.
+const HALT_GATED = new Set(["auto-scan", "lead-engine"]);
 const safeTick = (name, fn) => () => {
   try {
+    if (HALT_GATED.has(name) && existsSync(join(__dirname, "docs", "HALT"))) return;
     const r = fn();
     if (r && typeof r.catch === "function") r.catch((e) => console.error(`[${name}] tick failed:`, e.message));
   } catch (e) { console.error(`[${name}] tick failed:`, e.message); }
@@ -167,6 +173,35 @@ db.exec(`CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL, type TEXT, title TEXT, body TEXT,
   property_id INTEGER, read INTEGER DEFAULT 0
 );`);
+// Sonny Emailer's send queue — drafts written by focus/agents/emailer.mjs,
+// reviewed + fired from the Outreach tab (status: draft | sent | dismissed).
+db.exec(`CREATE TABLE IF NOT EXISTS email_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  lead_id INTEGER NOT NULL,
+  recipient_type TEXT,
+  to_addr TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  template_id INTEGER,
+  offer_amount REAL,
+  ai INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'draft',
+  sent_at TEXT,
+  agent TEXT DEFAULT 'emailer'
+);`);
+// Pro-queue lives in the boot schema so /api/pro-queue answers 200-empty on a
+// fresh db instead of 503 (DDL mirrors tools/build_pro_queue.mjs, which still
+// owns populating it via --persist).
+db.exec(`CREATE TABLE IF NOT EXISTS pro_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  property_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  tier TEXT NOT NULL, priority_score INTEGER,
+  next_action TEXT, spend_allowed INTEGER DEFAULT 0,
+  missing_json TEXT, reasons_json TEXT, signals_json TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pro_queue_tier ON pro_queue(tier, priority_score DESC);`);
 db.exec(`CREATE TABLE IF NOT EXISTS property_evidence (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   property_id INTEGER NOT NULL,
@@ -208,6 +243,17 @@ db.exec(`CREATE TABLE IF NOT EXISTS lead_engine_candidates (
 try { db.exec("ALTER TABLE lead_engine_candidates ADD COLUMN lead_id INTEGER"); } catch { /* already exists */ }
 db.exec("CREATE INDEX IF NOT EXISTS idx_lead_engine_candidates_run ON lead_engine_candidates(run_id, score DESC)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_lead_engine_candidates_status ON lead_engine_candidates(status, score DESC)");
+// Offer Oven saved scenarios — a deal can carry several structured offers
+// (label + raw inputs; the math is recomputed client-side by offer_engine.js).
+db.exec(`CREATE TABLE IF NOT EXISTS offer_scenarios (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  lead_id INTEGER,
+  label TEXT NOT NULL,
+  inputs_json TEXT NOT NULL,
+  FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL
+);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_offer_scenarios_lead ON offer_scenarios(lead_id, created_at DESC)");
 // Fill-Properties pipeline runs (the one-button chain). One row per run; stages_json
 // holds the live per-stage progress the operator UI polls.
 db.exec(`CREATE TABLE IF NOT EXISTS pipeline_runs (
@@ -659,6 +705,13 @@ if (db.prepare("SELECT COUNT(*) n FROM templates WHERE audience='offer'").get().
     .run(now(), "Cash offer — listing agent", "Cash offer — {{address}}",
       "Hi {{first_name}},\n\nI'd like to submit a cash offer on {{address}}:\n\n• Purchase price: {{offer}}\n• Earnest money deposit: {{earnest}}, submitted 1 business day after the inspection period\n• Inspection period: {{inspection_days}} business days\n• Closing: {{close_days}} days or less, all cash, no financing contingency\n• Purchased as-is — no repairs requested\n\nI'm a serious cash buyer and can close on your timeline. If the number doesn't work, send me a counter — I'm flexible and easy to work with.\n\nThanks,\n{{my_name}}\n{{my_phone}}", "offer");
 }
+// Seed the homeowner-facing offer template (used by the Sonny Emailer agent
+// when the lead's contact is the owner, not a listing agent).
+if (db.prepare("SELECT COUNT(*) n FROM templates WHERE audience='offer' AND name LIKE '%homeowner%'").get().n === 0) {
+  db.prepare("INSERT INTO templates (created_at, name, subject, body, audience) VALUES (?,?,?,?,?)")
+    .run(now(), "Cash offer — homeowner", "Cash offer for {{address}}",
+      "Hi {{first_name}},\n\nI'd like to make you a real cash offer on {{address}}: {{offer}}.\n\nThat's as-is — no repairs, no fees, no cleaning anything out. You pick the closing date; I can close in {{close_days}} days or less.\n\nIf the number isn't quite right, tell me what works and I'll see what I can do. No pressure at all.\n\nEven a quick text works: {{my_phone}}.\n\nThanks,\n{{my_name}}\n{{my_phone}}", "offer");
+}
 
 const LEAD_FIELDS = [
   "stage", "seller_name", "seller_phone", "seller_email",
@@ -702,8 +755,63 @@ app.use(express.static(join(__dirname, "public"), {
 // --- Focus dashboard (ADHD command layer) — additive mount, see focus/ ---
 // Serves GET /focus (iframed by the operator UI's Focus view) + the focus
 // API (/api/focus, POST /api/tasks[/:id/toggle], /api/agents/:name/run).
-mountFocus(app);
+const focusCore = mountFocus(app);
 mountWorkspace(app); // /api/ws/* — merged-workspace adapter (workspace_api.mjs)
+
+// --- Daily Briefing scheduling (Today dashboard engine) ---
+// Full run at 8:00 AM Eastern (AI briefing + bell + morning KPI snapshot),
+// then incremental re-runs every `briefing_interval_min` minutes (default 45,
+// 0 = off) that refresh briefing_state + deltas. Manual: POST /api/agents/briefing/run.
+try { db.exec(`CREATE TABLE IF NOT EXISTS agent_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, agent TEXT NOT NULL, finished_at TEXT NOT NULL, digest TEXT)`); } catch {}
+const etParts = () => {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date());
+  const g = (t) => p.find((x) => x.type === t).value;
+  return { day: `${g("year")}-${g("month")}-${g("day")}`, hour: +g("hour"), minute: +g("minute") };
+};
+function maybeBriefing() {
+  const et = etParts();
+  // full run: once per ET day, at/after 8am ET
+  if (et.hour >= 8 && getSetting("briefing_last_full_day") !== et.day) {
+    if (focusCore.runAgent("briefing")) setSetting("briefing_last_full_day", et.day);
+    return;
+  }
+  // incremental: only after today's full run exists
+  const interval = Number(getSetting("briefing_interval_min") ?? 45);
+  if (!interval || getSetting("briefing_last_full_day") !== et.day) return;
+  const last = db.prepare("SELECT finished_at FROM agent_runs WHERE agent='briefing' ORDER BY id DESC LIMIT 1").get();
+  if (last && Date.now() - Date.parse(last.finished_at) < interval * 60 * 1000) return;
+  focusCore.runAgent("briefing", { BRIEFING_MODE: "incremental" });
+}
+setInterval(safeTick("briefing", maybeBriefing), 5 * 60 * 1000); // check every 5 min
+setTimeout(() => safeTick("briefing", maybeBriefing)(), 20 * 1000);
+
+// --- Daily News (Today dashboard panel) ---
+// 8:00 AM ET: fetch the day's top AI/tech story (free RSS; Claude polish when
+// the key is connected) into settings.daily_news. Manual: POST /api/ws/news/refresh.
+import("./daily_news.mjs").then(({ refreshDailyNews }) => {
+  const anthropicKey = () => getSetting("anthropic_api_key") || process.env.ANTHROPIC_API_KEY || null;
+  async function maybeNews() {
+    const et = etParts();
+    if (et.hour < 8) return;
+    let cached = null;
+    try { cached = JSON.parse(getSetting("daily_news") || "null"); } catch {}
+    if (cached && cached.day === et.day) return;
+    const news = await refreshDailyNews({ apiKey: anthropicKey(), day: et.day });
+    if (news) setSetting("daily_news", JSON.stringify(news));
+  }
+  setInterval(safeTick("daily-news", () => { maybeNews().catch((e) => console.error("news:", e.message)); }), 10 * 60 * 1000);
+  setTimeout(() => { maybeNews().catch((e) => console.error("news:", e.message)); }, 30 * 1000);
+  app.post("/api/ws/news/refresh", async (req, res) => {
+    try {
+      const news = await refreshDailyNews({ apiKey: anthropicKey(), day: etParts().day });
+      if (!news) return res.status(502).json({ error: "no story found — feeds unreachable?" });
+      setSetting("daily_news", JSON.stringify(news));
+      res.json({ ok: true, news });
+    } catch (e) { res.status(502).json({ error: e.message }); }
+  });
+}).catch((e) => console.error("daily_news module failed to load:", e.message));
 
 // --- Leads ---
 app.get("/api/leads", (req, res) => {
@@ -1407,6 +1515,19 @@ app.post("/api/email/send", async (req, res) => {
   }
 });
 
+// Flag a lead as offer-sent + advance the pipeline to "Offer Made" (unless
+// it's already further along). Shared by the offer endpoint + the email queue.
+function applyOfferSent(leadId, amt, currentStage) {
+  const beforeOffer = ["New", "Contacted", "Follow-Up"];
+  let stage = currentStage;
+  if (beforeOffer.includes(currentStage)) {
+    stage = "Offer Made";
+    logActivity(leadId, "stage_change", `Stage: ${currentStage} → Offer Made (offer sent)`);
+  }
+  db.prepare("UPDATE leads SET offer_sent_at=?, offer_amount=?, stage=?, updated_at=? WHERE id=?").run(now(), amt, stage, now(), leadId);
+  return stage;
+}
+
 // --- Send an offer to the listing agent + flag the lead ---
 app.post("/api/leads/:id/offer", async (req, res) => {
   if (!emailConfigured()) return res.status(400).json({ error: "Connect your Gmail in the Outreach tab first." });
@@ -1420,18 +1541,80 @@ app.post("/api/leads/:id/offer", async (req, res) => {
     const amt = Number(offerAmount) || null;
     logActivity(req.params.id, "email", `💵 Offer sent to ${to}${amt ? " — $" + amt.toLocaleString() : ""}\nSubject: ${subject}\n\n${body}`);
     recordEmail({ lead_id: req.params.id, direction: "out", from_name: emailCfg().fromName, from_addr: emailCfg().user, to_addr: to, subject, body: (req.body && req.body.body) || "" });
-    // Advance the pipeline to "Offer Made" (unless it's already further along).
-    const beforeOffer = ["New", "Contacted", "Follow-Up"];
-    let stage = lead.stage;
-    if (beforeOffer.includes(lead.stage)) {
-      stage = "Offer Made";
-      logActivity(req.params.id, "stage_change", `Stage: ${lead.stage} → Offer Made (offer sent)`);
-    }
-    db.prepare("UPDATE leads SET offer_sent_at=?, offer_amount=?, stage=?, updated_at=? WHERE id=?").run(now(), amt, stage, now(), req.params.id);
+    const stage = applyOfferSent(req.params.id, amt, lead.stage);
     res.json({ ok: true, stage });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
+});
+
+// --- Sonny Emailer queue: drafts written by focus/agents/emailer.mjs ---
+// The human is the send gate — review/edit in the Outreach tab, then fire.
+app.get("/api/email-queue", (req, res) => {
+  const status = req.query.status || "draft";
+  const rows = db.prepare(`SELECT q.*, l.address AS lead_address, l.seller_name AS lead_seller, l.stage AS lead_stage
+    FROM email_queue q LEFT JOIN leads l ON l.id = q.lead_id
+    WHERE q.status = ? ORDER BY q.created_at DESC LIMIT 100`).all(status);
+  const counts = Object.fromEntries(db.prepare("SELECT status, COUNT(*) c FROM email_queue GROUP BY status").all().map((r) => [r.status, r.c]));
+  res.json({ emails: rows, counts });
+});
+
+app.put("/api/email-queue/:id", (req, res) => {
+  const q = db.prepare("SELECT id, status FROM email_queue WHERE id=?").get(req.params.id);
+  if (!q) return res.status(404).json({ error: "not found" });
+  if (q.status !== "draft") return res.status(400).json({ error: "only drafts can be edited" });
+  const b = req.body || {};
+  db.prepare("UPDATE email_queue SET to_addr=COALESCE(?,to_addr), subject=COALESCE(?,subject), body=COALESCE(?,body) WHERE id=?")
+    .run(b.to ?? null, b.subject ?? null, b.body ?? null, req.params.id);
+  res.json({ ok: true });
+});
+
+app.post("/api/email-queue/:id/dismiss", (req, res) => {
+  db.prepare("UPDATE email_queue SET status='dismissed' WHERE id=? AND status='draft'").run(req.params.id);
+  res.json({ ok: true });
+});
+
+// Send one queued draft: same path as a hand-sent offer (footer, unified
+// email log, activity, offer flag + stage advance when it carries an amount).
+async function sendQueuedEmail(id) {
+  const q = db.prepare("SELECT * FROM email_queue WHERE id=?").get(id);
+  if (!q) return { error: "not found", code: 404 };
+  if (q.status !== "draft") return { error: "already " + q.status, code: 400 };
+  if (!emailConfigured()) return { error: "Connect your Gmail in the Outreach tab first.", code: 400 };
+  const lead = db.prepare("SELECT id, stage FROM leads WHERE id=?").get(q.lead_id);
+  const body = withFooter(q.body);
+  await sendOne(makeTransport(), q.to_addr, q.subject, body);
+  recordEmail({ lead_id: q.lead_id, direction: "out", from_name: emailCfg().fromName, from_addr: emailCfg().user, to_addr: q.to_addr, subject: q.subject, body: q.body });
+  let stage = lead ? lead.stage : null;
+  if (lead) {
+    const amt = Number(q.offer_amount) || null;
+    const who = q.recipient_type === "realtor" ? "listing agent" : "homeowner";
+    logActivity(q.lead_id, "email", `💵 Offer sent to ${who} ${q.to_addr}${amt ? " — $" + amt.toLocaleString() : ""} (Sonny Emailer)\nSubject: ${q.subject}\n\n${body}`);
+    if (amt) stage = applyOfferSent(q.lead_id, amt, lead.stage);
+    else db.prepare("UPDATE leads SET updated_at=? WHERE id=?").run(now(), q.lead_id);
+  }
+  db.prepare("UPDATE email_queue SET status='sent', sent_at=? WHERE id=?").run(now(), id);
+  return { ok: true, stage };
+}
+
+app.post("/api/email-queue/:id/send", async (req, res) => {
+  try {
+    const r = await sendQueuedEmail(+req.params.id);
+    if (r.error) return res.status(r.code || 500).json({ error: r.error });
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: String(err.message || err) }); }
+});
+
+app.post("/api/email-queue/send-all", async (req, res) => {
+  const drafts = db.prepare("SELECT id FROM email_queue WHERE status='draft' ORDER BY created_at ASC").all();
+  let sent = 0; const errors = [];
+  for (const d of drafts) {
+    try {
+      const r = await sendQueuedEmail(d.id);
+      if (r.ok) sent++; else errors.push(`#${d.id}: ${r.error}`);
+    } catch (err) { errors.push(`#${d.id}: ${String(err.message || err)}`); }
+  }
+  res.json({ ok: true, sent, of: drafts.length, errors });
 });
 
 // --- Inbox: serve cached inbound email instantly from the DB ---
@@ -1452,6 +1635,10 @@ async function syncInboxOnce() {
   const c = emailCfg();
   if (!c.user || !c.pass) throw new Error("Gmail not connected");
   const client = new ImapFlow({ host: "imap.gmail.com", port: 993, secure: true, auth: { user: c.user, pass: c.pass }, logger: false });
+  // Without a listener, a late socket error (TLS reset after logout, Gmail
+  // dropping an idle connection) is an unhandled 'error' EVENT that kills the
+  // whole process — launchd then restarts the app. Log-and-continue instead.
+  client.on("error", (err) => console.error("imap (non-fatal):", err.message || err));
   let added = 0;
   try {
     await client.connect();
@@ -1823,7 +2010,9 @@ const acqConfig = () => ({
   buyerPct: acqNum("buyer_pct", 70),
   minFee: acqNum("min_fee", 10000),
   minScore: acqInt("min_score", 50),
-  autoScanHours: acqInt("auto_scan_hours", 24),
+  // Default OFF: auto-scan spends RentCast lookups; paid actions are opt-in
+  // (cost philosophy, v39). Turn on per-user via the Acquisitions settings bar.
+  autoScanHours: acqInt("auto_scan_hours", 0),
   hotScore: acqNum("hot_score", 60),
   emailAlerts: getSetting("email_alerts") !== "0",
 });
@@ -2451,7 +2640,13 @@ app.get("/api/pro-queue/call-sheet.csv", (req, res) => {
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename="call-sheet-${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send(lines.join("\n") + "\n");
-  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+  } catch (e) {
+    // same actionable hint as /api/pro-queue when the table hasn't been built
+    if (/no such table: pro_queue/.test(String(e.message || e))) {
+      return res.status(503).json({ error: "pro-queue not built yet — run the Fill Properties pipeline (or: node tools/build_pro_queue.mjs --persist)", detail: String(e.message || e) });
+    }
+    res.status(500).json({ error: String(e.message || e) });
+  }
 });
 
 // ---------- Fill-Properties pipeline (the one-button chain) ----------
@@ -3538,6 +3733,35 @@ app.post("/api/lead-engine/candidates/:id/skiptrace", async (req, res) => {
   mirrorLeadSafe(lead.id);
   db.prepare("UPDATE lead_engine_candidates SET status=? WHERE id=?").run("skiptraced", req.params.id);
   res.json({ ok: true, leadId: lead.id, phones: st.phones.map(fmtPhone), emails: st.emails, phone: applied.phone, email: applied.email });
+});
+
+// ---- Offer Oven scenarios: saved offers, optionally attached to a lead ----
+app.get("/api/offer-scenarios", (req, res) => {
+  const leadId = req.query.lead_id ? Number(req.query.lead_id) : null;
+  const rows = leadId
+    ? db.prepare("SELECT * FROM offer_scenarios WHERE lead_id=? ORDER BY created_at DESC").all(leadId)
+    : db.prepare("SELECT * FROM offer_scenarios ORDER BY created_at DESC LIMIT 100").all();
+  res.json({ scenarios: rows.map((r) => ({ ...r, inputs: JSON.parse(r.inputs_json) })) });
+});
+
+app.post("/api/offer-scenarios", (req, res) => {
+  const b = req.body || {};
+  const label = String(b.label || "").trim();
+  if (!label) return res.status(400).json({ error: "label required" });
+  if (!b.inputs || typeof b.inputs !== "object") return res.status(400).json({ error: "inputs required" });
+  const leadId = b.lead_id ? Number(b.lead_id) : null;
+  if (leadId && !db.prepare("SELECT id FROM leads WHERE id=?").get(leadId)) {
+    return res.status(404).json({ error: "lead not found" });
+  }
+  const info = db.prepare("INSERT INTO offer_scenarios (created_at, lead_id, label, inputs_json) VALUES (?, ?, ?, ?)")
+    .run(now(), leadId, label, JSON.stringify(b.inputs));
+  if (leadId) logActivity(leadId, "note", `Offer scenario saved: ${label}`);
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+app.delete("/api/offer-scenarios/:id", (req, res) => {
+  const r = db.prepare("DELETE FROM offer_scenarios WHERE id=?").run(req.params.id);
+  res.json({ ok: true, deleted: r.changes });
 });
 
 // ---- Built-in map: free OpenStreetMap pins + free Census geocoding (no keys) ----

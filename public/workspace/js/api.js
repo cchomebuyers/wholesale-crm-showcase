@@ -13,6 +13,7 @@ async function req(method, path, body) {
 }
 export const get = (p) => req("GET", p);
 export const post = (p, b) => req("POST", p, b);
+export const put = (p, b) => req("PUT", p, b);
 export const patch = (p, b) => req("PATCH", p, b);
 export const del = (p) => req("DELETE", p);
 

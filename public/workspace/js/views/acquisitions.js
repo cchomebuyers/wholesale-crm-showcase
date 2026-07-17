@@ -2,7 +2,7 @@
 // Native drag-drop between stages · inline MAO calc on every card (never leave
 // the card to do math) · Dead requires a revive date · Under Contract opens the
 // blocking deal modal (Ontario assignment-clause disclosure).
-import { el, toast, modal, field } from "../ui.js";
+import { el, toast, modal, field, focusTimer } from "../ui.js";
 import { get, post, patch, del, money, mao, daysAgo } from "../api.js";
 
 export const title = "Acquisitions";
@@ -54,7 +54,10 @@ function kcard(lead, root) {
       lead.next_followup ? el("span", {}, `next ${lead.next_followup}`) : null,
       el("span", { class: "mao-chip", role: "button", title: "inline deal calc",
         onclick: (e) => { e.stopPropagation(); cardEl.classList.toggle("open"); } },
-        lead.arv ? `💲 MAO ${money(maoVal)}` : "💲 set numbers")),
+        lead.arv ? `💲 MAO ${money(maoVal)}` : "💲 set numbers"),
+      el("span", { class: "mao-chip", role: "button", title: "15-min sprint: work this lead",
+        onclick: (e) => { e.stopPropagation(); focusTimer(lead.address || lead.seller_name || `lead #${lead.id}`, 15); } },
+        "⏱ 15m")),
     calcRow(lead));
   cardEl.addEventListener("dragstart", (e) => {
     e.dataTransfer.setData("text/plain", String(lead.id));

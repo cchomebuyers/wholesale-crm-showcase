@@ -44,6 +44,9 @@ export function mountWorkspace(app, { dbPath = join(__dirname, "crm.db") } = {})
     locked_buyer_id INTEGER
   )`);
 
+  // Do-Today manual ordering (dashboard) — additive, null = unordered
+  try { db.exec("ALTER TABLE tasks ADD COLUMN position INTEGER"); } catch { /* exists */ }
+
   const getSetting = (k, fb = null) => { try { return db.prepare("SELECT value FROM settings WHERE key=?").get(k)?.value ?? fb; } catch { return fb; } };
   const setSetting = (k, v) => db.prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(k, String(v));
   const cadence = () => { try { return { ...DEFAULT_CADENCE, ...JSON.parse(getSetting("ws_cadence", "{}")) }; } catch { return { ...DEFAULT_CADENCE }; } };
@@ -106,6 +109,173 @@ export function mountWorkspace(app, { dbPath = join(__dirname, "crm.db") } = {})
       setSetting("ws_last_clear", t);
     }
     res.json({ cleared: true, streak, firstClearToday: last !== t });
+  });
+
+  // ---- Today dashboard (single-screen command center) ----------------------
+  // One call feeds every panel: KPI strip, Do Today, Alerts, Email, News,
+  // briefing status. Live SQL for freshness; news + briefing come from the
+  // caches their scheduled jobs maintain (settings: daily_news, briefing_state).
+  const safeAll = (sql, params = [], fb = []) => { try { return db.prepare(sql).all(...params); } catch { return fb; } };
+  const safeGet = (sql, params = [], fb = null) => { try { return db.prepare(sql).get(...params) ?? fb; } catch { return fb; } };
+
+  // 9am-ET offer-day cutoff — mirrors server.js /api/stats semantics
+  function cutoff9amET(nowD = new Date()) {
+    const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour12: false, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(nowD);
+    const g = (t) => +p.find((x) => x.type === t).value;
+    const et = new Date(nowD.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const utc = new Date(nowD.toLocaleString("en-US", { timeZone: "UTC" }));
+    const offUTC = -Math.round((et - utc) / 60000);
+    let cutoff = new Date(Date.UTC(g("year"), g("month") - 1, g("day"), 9, 0, 0) + offUTC * 60000);
+    if (nowD < cutoff) cutoff = new Date(cutoff.getTime() - 86400000);
+    return cutoff.toISOString();
+  }
+
+  app.get("/api/ws/dashboard", (req, res) => {
+    const t = today();
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const in72h = plusDays(3);
+
+    // --- KPI strip ---
+    const kpis = {
+      newLeadsToday: safeGet("SELECT COUNT(*) n FROM leads WHERE created_at >= ?", [t], { n: 0 }).n,
+      newLeadsWeek: safeGet("SELECT COUNT(*) n FROM leads WHERE created_at >= ?", [weekAgo], { n: 0 }).n,
+      contracts: safeGet("SELECT COUNT(*) n FROM ws_deals WHERE deleted_at IS NULL AND dispo_stage != 'closed'", [], { n: 0 }).n,
+      pipelineValue: safeGet("SELECT COALESCE(SUM(assignment_fee),0) v FROM leads WHERE active=1 AND stage NOT IN ('Closed','Dead')", [], { v: 0 }).v,
+      offersToday: safeGet("SELECT COUNT(*) n FROM leads WHERE offer_sent_at >= ?", [cutoff9amET()], { n: 0 }).n,
+      followupsDue: safeGet(`SELECT COUNT(*) n FROM leads WHERE ${live} AND stage NOT IN ('Closed','Dead')
+        AND next_followup IS NOT NULL AND next_followup <= ?`, [t], { n: 0 }).n,
+      followupsOverdue: safeGet(`SELECT COUNT(*) n FROM leads WHERE ${live} AND stage NOT IN ('Closed','Dead')
+        AND next_followup IS NOT NULL AND next_followup < ?`, [t], { n: 0 }).n,
+      buyers: safeGet("SELECT COUNT(*) n FROM buyers WHERE deleted_at IS NULL", [], { n: 0 }).n,
+      buyersNewWeek: safeGet("SELECT COUNT(*) n FROM buyers WHERE deleted_at IS NULL AND created_at >= ?", [weekAgo], { n: 0 }).n,
+      collectedFees: safeGet("SELECT COALESCE(SUM(fee_collected),0) v FROM leads WHERE stage='Closed' AND fee_collected IS NOT NULL", [], { v: 0 }).v,
+      offersTarget: 5,
+    };
+    const sent7 = safeGet("SELECT COUNT(*) n FROM emails WHERE direction='out' AND msg_date >= ?", [weekAgo], { n: 0 }).n;
+    const replies7 = safeGet("SELECT COUNT(*) n FROM emails WHERE direction='in' AND lead_id IS NOT NULL AND msg_date >= ?", [weekAgo], { n: 0 }).n;
+    kpis.responseRate = sent7 ? Math.round((replies7 / sent7) * 100) : null;
+    kpis.outbound7 = sent7; kpis.replies7 = replies7;
+
+    // --- Do Today (tasks + follow-ups + revived + closings) ---
+    const doToday = [];
+    for (const x of safeAll(`SELECT t.id, t.title, t.due_date, t.position, t.lead_id, l.address
+        FROM tasks t LEFT JOIN leads l ON l.id=t.lead_id
+        WHERE t.done=0 AND (t.due_date IS NULL OR t.due_date <= ?)
+        ORDER BY t.position IS NULL, t.position ASC, t.due_date ASC, t.id ASC LIMIT 60`, [t])) {
+      doToday.push({ kind: "task", taskId: x.id, leadId: x.lead_id, title: x.title, sub: x.address || null,
+        overdue: Boolean(x.due_date && x.due_date < t), position: x.position });
+    }
+    for (const f of safeAll(`SELECT id, seller_name, address, stage, next_followup, seller_phone FROM leads
+        WHERE ${live} AND stage NOT IN ('Closed','Dead') AND next_followup IS NOT NULL AND next_followup <= ?
+        ORDER BY next_followup ASC LIMIT 30`, [t])) {
+      doToday.push({ kind: "followup", leadId: f.id, title: `Follow up: ${f.seller_name || "seller"} — ${f.address || "lead #" + f.id}`,
+        sub: `${f.stage}${f.seller_phone ? " · " + f.seller_phone : ""}`, overdue: f.next_followup < t });
+    }
+    for (const r of safeAll(`SELECT id, seller_name, address FROM leads
+        WHERE ${live} AND stage='Dead' AND ws_revive_date IS NOT NULL AND ws_revive_date <= ? LIMIT 10`, [t])) {
+      doToday.push({ kind: "revived", leadId: r.id, title: `Revive: ${r.address || r.seller_name || "lead #" + r.id}`, sub: "call today", overdue: true });
+    }
+    for (const d of safeAll(`SELECT d.id, d.closing_date, l.id lead_id, l.address FROM ws_deals d
+        JOIN leads l ON l.id=d.lead_id
+        WHERE d.deleted_at IS NULL AND d.dispo_stage != 'closed' AND d.closing_date IS NOT NULL AND d.closing_date <= ?`, [in72h])) {
+      doToday.push({ kind: "closing", dealId: d.id, leadId: d.lead_id, title: `Closing ${d.closing_date}: ${d.address || "deal #" + d.id}`,
+        sub: "push to close", overdue: d.closing_date <= t });
+    }
+    doToday.sort((a, b) => (b.overdue - a.overdue) || ((a.position ?? 1e9) - (b.position ?? 1e9)));
+
+    // --- Alerts (red = act now, yellow = drifting) ---
+    const alerts = [];
+    for (const d of safeAll(`SELECT d.id, d.closing_date, l.id lead_id, l.address FROM ws_deals d JOIN leads l ON l.id=d.lead_id
+        WHERE d.deleted_at IS NULL AND d.dispo_stage != 'closed' AND d.closing_date IS NOT NULL AND d.closing_date <= ?`, [in72h])) {
+      alerts.push({ severity: "red", kind: "closing", dealId: d.id, leadId: d.lead_id, view: "dispo",
+        text: `Contract ${d.address || "#" + d.id} closes ${d.closing_date}` });
+    }
+    for (const e of safeAll(`SELECT e.lead_id, MAX(e.msg_date) last_in, l.address, l.seller_name FROM emails e
+        JOIN leads l ON l.id=e.lead_id WHERE e.direction='in' AND e.lead_id IS NOT NULL
+        GROUP BY e.lead_id
+        HAVING NOT EXISTS (SELECT 1 FROM emails o WHERE o.lead_id=e.lead_id AND o.direction='out' AND o.msg_date > MAX(e.msg_date))
+        ORDER BY last_in DESC LIMIT 10`)) {
+      const ageH = (Date.now() - Date.parse(e.last_in)) / 3600000;
+      alerts.push({ severity: ageH > 24 ? "red" : "yellow", kind: "unanswered", leadId: e.lead_id, view: "acquisitions",
+        text: `${e.seller_name || e.address || "lead #" + e.lead_id} replied ${Math.round(ageH)}h ago — no answer sent` });
+    }
+    for (const f of safeAll(`SELECT id, seller_name, address, next_followup FROM leads
+        WHERE ${live} AND stage NOT IN ('Closed','Dead') AND next_followup IS NOT NULL AND next_followup < ?
+        ORDER BY next_followup ASC LIMIT 10`, [t])) {
+      alerts.push({ severity: "red", kind: "missed_followup", leadId: f.id, view: "acquisitions",
+        text: `Missed follow-up (${f.next_followup}): ${f.seller_name || f.address || "#" + f.id}` });
+    }
+    const stale = new Date(Date.now() - 5 * 86400000).toISOString();
+    for (const s of safeAll(`SELECT id, address, seller_name, stage, updated_at FROM leads
+        WHERE ${live} AND stage IN ('Contacted','Follow-Up','Offer Made','Backup Offer','Under Contract','Assigned')
+        AND updated_at < ? ORDER BY updated_at ASC LIMIT 10`, [stale])) {
+      alerts.push({ severity: "yellow", kind: "stalled", leadId: s.id, view: "acquisitions",
+        text: `Stalled ${Math.floor((Date.now() - Date.parse(s.updated_at)) / 86400000)}d in ${s.stage}: ${s.address || s.seller_name || "#" + s.id}` });
+    }
+    alerts.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "red" ? -1 : 1));
+
+    // --- Email feed ---
+    const emails = safeAll(`SELECT e.id, e.lead_id, e.from_name, e.from_addr, e.subject, e.snippet, e.msg_date, e.read,
+        l.address lead_address, l.seller_name FROM emails e LEFT JOIN leads l ON l.id=e.lead_id
+        WHERE e.direction='in' ORDER BY e.msg_date DESC LIMIT 30`);
+    const unread = safeGet("SELECT COUNT(*) n FROM emails WHERE direction='in' AND read=0", [], { n: 0 }).n;
+
+    // --- 14-day series for KPI sparklines ---
+    const dayList = [...Array(14)].map((_, i) => new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10));
+    const fill = (rows) => { const m = Object.fromEntries(rows.map((r) => [r.d, r.n])); return dayList.map((d) => m[d] || 0); };
+    const history = {
+      newLeads: fill(safeAll("SELECT substr(created_at,1,10) d, COUNT(*) n FROM leads WHERE created_at >= ? GROUP BY d", [dayList[0]])),
+      offers: fill(safeAll("SELECT substr(offer_sent_at,1,10) d, COUNT(*) n FROM leads WHERE offer_sent_at IS NOT NULL AND offer_sent_at >= ? GROUP BY d", [dayList[0]])),
+      replies: fill(safeAll("SELECT substr(msg_date,1,10) d, COUNT(*) n FROM emails WHERE direction='in' AND lead_id IS NOT NULL AND msg_date >= ? GROUP BY d", [dayList[0]])),
+    };
+
+    // --- caches maintained by scheduled jobs ---
+    let news = null, briefing = null;
+    try { news = JSON.parse(getSetting("daily_news", "null")); } catch { /* bad cache */ }
+    try { briefing = JSON.parse(getSetting("briefing_state", "null")); } catch { /* bad cache */ }
+
+    res.json({ now: now(), today: t, kpis, history, doToday, alerts, emails, unread, news, briefing });
+  });
+
+  // Do-Today reorder: client sends the full ordered list of task ids
+  app.post("/api/ws/tasks/reorder", (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isFinite) : null;
+    if (!ids || !ids.length) return res.status(400).json({ error: "ids[] required" });
+    const stmt = db.prepare("UPDATE tasks SET position=? WHERE id=?");
+    ids.forEach((id, i) => stmt.run(i, id));
+    res.json({ ok: true, ordered: ids.length });
+  });
+
+  // AI reply drafter — sonny-voice.md rules + thread context. Graceful 400
+  // when no Anthropic key is connected (panel shows plain compose instead).
+  app.post("/api/ws/draft-reply", async (req, res) => {
+    const email = safeGet("SELECT * FROM emails WHERE id=?", [Number(req.body?.email_id)]);
+    if (!email) return res.status(404).json({ error: "no such email" });
+    const apiKey = getSetting("anthropic_api_key") || process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: "Connect AI (Acquisitions tab) to enable drafting." });
+    try {
+      const { readFileSync } = await import("node:fs");
+      let voice = "";
+      try { voice = readFileSync(join(__dirname, "sonny-voice.md"), "utf8"); } catch { /* defaults */ }
+      const me = { name: getSetting("my_name", "Sonny"), phone: getSetting("my_phone", "") };
+      const thread = email.lead_id
+        ? safeAll("SELECT direction, subject, body, msg_date FROM emails WHERE lead_id=? ORDER BY msg_date DESC LIMIT 6", [email.lead_id])
+        : [email];
+      const { default: Anthropic } = await import("@anthropic-ai/sdk");
+      const client = new Anthropic({ apiKey });
+      const response = await client.messages.create(
+        {
+          model: "claude-opus-4-8",
+          max_tokens: 800,
+          thinking: { type: "adaptive" },
+          system: `You draft email replies for Sonny, a Detroit real-estate wholesaler. Follow these style rules exactly:\n\n${voice}\n\nSonny's name: ${me.name}. Phone: ${me.phone}. Return ONLY the email body text — no subject line, no commentary.`,
+          messages: [{ role: "user", content: `Reply to this (newest first thread):\n${JSON.stringify(thread)}` }],
+        },
+        { timeout: 45_000, maxRetries: 1 },
+      );
+      const draft = response.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+      res.json({ ok: true, draft });
+    } catch (e) { res.status(502).json({ error: "Draft failed: " + e.message }); }
   });
 
   // ---- Phase 4: leads / kanban --------------------------------------------

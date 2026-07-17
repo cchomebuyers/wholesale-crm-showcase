@@ -74,13 +74,14 @@ export function confetti() {
   setTimeout(() => host.remove(), 1100);
 }
 
-/** 15-minute focus timer chip (spec Phase 3). One at a time. */
+/** ADHD focus timer chip (spec Phase 3). One at a time. Default 15 min;
+    pass minutes for pomodoro-length task sprints. */
 let timerInterval;
-export function focusTimer(label) {
+export function focusTimer(label, min = 15) {
   document.getElementById("wsTimer")?.remove();
   clearInterval(timerInterval);
-  let left = 15 * 60;
-  const time = el("b", {}, "15:00");
+  let left = min * 60;
+  const time = el("b", {}, `${String(min).padStart(2, "0")}:00`);
   const chip = el("div", { class: "timer-chip glass", id: "wsTimer" },
     el("span", { class: "t-label" }, label), time,
     el("button", { class: "btn-ghost", onclick: () => { chip.remove(); clearInterval(timerInterval); } }, "✕"));

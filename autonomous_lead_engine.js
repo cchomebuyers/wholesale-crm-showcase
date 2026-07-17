@@ -140,7 +140,7 @@ function scoreConvergedThinga(t, buyers = [], buyerCandidates = []) {
   const reasons = [];
   const spendBlocks = [];
 
-  if (parsed.success) { score += 10; reasons.push("parsed as realEstate"); }
+  if (parsed.ok) { score += 10; reasons.push("parsed as realEstate"); }
   if (f.property?.address || f.property?.parcel_id) { score += 20; reasons.push("property identity resolved"); }
   if (listingStatus === "active" || listingStatus === "for sale") { score += 20; reasons.push("active listing signal"); }
   if (daysOnMarket >= 30) { score += 8; reasons.push("days on market suggests motivation"); }

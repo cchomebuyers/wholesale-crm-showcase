@@ -20,6 +20,9 @@ export function mountFocus(app, opts = {}) {
 
   app.get("/api/focus", (req, res) => res.json(core.statePayload()));
 
+  // Workspace Agents tab: status + report trail + lead-engine last run.
+  app.get("/api/agents", (req, res) => res.json(core.agentsPayload()));
+
   app.post("/api/tasks", (req, res) => {
     const title = req.body?.title;
     if (!title || typeof title !== "string") return res.status(400).json({ error: "title required" });
@@ -33,7 +36,14 @@ export function mountFocus(app, opts = {}) {
   });
 
   app.post("/api/agents/:name/run", (req, res) => {
-    if (core.runAgent(req.params.name)) return res.json({ ok: true, started: req.params.name });
+    // briefing supports ?mode=incremental (intraday refresh); default full
+    const env = req.query.mode === "incremental" ? { BRIEFING_MODE: "incremental" } : {};
+    // emailer knobs — a fixed query→env whitelist, never arbitrary env from a request
+    for (const [q, k] of [["audience", "EMAILER_AUDIENCE"], ["max", "EMAILER_MAX"],
+      ["template", "EMAILER_TEMPLATE_ID"], ["ai", "EMAILER_AI"], ["send", "EMAILER_AUTO_SEND"]]) {
+      if (req.query[q] != null && req.query[q] !== "") env[k] = String(req.query[q]);
+    }
+    if (core.runAgent(req.params.name, env)) return res.json({ ok: true, started: req.params.name, mode: req.query.mode || "full" });
     res.status(409).json({ error: "unknown agent or already running" });
   });
 

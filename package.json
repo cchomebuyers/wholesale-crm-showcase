@@ -9,8 +9,7 @@
     "test": "node --test '**/*.test.js' '**/*.test.mjs'",
     "app": "node crm-app.mjs",
     "focus": "node focus/focus-terminal.mjs",
-    "focus:web": "node focus/focus-web.mjs",
-    "seed": "node tools/seed_demo.mjs --fresh"
+    "focus:web": "node focus/focus-web.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
@@ -19,5 +18,8 @@
     "mailparser": "^3.9.11",
     "nodemailer": "^6.9.16",
     "pg": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=26"
   }
 }

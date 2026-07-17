@@ -1630,7 +1630,129 @@ async function openOutreach() {
   await loadSettings();
   await loadTemplates();
   loadRecipients();
+  loadEmailQueue();
 }
+
+// ---------- Sonny Email Agent (Agent 6) ----------
+// Drafts land in email_queue via focus/agents/emailer.mjs; this panel is the
+// human send gate: review/edit each draft, fire one, or send all.
+let eqEmails = [], eqPollTimer = null;
+
+async function loadEmailQueue() {
+  try {
+    const r = await api("/api/email-queue?status=draft");
+    eqEmails = r.emails || [];
+    renderEmailQueue(r.counts || {});
+    // fill the template override select from the already-loaded templates
+    const sel = $("#eqTemplate");
+    if (sel && sel.options.length <= 1 && templates.length) {
+      sel.innerHTML = `<option value="">Auto template</option>` +
+        templates.filter((t) => t.audience === "offer").map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+    }
+  } catch { /* server restarting */ }
+}
+
+function renderEmailQueue(counts) {
+  const list = $("#eqList");
+  if (!list) return;
+  const n = eqEmails.length;
+  $("#eqCount").textContent = n ? `${n} draft${n > 1 ? "s" : ""} waiting` : (counts.sent ? `${counts.sent} sent all-time` : "");
+  $("#eqSendAllBtn").style.display = n > 1 ? "" : "none";
+  $("#eqSendAllCount").textContent = n;
+  if (!n) {
+    list.innerHTML = `<div class="eq-empty">No drafts in the queue. Hit <b>✍ Draft emails</b> — the agent finds offer-ready leads (email on file + a price, no offer out yet), writes each one in Sonny's voice, and parks it here for your approval.</div>`;
+    return;
+  }
+  list.innerHTML = eqEmails.map((q) => {
+    const badge = q.recipient_type === "realtor" ? `<span class="eq-badge realtor">🏢 Realtor</span>` : `<span class="eq-badge homeowner">🏠 Homeowner</span>`;
+    const ai = q.ai ? `<span class="eq-badge ai" title="Rewritten in Sonny's voice by AI">✨ Sonny voice</span>` : "";
+    const amt = q.offer_amount ? `<span class="eq-amt">💵 ${money(q.offer_amount)}</span>` : "";
+    return `<div class="eq-card" data-eq="${q.id}">
+      <div class="eq-top">
+        ${badge}${ai}
+        <span class="eq-lead">${esc(q.lead_address || q.lead_seller || "lead #" + q.lead_id)}</span>
+        ${amt}
+        <span class="eq-to" title="Recipient">→ ${esc(q.to_addr)}</span>
+      </div>
+      <input class="eq-subject" value="${esc(q.subject)}" />
+      <textarea class="eq-body" rows="7">${esc(q.body)}</textarea>
+      <div class="eq-actions">
+        <button class="btn xs" data-eq-dismiss="${q.id}">✕ Dismiss</button>
+        <button class="btn xs" data-eq-open="${q.lead_id}">Open lead</button>
+        <button class="btn xs primary" data-eq-send="${q.id}">✉ Send</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function eqSaveEdits(id) {
+  const card = $(`.eq-card[data-eq="${id}"]`);
+  if (!card) return;
+  await api(`/api/email-queue/${id}`, { method: "PUT", body: JSON.stringify({ subject: $(".eq-subject", card).value, body: $(".eq-body", card).value }) });
+}
+
+$("#eqList")?.addEventListener("click", async (e) => {
+  const send = e.target.closest("[data-eq-send]");
+  const dismiss = e.target.closest("[data-eq-dismiss]");
+  const open = e.target.closest("[data-eq-open]");
+  try {
+    if (send) {
+      send.disabled = true; send.textContent = "Sending…";
+      await eqSaveEdits(send.dataset.eqSend);
+      const r = await api(`/api/email-queue/${send.dataset.eqSend}/send`, { method: "POST" });
+      toast(`Offer sent ✓${r.stage ? " — stage: " + r.stage : ""}`);
+      await loadEmailQueue();
+    } else if (dismiss) {
+      await api(`/api/email-queue/${dismiss.dataset.eqDismiss}/dismiss`, { method: "POST" });
+      await loadEmailQueue();
+    } else if (open) {
+      await loadLeads(); openLead(+open.dataset.eqOpen);
+    }
+  } catch (err) { toast(err.message, true); await loadEmailQueue(); }
+});
+
+$("#eqRunBtn")?.addEventListener("click", async () => {
+  const btn = $("#eqRunBtn");
+  const qs = new URLSearchParams();
+  if ($("#eqAudience").value !== "both") qs.set("audience", $("#eqAudience").value);
+  if ($("#eqTemplate").value) qs.set("template", $("#eqTemplate").value);
+  if ($("#eqMax").value) qs.set("max", $("#eqMax").value);
+  try {
+    await api(`/api/agents/emailer/run?${qs}`, { method: "POST" });
+    btn.disabled = true; btn.textContent = "Drafting…";
+    $("#eqStatus").textContent = "The agent is reading offer-ready leads and writing each email in Sonny's voice…";
+    const before = eqEmails.length;
+    let ticks = 0;
+    clearInterval(eqPollTimer);
+    eqPollTimer = setInterval(async () => {
+      ticks++;
+      await loadEmailQueue();
+      const a = await api("/api/agents").catch(() => null);
+      const running = a?.agents?.find((x) => x.name === "emailer")?.running;
+      if (!running || ticks > 40) {
+        clearInterval(eqPollTimer);
+        btn.disabled = false; btn.textContent = "✍ Draft emails";
+        const got = eqEmails.length - before;
+        const digest = a?.agents?.find((x) => x.name === "emailer")?.digest;
+        $("#eqStatus").textContent = digest || (got > 0 ? `${got} new draft${got > 1 ? "s" : ""} ready below.` : "No new drafts — no offer-ready leads matched (need an email + a priced offer, none sent yet).");
+      }
+    }, 2500);
+  } catch (err) { toast(err.message, true); btn.disabled = false; btn.textContent = "✍ Draft emails"; }
+});
+
+$("#eqSendAllBtn")?.addEventListener("click", async () => {
+  if (!confirm(`Send all ${eqEmails.length} drafted offer emails now?`)) return;
+  const btn = $("#eqSendAllBtn");
+  btn.disabled = true;
+  try {
+    for (const q of eqEmails) await eqSaveEdits(q.id).catch(() => {});
+    const r = await api("/api/email-queue/send-all", { method: "POST" });
+    toast(`Sent ${r.sent}/${r.of} ✓${r.errors.length ? " — " + r.errors.length + " failed" : ""}`, r.errors.length > 0);
+    if (r.errors.length) $("#eqStatus").textContent = r.errors.join(" · ");
+    await loadEmailQueue();
+  } catch (err) { toast(err.message, true); }
+  btn.disabled = false;
+});
 
 // ---------- Acquisitions (Phase 1) ----------
 let acqSettings = {}, campaigns = [], currentCampId = null;

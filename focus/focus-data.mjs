@@ -157,6 +157,10 @@ export function openFocusDb(dbPath = DB_PATH) {
        WHERE id IN (SELECT MAX(id) FROM agent_runs GROUP BY agent)
        ORDER BY agent`);
   }
+  function agentRunHistory(limit = 40) {
+    // full report trail, newest first — feeds the workspace Agents tab
+    return safeAll("SELECT agent, finished_at, digest FROM agent_runs ORDER BY id DESC LIMIT ?", [limit]);
+  }
   function lastLeadEngineRun() {
     // the autonomous lead engine (server.js hourly loop) logs its own runs
     return safeGet(
@@ -183,5 +187,5 @@ export function openFocusDb(dbPath = DB_PATH) {
        LEFT JOIN leads l ON l.id = a.lead_id ORDER BY a.id DESC LIMIT ?`, [limit]);
   }
 
-  return { db, computeKpis, followupsDue, listTasks, tasksDoneToday, toggleTask, addTask, addTaskOnce, recordAgentRun, listAgentRuns, lastLeadEngineRun, kpiHistory, recentActivity, close: () => db.close() };
+  return { db, computeKpis, followupsDue, listTasks, tasksDoneToday, toggleTask, addTask, addTaskOnce, recordAgentRun, listAgentRuns, agentRunHistory, lastLeadEngineRun, kpiHistory, recentActivity, close: () => db.close() };
 }

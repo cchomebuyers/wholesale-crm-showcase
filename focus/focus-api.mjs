@@ -16,10 +16,15 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 // The runnable agents — a fixed whitelist, never derived from a request.
 export const AGENTS = {
+  briefing: "Daily Briefing",
   momentum: "Momentum Keeper",
   acquisitions: "Acquisitions Autopilot",
   underwriting: "Underwriting Analyst",
   outreach: "Outreach Drafter",
+  emailer: "Sonny Emailer",
+  doctor: "System Doctor",
+  comps: "Comps Analyst",
+  replies: "Reply Triage",
 };
 
 export function createFocusCore({ dbPath = DB_PATH } = {}) {
@@ -56,11 +61,27 @@ export function createFocusCore({ dbPath = DB_PATH } = {}) {
     };
   }
 
-  function runAgent(name) {
+  // Everything the workspace Agents tab needs in one call: live status per
+  // agent, the full report trail, and the autonomous lead engine's last run.
+  function agentsPayload() {
+    const kpis = store.computeKpis(goals);
+    const tasks = store.listTasks();
+    const followups = store.followupsDue();
+    return {
+      now: new Date().toISOString(),
+      agents: agentStatus(),
+      history: store.agentRunHistory(40),
+      leadEngine: store.lastLeadEngineRun(),
+      tasks, // the work the agents filed — the human's queue
+      next: getNextAction({ kpis, tasks, followups }), // the coach's ONE next action
+    };
+  }
+
+  function runAgent(name, extraEnv = {}) {
     if (!AGENTS[name] || running.has(name)) return false;
     running.set(name, { startedAt: Date.now() });
     const child = spawn(process.execPath, [join(HERE, "agents", `${name}.mjs`)], {
-      env: { ...process.env, CRM_DB: dbPath },
+      env: { ...process.env, CRM_DB: dbPath, ...extraEnv },
       stdio: ["ignore", "inherit", "inherit"],
     });
     child.on("exit", () => running.delete(name));
@@ -70,7 +91,7 @@ export function createFocusCore({ dbPath = DB_PATH } = {}) {
 
   return {
     store, goals,
-    statePayload, runAgent,
+    statePayload, agentsPayload, runAgent,
     htmlPath: join(HERE, "focus-web.html"),
     addTask: (title) => store.addTask(String(title).slice(0, 300)),
     toggleTask: (id) => store.toggleTask(id),

@@ -4,7 +4,7 @@ A real-estate wholesaling CRM I built and run my own lead pipeline through.
 Local-first Node.js: leads, pipeline stages, cash buyers, offers, deal math,
 and two-way email - all in one app, with the data in a single SQLite file.
 
-Built solo: 17,000+ lines across 90+ modules, 178 commits, 422 automated tests.
+Built solo: 17,000+ lines across 90+ modules, 179 commits, 450 automated tests.
 
 ## Try it in 60 seconds
 
@@ -15,7 +15,7 @@ dependencies).
 npm install
 npm run seed     # builds a demo database of fabricated leads and properties
 npm start        # http://localhost:4000
-npm test         # 422 tests
+npm test         # 450 tests
 ```
 
 `npm run seed` generates invented data only: 555-range phone numbers,
@@ -25,6 +25,9 @@ calls a paid or external API.
 
 ## What it does
 
+- **Operator workspace** - a dark, single-screen daily HUD (`/workspace/`):
+  offer targets, follow-ups, pipeline value, do-today list, daily briefing,
+  and inbox, with an agent crew that drafts briefings, comps, and replies.
 - **Lead pipeline** - 7 stages (New through Closed), one-tap activity logging,
   follow-up cadences, daily offer targets, and a calendar with day notes.
 - **Deal math** - MAO calculator with live comps, cash / seller-finance /
@@ -43,7 +46,7 @@ calls a paid or external API.
 
 ## Testing
 
-`npm test` runs 422 tests with Node's built-in runner - unit tests colocated
+`npm test` runs 450 tests with Node's built-in runner - unit tests colocated
 with every module plus a boot-smoke suite that starts the real server and
 exercises the money-path endpoints against the seeded database.
 
